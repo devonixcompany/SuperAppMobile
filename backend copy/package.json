@@ -1,0 +1,24 @@
+{
+  "name": "superapp-backend",
+  "version": "1.0.0",
+  "description": "Backend for SuperApp",
+  "module": "src/app.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/app.ts",
+    "start": "bun run src/app.ts"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^0.8.0",
+    "@elysiajs/jwt": "^0.8.0",
+    "@prisma/client": "^5.9.1",
+    "@types/bcrypt": "^6.0.0",
+    "bcrypt": "^6.0.0",
+    "elysia": "^0.8.17"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "bun-types": "latest",
+    "prisma": "^5.9.1"
+  }
+}

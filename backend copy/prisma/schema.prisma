@@ -1,0 +1,319 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ตารางผู้ใช้ (ลงทะเบียนด้วยเบอร์โทรศัพท์)
+model User {
+  id          String   @id @default(uuid())
+  firebaseUid String   @unique // Firebase UID จากการยืนยัน OTP
+  phoneNumber String   @unique
+  password    String   // รหัสผ่านสำหรับการ login
+  status      String   @default("PENDING") // PENDING, ACTIVE, BLOCKED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+// ประเภทนิติบุคล หรือ บุคลคลธรรมดา
+  type         String?   // NORMAL, BUSINESS
+  // ความสัมพันธ์
+  vehicles     UserVehicle[]
+  transactions Transaction[]
+  chargePoints ChargePoint[]  @relation("UserChargePoints")
+}
+
+// สถานะผู้ใช้
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  EXPIRED
+}
+
+// ตารางรถยนต์ของผู้ใช้
+model UserVehicle {
+  id           String    @id @default(cuid())
+  userId       String
+  licensePlate String    @unique // ทะเบียนรถ
+  make         String?   // ยี่ห้อรถ
+  model        String?   // รุ่นรถ
+  type         VehicleType @default(ELECTRIC) // ประเภทรถ
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  
+  // ความสัมพันธ์
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  
+  @@map("user_vehicles")
+}
+
+// ประเภทรถ
+enum VehicleType {
+  ELECTRIC
+  HYBRID
+  PLUGIN_HYBRID
+}
+
+// ประเภทความเป็นเจ้าของเครื่องชาร์จ
+enum OwnershipType {
+  PUBLIC    // เครื่องชาร์จสาธารณะ
+  PRIVATE   // เครื่องชาร์จส่วนตัว
+  SHARED    // เครื่องชาร์จส่วนตัวที่แชร์ให้คนอื่นใช้
+}
+
+// ตารางเครื่องชาร์จ
+model ChargePoint {
+  id              String           @id
+  name            String
+  location        String
+  latitude        Float?
+  longitude       Float?
+  protocol        OCPPVersion
+  status          ChargePointStatus @default(AVAILABLE)
+  maxPower        Float? // กำลังไฟสูงสุด (kW)
+  connectorCount  Int              @default(1) // จำนวน connector
+  
+  // ฟิลด์สำหรับเจ้าของเครื่องชาร์จ
+  ownerId         String?          // ID ของเจ้าของ (null = เครื่องชาร์จสาธารณะ)
+  ownershipType   OwnershipType    @default(PUBLIC) // ประเภทความเป็นเจ้าของ
+  isPublic        Boolean          @default(true)   // เปิดให้คนอื่นใช้ได้หรือไม่
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  
+  // ความสัมพันธ์
+  owner           User?            @relation("UserChargePoints", fields: [ownerId], references: [id])
+  connectors      Connector[]
+  transactions    Transaction[]
+  sessions        ChargingSession[]
+  
+  @@map("charge_points")
+}
+
+// เวอร์ชัน OCPP
+enum OCPPVersion {
+  OCPP16
+  OCPP20
+  OCPP21
+}
+
+// สถานะเครื่องชาร์จ
+enum ChargePointStatus {
+  AVAILABLE
+  OCCUPIED
+  UNAVAILABLE
+  FAULTED
+  MAINTENANCE
+}
+
+// ตาราง connector ของเครื่องชาร์จ
+model Connector {
+  id             String             @id @default(cuid())
+  chargePointId  String
+  connectorId    Int // หมายเลข connector (1, 2, 3, ...)
+  type           ConnectorType      @default(TYPE_2)
+  status         ConnectorStatus    @default(AVAILABLE)
+  maxPower       Float? // กำลังไฟสูงสุด (kW)
+  maxCurrent     Float? // กระแสสูงสุด (A)
+  
+  // ความสัมพันธ์
+  chargePoint    ChargePoint        @relation(fields: [chargePointId], references: [id], onDelete: Cascade)
+  transactions   Transaction[]
+  sessions       ChargingSession[]
+  
+  @@unique([chargePointId, connectorId])
+  @@map("connectors")
+}
+
+// ประเภท connector
+enum ConnectorType {
+  TYPE_1
+  TYPE_2
+  CHADEMO
+  CCS_COMBO_1
+  CCS_COMBO_2
+  TESLA
+  GB_T
+}
+
+// สถานะ connector
+enum ConnectorStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  UNAVAILABLE
+  FAULTED
+}
+
+// ตารางธุรกรรมการชาร์จ
+model Transaction {
+  id             String           @id @default(cuid())
+  transactionId  String           @unique // ID จาก OCPP
+  userId         String
+  vehicleId      String?
+  chargePointId  String
+  connectorId    String
+  startTime      DateTime
+  endTime        DateTime?
+  startMeterValue Float           @default(0) // ค่ามิเตอร์ตอนเริ่ม (kWh)
+  endMeterValue   Float?          // ค่ามิเตอร์ตอนสิ้นสุด (kWh)
+  totalEnergy     Float?          // พลังงานทั้งหมด (kWh)
+  totalCost       Float?          // ค่าใช้จ่ายทั้งหมด
+  status          TransactionStatus @default(ACTIVE)
+  stopReason     String?          // เหตุผลที่หยุด
+  
+  // ความสัมพันธ์
+  user           User             @relation(fields: [userId], references: [id])
+  vehicle        UserVehicle?     @relation(fields: [vehicleId], references: [id])
+  chargePoint    ChargePoint      @relation(fields: [chargePointId], references: [id])
+  connector      Connector        @relation(fields: [connectorId], references: [id])
+  meterValues    MeterValue[]
+  
+  @@map("transactions")
+}
+
+// สถานะธุรกรรม
+enum TransactionStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
+// ตารางค่ามิเตอร์
+model MeterValue {
+  id            String   @id @default(cuid())
+  transactionId String
+  timestamp     DateTime
+  value         Float    // ค่ามิเตอร์ (kWh)
+  power         Float?   // กำลังไฟ (kW)
+  current       Float?   // กระแส (A)
+  voltage       Float?   // แรงดัน (V)
+  
+  // ความสัมพันธ์
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  
+  @@map("meter_values")
+}
+
+// ตารางเซสชันการชาร์จ (สำหรับติดตามแบบเรียลไทม์)
+model ChargingSession {
+  id            String           @id @default(cuid())
+  sessionId     String           @unique
+  chargePointId String
+  connectorId   String
+  userId        String?
+  status        SessionStatus    @default(ACTIVE)
+  startTime     DateTime         @default(now())
+  endTime       DateTime?
+  lastActivity  DateTime         @default(now())
+  
+  // ความสัมพันธ์
+  chargePoint   ChargePoint      @relation(fields: [chargePointId], references: [id])
+  connector     Connector        @relation(fields: [connectorId], references: [id])
+  
+  @@map("charging_sessions")
+}
+
+// สถานะเซสชัน
+enum SessionStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+  TIMEOUT
+}
+
+// ตารางการจองเครื่องชาร์จ
+model Reservation {
+  id            String           @id @default(cuid())
+  userId        String
+  chargePointId String
+  connectorId   String?
+  startTime     DateTime
+  endTime       DateTime
+  status        ReservationStatus @default(ACTIVE)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  
+  @@map("reservations")
+}
+
+// สถานะการจอง
+enum ReservationStatus {
+  ACTIVE
+  COMPLETED
+  CANCELED
+  EXPIRED
+}
+
+// ตารางคอนฟิกการชาร์จ
+model ChargingProfile {
+  id                String   @id @default(cuid())
+  chargePointId     String?
+  connectorId       String?
+  name              String
+  description       String?
+  chargingRateUnit  RateUnit @default(A) // หน่วยอัตราการชาร์จ
+  chargingSchedule  Json     // ตารางเวลาการชาร์จ
+  stackLevel        Int      @default(1)
+  validFrom         DateTime?
+  validTo           DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("charging_profiles")
+}
+
+// หน่วยอัตราการชาร์จ
+enum RateUnit {
+  A   // แอมแปร์
+  W   // วัตต์
+  kW  // กิโลวัตต์
+}
+
+// ตารางข้อความ OCPP
+model OCPPMessage {
+  id          String       @id @default(cuid())
+  messageId   String       // Message ID จาก OCPP
+  chargePointId String
+  direction   MessageDirection // ขาเข้า/ขาออก
+  action      String       // ชื่อ action (BootNotification, StartTransaction, etc.)
+  payload     Json         // ข้อมูลที่ส่ง
+  timestamp   DateTime     @default(now())
+  
+  @@map("ocpp_messages")
+}
+
+// ทิศทางข้อความ
+enum MessageDirection {
+  INBOUND  // จาก Charge Point เข้ามา
+  OUTBOUND // จากระบบส่งไปยัง Charge Point
+}
+
+// ตารางการแจ้งเตือน
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String?
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  
+  @@map("notifications")
+}
+
+// ประเภทการแจ้งเตือน
+enum NotificationType {
+  CHARGING_STARTED
+  CHARGING_STOPPED
+  CHARGING_COMPLETED
+  PAYMENT_REQUIRED
+  SYSTEM_MAINTENANCE
+  GENERAL
+}

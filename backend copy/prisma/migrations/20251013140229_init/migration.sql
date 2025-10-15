@@ -1,0 +1,253 @@
+-- CreateEnum
+CREATE TYPE "UserStatus" AS ENUM ('ACTIVE', 'BLOCKED', 'EXPIRED');
+
+-- CreateEnum
+CREATE TYPE "VehicleType" AS ENUM ('ELECTRIC', 'HYBRID', 'PLUGIN_HYBRID');
+
+-- CreateEnum
+CREATE TYPE "OwnershipType" AS ENUM ('PUBLIC', 'PRIVATE', 'SHARED');
+
+-- CreateEnum
+CREATE TYPE "OCPPVersion" AS ENUM ('OCPP16', 'OCPP20', 'OCPP21');
+
+-- CreateEnum
+CREATE TYPE "ChargePointStatus" AS ENUM ('AVAILABLE', 'OCCUPIED', 'UNAVAILABLE', 'FAULTED', 'MAINTENANCE');
+
+-- CreateEnum
+CREATE TYPE "ConnectorType" AS ENUM ('TYPE_1', 'TYPE_2', 'CHADEMO', 'CCS_COMBO_1', 'CCS_COMBO_2', 'TESLA', 'GB_T');
+
+-- CreateEnum
+CREATE TYPE "ConnectorStatus" AS ENUM ('AVAILABLE', 'OCCUPIED', 'RESERVED', 'UNAVAILABLE', 'FAULTED');
+
+-- CreateEnum
+CREATE TYPE "TransactionStatus" AS ENUM ('ACTIVE', 'COMPLETED', 'FAILED', 'CANCELED');
+
+-- CreateEnum
+CREATE TYPE "SessionStatus" AS ENUM ('ACTIVE', 'COMPLETED', 'FAILED', 'TIMEOUT');
+
+-- CreateEnum
+CREATE TYPE "ReservationStatus" AS ENUM ('ACTIVE', 'COMPLETED', 'CANCELED', 'EXPIRED');
+
+-- CreateEnum
+CREATE TYPE "RateUnit" AS ENUM ('A', 'W', 'kW');
+
+-- CreateEnum
+CREATE TYPE "MessageDirection" AS ENUM ('INBOUND', 'OUTBOUND');
+
+-- CreateEnum
+CREATE TYPE "NotificationType" AS ENUM ('CHARGING_STARTED', 'CHARGING_STOPPED', 'CHARGING_COMPLETED', 'PAYMENT_REQUIRED', 'SYSTEM_MAINTENANCE', 'GENERAL');
+
+-- CreateTable
+CREATE TABLE "users" (
+    "id" TEXT NOT NULL,
+    "phoneNumber" TEXT NOT NULL,
+    "password" TEXT NOT NULL,
+    "name" TEXT,
+    "email" TEXT,
+    "status" "UserStatus" NOT NULL DEFAULT 'ACTIVE',
+    "resetToken" TEXT,
+    "resetTokenExp" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "user_vehicles" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "licensePlate" TEXT NOT NULL,
+    "make" TEXT,
+    "model" TEXT,
+    "type" "VehicleType" NOT NULL DEFAULT 'ELECTRIC',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "user_vehicles_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "charge_points" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "location" TEXT NOT NULL,
+    "latitude" DOUBLE PRECISION,
+    "longitude" DOUBLE PRECISION,
+    "protocol" "OCPPVersion" NOT NULL,
+    "status" "ChargePointStatus" NOT NULL DEFAULT 'AVAILABLE',
+    "maxPower" DOUBLE PRECISION,
+    "connectorCount" INTEGER NOT NULL DEFAULT 1,
+    "ownerId" TEXT,
+    "ownershipType" "OwnershipType" NOT NULL DEFAULT 'PUBLIC',
+    "isPublic" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "charge_points_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "connectors" (
+    "id" TEXT NOT NULL,
+    "chargePointId" TEXT NOT NULL,
+    "connectorId" INTEGER NOT NULL,
+    "type" "ConnectorType" NOT NULL DEFAULT 'TYPE_2',
+    "status" "ConnectorStatus" NOT NULL DEFAULT 'AVAILABLE',
+    "maxPower" DOUBLE PRECISION,
+    "maxCurrent" DOUBLE PRECISION,
+
+    CONSTRAINT "connectors_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "transactions" (
+    "id" TEXT NOT NULL,
+    "transactionId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "vehicleId" TEXT,
+    "chargePointId" TEXT NOT NULL,
+    "connectorId" TEXT NOT NULL,
+    "startTime" TIMESTAMP(3) NOT NULL,
+    "endTime" TIMESTAMP(3),
+    "startMeterValue" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "endMeterValue" DOUBLE PRECISION,
+    "totalEnergy" DOUBLE PRECISION,
+    "totalCost" DOUBLE PRECISION,
+    "status" "TransactionStatus" NOT NULL DEFAULT 'ACTIVE',
+    "stopReason" TEXT,
+
+    CONSTRAINT "transactions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "meter_values" (
+    "id" TEXT NOT NULL,
+    "transactionId" TEXT NOT NULL,
+    "timestamp" TIMESTAMP(3) NOT NULL,
+    "value" DOUBLE PRECISION NOT NULL,
+    "power" DOUBLE PRECISION,
+    "current" DOUBLE PRECISION,
+    "voltage" DOUBLE PRECISION,
+
+    CONSTRAINT "meter_values_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "charging_sessions" (
+    "id" TEXT NOT NULL,
+    "sessionId" TEXT NOT NULL,
+    "chargePointId" TEXT NOT NULL,
+    "connectorId" TEXT NOT NULL,
+    "userId" TEXT,
+    "status" "SessionStatus" NOT NULL DEFAULT 'ACTIVE',
+    "startTime" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "endTime" TIMESTAMP(3),
+    "lastActivity" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "charging_sessions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "reservations" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "chargePointId" TEXT NOT NULL,
+    "connectorId" TEXT,
+    "startTime" TIMESTAMP(3) NOT NULL,
+    "endTime" TIMESTAMP(3) NOT NULL,
+    "status" "ReservationStatus" NOT NULL DEFAULT 'ACTIVE',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "reservations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "charging_profiles" (
+    "id" TEXT NOT NULL,
+    "chargePointId" TEXT,
+    "connectorId" TEXT,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "chargingRateUnit" "RateUnit" NOT NULL DEFAULT 'A',
+    "chargingSchedule" JSONB NOT NULL,
+    "stackLevel" INTEGER NOT NULL DEFAULT 1,
+    "validFrom" TIMESTAMP(3),
+    "validTo" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "charging_profiles_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ocpp_messages" (
+    "id" TEXT NOT NULL,
+    "messageId" TEXT NOT NULL,
+    "chargePointId" TEXT NOT NULL,
+    "direction" "MessageDirection" NOT NULL,
+    "action" TEXT NOT NULL,
+    "payload" JSONB NOT NULL,
+    "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ocpp_messages_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "notifications" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT,
+    "title" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "type" "NotificationType" NOT NULL,
+    "isRead" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_phoneNumber_key" ON "users"("phoneNumber");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "user_vehicles_licensePlate_key" ON "user_vehicles"("licensePlate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "connectors_chargePointId_connectorId_key" ON "connectors"("chargePointId", "connectorId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "transactions_transactionId_key" ON "transactions"("transactionId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "charging_sessions_sessionId_key" ON "charging_sessions"("sessionId");
+
+-- AddForeignKey
+ALTER TABLE "user_vehicles" ADD CONSTRAINT "user_vehicles_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "charge_points" ADD CONSTRAINT "charge_points_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "connectors" ADD CONSTRAINT "connectors_chargePointId_fkey" FOREIGN KEY ("chargePointId") REFERENCES "charge_points"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "transactions" ADD CONSTRAINT "transactions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "transactions" ADD CONSTRAINT "transactions_vehicleId_fkey" FOREIGN KEY ("vehicleId") REFERENCES "user_vehicles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "transactions" ADD CONSTRAINT "transactions_chargePointId_fkey" FOREIGN KEY ("chargePointId") REFERENCES "charge_points"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "transactions" ADD CONSTRAINT "transactions_connectorId_fkey" FOREIGN KEY ("connectorId") REFERENCES "connectors"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "meter_values" ADD CONSTRAINT "meter_values_transactionId_fkey" FOREIGN KEY ("transactionId") REFERENCES "transactions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "charging_sessions" ADD CONSTRAINT "charging_sessions_chargePointId_fkey" FOREIGN KEY ("chargePointId") REFERENCES "charge_points"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "charging_sessions" ADD CONSTRAINT "charging_sessions_connectorId_fkey" FOREIGN KEY ("connectorId") REFERENCES "connectors"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
