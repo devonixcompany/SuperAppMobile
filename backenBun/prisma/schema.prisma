@@ -20,7 +20,7 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 // ประเภทนิติบุคล หรือ บุคลคลธรรมดา
-  type         String?   // NORMAL, BUSINESS
+  typeUser         UserType?   // NORMAL, BUSINESS
   // ความสัมพันธ์
   vehicles     UserVehicle[]
   transactions Transaction[]
@@ -71,8 +71,8 @@ model ChargePoint {
   id              String           @id
   name            String
   location        String
-  latitude        Float?
-  longitude       Float?
+  latitude        Decimal?         // ถ้า DB รองรับ Decimal
+  longitude       Decimal?
   protocol        OCPPVersion
   status          ChargePointStatus @default(AVAILABLE)
   maxPower        Float? // กำลังไฟสูงสุด (kW)
@@ -82,16 +82,14 @@ model ChargePoint {
   ownerId         String?          // ID ของเจ้าของ (null = เครื่องชาร์จสาธารณะ)
   ownershipType   OwnershipType    @default(PUBLIC) // ประเภทความเป็นเจ้าของ
   isPublic        Boolean          @default(true)   // เปิดให้คนอื่นใช้ได้หรือไม่
-  
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  
+
   // ความสัมพันธ์
   owner           User?            @relation("UserChargePoints", fields: [ownerId], references: [id])
   connectors      Connector[]
   transactions    Transaction[]
   sessions        ChargingSession[]
-  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
   @@map("charge_points")
 }
 
@@ -310,10 +308,15 @@ model Notification {
 
 // ประเภทการแจ้งเตือน
 enum NotificationType {
-  CHARGING_STARTED
+  CHARGING_STARTEDChargePoint
   CHARGING_STOPPED
   CHARGING_COMPLETED
   PAYMENT_REQUIRED
   SYSTEM_MAINTENANCE
   GENERAL
+}
+
+enum UserType {
+  NORMAL
+  BUSINESS
 }

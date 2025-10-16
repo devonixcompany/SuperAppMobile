@@ -1,0 +1,38 @@
+{
+  "name": "ws-gateway",
+  "version": "1.0.0",
+  "description": "WebSocket Gateway for OCPP Protocol",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts"
+  },
+  "dependencies": {
+    "ws": "^8.13.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.15.0",
+    "@types/ws": "^8.5.0",
+    "@types/uuid": "^9.0.0",
+    "@typescript-eslint/eslint-plugin": "^5.57.0",
+    "@typescript-eslint/parser": "^5.57.0",
+    "eslint": "^8.37.0",
+    "jest": "^29.5.0",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "ocpp",
+    "websocket",
+    "gateway",
+    "electric-vehicle",
+    "charging-station"
+  ],
+  "author": "",
+  "license": "MIT"
+}
