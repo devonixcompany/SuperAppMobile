@@ -1,136 +1,353 @@
-import React from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import ENV from '../config/env';
+import { storeTokens } from '../utils/keychain';
 
 export default function SuccessScreen() {
-  const handleContinue = () => {
-    // Navigate to main app or home screen
-    router.replace('/');
+  const params = useLocalSearchParams();
+  const firebaseUidFromParams = params.firebaseUid as string;
+  const phoneNumberFromParams = params.phoneNumber as string;
+  
+  const [userType, setUserType] = useState('individual'); // 'individual' or 'corporate'
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Memoize handlers to prevent re-renders
+  const handleFullNameChange = useCallback((text: string) => setFullName(text), []);
+  const handleEmailChange = useCallback((text: string) => setEmail(text), []);
+  const handlePasswordChange = useCallback((text: string) => setPassword(text), []);
+  const handleConfirmPasswordChange = useCallback((text: string) => setConfirmPassword(text), []);
+  const toggleShowPassword = useCallback(() => setShowPassword(prev => !prev), []);
+  const toggleShowConfirmPassword = useCallback(() => setShowConfirmPassword(prev => !prev), []);
+
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   };
+
+  const validateForm = () => {
+    if (!fullName.trim()) {
+      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกชื่อ-นามสกุล');
+      return false;
+    }
+
+    if (!email.trim()) {
+      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกอีเมล');
+      return false;
+    }
+
+    if (!validateEmail(email)) {
+      Alert.alert('ข้อผิดพลาด', 'รูปแบบอีเมลไม่ถูกต้อง');
+      return false;
+    }
+
+    if (!password.trim()) {
+      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกรหัสผ่าน');
+      return false;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('ข้อผิดพลาด', 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+      return false;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('ข้อผิดพลาด', 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Validate Firebase UID and phone number
+      if (!firebaseUidFromParams) {
+        Alert.alert('ข้อผิดพลาด', 'ไม่พบข้อมูลการยืนยันตัวตน กรุณาลองใหม่อีกครั้ง');
+        return;
+      }
+
+      if (!phoneNumberFromParams) {
+        Alert.alert('ข้อผิดพลาด', 'ไม่พบหมายเลขโทรศัพท์ กรุณาลองใหม่อีกครั้ง');
+        return;
+      }
+
+      const registrationData = {
+        firebaseUid: firebaseUidFromParams,
+        phoneNumber: phoneNumberFromParams,
+        userType,
+        fullName: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        confirmPassword,
+      };
+
+      console.log('Registration data:', registrationData);
+
+      // Send data to backend API
+      const response = await fetch(`${ENV.apiUrl}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(registrationData),
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(responseData.message || 'Registration failed');
+      }
+
+      console.log('✅ Registration successful:', responseData);
+
+      // Store authentication tokens if provided
+      if (responseData.data?.token && responseData.data?.refreshToken) {
+        const tokensStored = await storeTokens({
+          accessToken: responseData.data.token,
+          refreshToken: responseData.data.refreshToken,
+        });
+        console.log('🎫 Tokens stored after registration:', tokensStored);
+        console.log('📦 Access Token:', responseData.data.token.substring(0, 20) + '...');
+        console.log('🔄 Refresh Token:', responseData.data.refreshToken.substring(0, 20) + '...');
+      } else {
+        console.warn('⚠️ No tokens received from registration');
+      }
+
+      Alert.alert(
+        'สำเร็จ!',
+        'การลงทะเบียนเสร็จสมบูรณ์',
+        [
+          {
+            text: 'ตกลง',
+            onPress: () => router.replace('/login')
+          }
+        ]
+      );
+
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      Alert.alert(
+        'เกิดข้อผิดพลาด',
+        error.message || 'ไม่สามารถลงทะเบียนได้ กรุณาลองใหม่อีกครั้ง'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <ScrollView 
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
-        contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingBottom: 40 }}
-        showsVerticalScrollIndicator={false}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        {/* Back Button */}
-        <View className="flex-row items-center pt-2 pb-4">
-          <TouchableOpacity className="p-2 -ml-2" onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={24} color="#374151" />
-          </TouchableOpacity>
-        </View>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          <View className="flex-1 justify-center items-center ">
+            {/* Header */}
+            <View className="items-center  mb-10">
+              <Image
+                source={require('../assets/img/logo.png')}
+                style={{ width: 220, height: 110 }}
 
-        {/* Logo Section */}
-        <View className="items-center my-12">
-          <View className="mb-4">
-            <Text className="text-4xl font-bold">
-              <Text className="text-green-500">P</Text>
-              <Text className="text-gray-800">ONIX</Text>
-            </Text>
-          </View>
-          <View className="w-16 h-1 bg-green-500 rounded-full"></View>
-        </View>
+              />
+              <Text className="text-2xl font-bold text-[#5EC1A0] mb-2">
+                ลงทะเบียน
+              </Text>
+              <Text className="text-base text-gray-600 text-center leading-6">
+                กรอกข้อมูลส่วนตัวเพื่อสร้างบัญชีใหม่
+              </Text>
+            </View>
 
-        {/* Success Content */}
-        <View className="flex-1 items-center justify-center">
-          {/* Success Icon */}
-          <View className="w-24 h-24 bg-green-100 rounded-full items-center justify-center mb-8">
-            <Ionicons name="checkmark" size={48} color="#10B981" />
-          </View>
+            {/* Form */}
+            <View className="mb-8 w-full  px-8">
+              {/* User Type Selection */}
+              <View className="mb-5">
+                <Text className="text-base font-medium text-[#1D2144] mb-3">
+                  ประเภทผู้ใช้
+                </Text>
+                <View className="flex-row bg-gray-100 rounded-lg p-1">
+                  <TouchableOpacity
+                    onPress={() => setUserType('individual')}
+                    className={`flex-1 py-3 px-4 rounded-md items-center ${userType === 'individual' ? 'bg-[#00C58E]' : 'bg-transparent'}`}
+                  >
+                    <Text className={`text-sm ${userType === 'individual' ? 'text-white font-semibold' : 'text-gray-600 font-normal'}`}>
+                      บุคคลธรรมดา
+                    </Text>
+                  </TouchableOpacity>
 
-          {/* Header */}
-          <View className="items-center mb-12">
-            <Text className="text-2xl font-bold text-gray-800 mb-3">ลงทะเบียน</Text>
-            <Text className="text-base text-gray-500 text-center leading-6 px-4">
-              ระบบได้ลงทะเบียนเพื่อใช้งาน เพื่อให้บริการ{'\n'}
-              ข้อมูลของคุณ
-            </Text>
-          </View>
-
-          {/* User Info Section */}
-          <View className="w-full mb-8">
-            <View className="bg-white rounded-xl p-6 shadow-sm" style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.05,
-              shadowRadius: 2,
-              elevation: 1,
-            }}>
-              {/* Phone Number */}
-              <View className="flex-row items-center justify-between py-3 border-b border-gray-100">
-                <View className="flex-row items-center">
-                  <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                  <Text className="text-base text-gray-700 ml-3">เบอร์โทรศัพท์</Text>
+                  <TouchableOpacity
+                    onPress={() => setUserType('corporate')}
+                    className={`flex-1 py-3 px-4 rounded-md items-center ${userType === 'corporate' ? 'bg-[#00C58E]' : 'bg-transparent'}`}
+                  >
+                    <Text className={`text-sm ${userType === 'corporate' ? 'text-white font-semibold' : 'text-gray-600 font-normal'}`}>
+                      นิติบุคคล
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <Text className="text-base text-gray-500">ยืนยันแล้ว</Text>
               </View>
 
-              {/* Name */}
-              <View className="flex-row items-center justify-between py-3 border-b border-gray-100">
-                <View className="flex-row items-center">
-                  <View className="w-5 h-5 border border-gray-300 rounded-full" />
-                  <Text className="text-base text-gray-700 ml-3">ชื่อ-นามสกุล</Text>
+              {/* ชื่อ-นามสกุล */}
+              <View className="mb-5">
+                <Text className="text-base font-medium text-[#1D2144] mb-2">
+                  ชื่อ-นามสกุล
+                </Text>
+                <View className="border border-gray-300 rounded-lg bg-white">
+                  <TextInput
+                    className="px-4 py-4 text-base text-[#1F2937]"
+                    placeholder="กรอกชื่อ-นามสกุล"
+                    placeholderTextColor="#9CA3AF"
+                    value={fullName}
+                    onChangeText={handleFullNameChange}
+                    autoCapitalize="words"
+                  />
                 </View>
-                <Text className="text-base text-gray-400">ยังไม่ได้กรอก</Text>
               </View>
 
-              {/* Email */}
-              <View className="flex-row items-center justify-between py-3 border-b border-gray-100">
-                <View className="flex-row items-center">
-                  <View className="w-5 h-5 border border-gray-300 rounded-full" />
-                  <Text className="text-base text-gray-700 ml-3">อีเมล</Text>
+              {/* อีเมล */}
+              <View className="mb-5">
+                <Text className="text-base font-medium text-[#1D2144] mb-2">
+                  อีเมล
+                </Text>
+                <View className="border border-gray-300 rounded-lg bg-white">
+                  <TextInput
+                    className="px-4 py-4 text-base text-[#1F2937]"
+                    placeholder="example@email.com"
+                    placeholderTextColor="#9CA3AF"
+                    value={email}
+                    onChangeText={handleEmailChange}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
                 </View>
-                <Text className="text-base text-gray-400">ยังไม่ได้กรอก</Text>
               </View>
 
-              {/* ID Card */}
-              <View className="flex-row items-center justify-between py-3 border-b border-gray-100">
-                <View className="flex-row items-center">
-                  <View className="w-5 h-5 border border-gray-300 rounded-full" />
-                  <Text className="text-base text-gray-700 ml-3">บัตรประชาชน</Text>
+              {/* รหัสผ่าน */}
+              <View className="mb-5">
+                <Text className="text-base font-medium text-[#1D2144] mb-2">
+                  รหัสผ่าน
+                </Text>
+                <View className="relative border border-gray-300 rounded-lg bg-white">
+                  <TextInput
+                    className="px-4 py-4 text-base text-[#1F2937]"
+                    placeholder="กรอกรหัสผ่าน (อย่างน้อย 6 ตัวอักษร)"
+                    placeholderTextColor="#9CA3AF"
+                    value={password}
+                    onChangeText={handlePasswordChange}
+                    secureTextEntry={!showPassword}
+                  />
+                  <TouchableOpacity
+                    onPress={toggleShowPassword}
+                    className="absolute right-4 top-4 p-1"
+                  >
+                    <Ionicons
+                      name={showPassword ? 'eye' : 'eye-off'}
+                      size={20}
+                      color="#666"
+                    />
+                  </TouchableOpacity>
                 </View>
-                <Text className="text-base text-gray-400">ยังไม่ได้กรอก</Text>
               </View>
 
-              {/* Bank Account */}
-              <View className="flex-row items-center justify-between py-3">
-                <View className="flex-row items-center">
-                  <View className="w-5 h-5 border border-gray-300 rounded-full" />
-                  <Text className="text-base text-gray-700 ml-3">บัญชีธนาคาร</Text>
+              {/* ยืนยันรหัสผ่าน */}
+              <View className="mb-5">
+                <Text className="text-base font-medium text-[#1D2144] mb-2">
+                  ยืนยันรหัสผ่าน
+                </Text>
+                <View className="relative border border-gray-300 rounded-lg bg-white">
+                  <TextInput
+                    className="px-4 py-4 text-base text-[#1F2937]"
+                    placeholder="กรอกรหัสผ่านอีกครั้ง"
+                    placeholderTextColor="#9CA3AF"
+                    value={confirmPassword}
+                    onChangeText={handleConfirmPasswordChange}
+                    secureTextEntry={!showConfirmPassword}
+                  />
+                  <TouchableOpacity
+                    onPress={toggleShowConfirmPassword}
+                    className="absolute right-4 top-4 p-1"
+                  >
+                    <Ionicons
+                      name={showConfirmPassword ? 'eye' : 'eye-off'}
+                      size={20}
+                      color="#666"
+                    />
+                  </TouchableOpacity>
                 </View>
-                <Text className="text-base text-gray-400">ยังไม่ได้เชื่อมต่อ</Text>
               </View>
+
+              {/* Submit Button */}
+              <TouchableOpacity
+                onPress={handleSubmit}
+                disabled={loading}
+                className="mt-2"
+              >
+                <LinearGradient
+                  colors={['#1D2144', '#00C58E']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  className={`py-4 rounded-lg items-center shadow-sm ${loading ? 'opacity-70' : 'opacity-100'
+                    }`}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text className="text-white py-4 text-center text-xl font-semibold">
+                      ยืนยัน
+                    </Text>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+
+            {/* Login Link */}
+            <View className="items-center mt-auto mb-5">
+              <Text className="text-gray-600 text-sm">
+                มีบัญชีอยู่แล้ว?{' '}
+                <Text
+                  className="text-[#00C58E] font-medium"
+                  onPress={() => router.push('/login')}
+                >
+                  เข้าสู่ระบบ
+                </Text>
+              </Text>
             </View>
           </View>
-        </View>
-
-        {/* Continue Button */}
-        <View className="mt-auto">
-          <TouchableOpacity
-            className="h-14 rounded-xl items-center justify-center"
-            style={{
-              backgroundColor: '#3B82F6',
-              shadowColor: '#3B82F6',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.2,
-              shadowRadius: 4,
-              elevation: 3,
-            }}
-            onPress={handleContinue}
-          >
-            <Text className="text-base font-semibold text-white">เริ่มใช้งาน</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

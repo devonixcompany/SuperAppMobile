@@ -35,22 +35,25 @@ CREATE TYPE "RateUnit" AS ENUM ('A', 'W', 'kW');
 CREATE TYPE "MessageDirection" AS ENUM ('INBOUND', 'OUTBOUND');
 
 -- CreateEnum
-CREATE TYPE "NotificationType" AS ENUM ('CHARGING_STARTED', 'CHARGING_STOPPED', 'CHARGING_COMPLETED', 'PAYMENT_REQUIRED', 'SYSTEM_MAINTENANCE', 'GENERAL');
+CREATE TYPE "NotificationType" AS ENUM ('CHARGING_STARTEDChargePoint', 'CHARGING_STOPPED', 'CHARGING_COMPLETED', 'PAYMENT_REQUIRED', 'SYSTEM_MAINTENANCE', 'GENERAL');
+
+-- CreateEnum
+CREATE TYPE "UserType" AS ENUM ('NORMAL', 'BUSINESS');
 
 -- CreateTable
-CREATE TABLE "users" (
+CREATE TABLE "User" (
     "id" TEXT NOT NULL,
+    "firebaseUid" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
     "phoneNumber" TEXT NOT NULL,
     "password" TEXT NOT NULL,
-    "name" TEXT,
-    "email" TEXT,
-    "status" "UserStatus" NOT NULL DEFAULT 'ACTIVE',
-    "resetToken" TEXT,
-    "resetTokenExp" TIMESTAMP(3),
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "typeUser" "UserType",
+    "refresh_token" TEXT,
 
-    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -72,8 +75,8 @@ CREATE TABLE "charge_points" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "location" TEXT NOT NULL,
-    "latitude" DOUBLE PRECISION,
-    "longitude" DOUBLE PRECISION,
+    "latitude" DECIMAL(65,30),
+    "longitude" DECIMAL(65,30),
     "protocol" "OCPPVersion" NOT NULL,
     "status" "ChargePointStatus" NOT NULL DEFAULT 'AVAILABLE',
     "maxPower" DOUBLE PRECISION,
@@ -208,7 +211,13 @@ CREATE TABLE "notifications" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "users_phoneNumber_key" ON "users"("phoneNumber");
+CREATE UNIQUE INDEX "User_firebaseUid_key" ON "User"("firebaseUid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "User_phoneNumber_key" ON "User"("phoneNumber");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "user_vehicles_licensePlate_key" ON "user_vehicles"("licensePlate");
@@ -223,25 +232,25 @@ CREATE UNIQUE INDEX "transactions_transactionId_key" ON "transactions"("transact
 CREATE UNIQUE INDEX "charging_sessions_sessionId_key" ON "charging_sessions"("sessionId");
 
 -- AddForeignKey
-ALTER TABLE "user_vehicles" ADD CONSTRAINT "user_vehicles_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "user_vehicles" ADD CONSTRAINT "user_vehicles_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "charge_points" ADD CONSTRAINT "charge_points_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "charge_points" ADD CONSTRAINT "charge_points_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "connectors" ADD CONSTRAINT "connectors_chargePointId_fkey" FOREIGN KEY ("chargePointId") REFERENCES "charge_points"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "transactions" ADD CONSTRAINT "transactions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "transactions" ADD CONSTRAINT "transactions_vehicleId_fkey" FOREIGN KEY ("vehicleId") REFERENCES "user_vehicles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "transactions" ADD CONSTRAINT "transactions_chargePointId_fkey" FOREIGN KEY ("chargePointId") REFERENCES "charge_points"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "transactions" ADD CONSTRAINT "transactions_connectorId_fkey" FOREIGN KEY ("connectorId") REFERENCES "connectors"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "transactions" ADD CONSTRAINT "transactions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "transactions" ADD CONSTRAINT "transactions_vehicleId_fkey" FOREIGN KEY ("vehicleId") REFERENCES "user_vehicles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "meter_values" ADD CONSTRAINT "meter_values_transactionId_fkey" FOREIGN KEY ("transactionId") REFERENCES "transactions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
