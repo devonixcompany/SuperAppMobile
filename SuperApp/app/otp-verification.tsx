@@ -16,10 +16,11 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+// @ts-expect-error - Firebase config is JS file
 import { auth } from '../firebaseConfig';
 
 export default function OTPVerificationScreen() {
-  const { phoneNumber, verificationId } = useLocalSearchParams();
+  const { phoneNumber, verificationId, isRegistration, fullName } = useLocalSearchParams();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
@@ -71,19 +72,32 @@ export default function OTPVerificationScreen() {
         otpCode
       );
       
+      // @ts-expect-error - auth type from JS config
       const userCredential = await signInWithCredential(auth, credential);
-      
+      console.log("verify otp success data respon firebase ",userCredential)
       // Show success feedback immediately
       setLoading(false);
       
-      // Navigate to success screen
-      router.push('/success' as any);
+      if (isRegistration === 'true') {
+        // For registration flow, navigate to success page with Firebase UID
+        router.push({
+          pathname: '/success' as any,
+          params: { 
+            fullName, 
+            phoneNumber,
+            firebaseUid: userCredential.user.uid
+          }
+        });
+      } else {
+        // For login flow, navigate directly to success
+        router.push('/success' as any);
+      }
       
     } catch (error: any) {
       console.error('Error verifying OTP:', error);
       Alert.alert(
         'ข้อผิดพลาด',
-        error.message || 'รหัส OTP ไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง'
+        'รหัส OTP ไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง'
       );
     } finally {
       setLoading(false);
@@ -138,9 +152,14 @@ export default function OTPVerificationScreen() {
 
           {/* Header */}
           <View className="items-center mb-12">
-            <Text className="text-2xl font-bold text-[#51BC8E]  mb-3">ส่ง OTP</Text>
+            <Text className="text-2xl font-bold text-[#51BC8E] mb-3">
+              {isRegistration === 'true' ? 'ยืนยันการลงทะเบียน' : 'ส่ง OTP'}
+            </Text>
             <Text className="text-base text-gray-500 text-center leading-6 px-4">
-              ระบบได้ส่งรหัส OTP 6 หลักทาง SMS เพื่อยืนยันตัวตน
+              {isRegistration === 'true' 
+                ? `ระบบได้ส่งรหัส OTP 6 หลักไปยัง ${phoneNumber} เพื่อยืนยันการลงทะเบียน`
+                : 'ระบบได้ส่งรหัส OTP 6 หลักทาง SMS เพื่อยืนยันตัวตน'
+              }
             </Text>
             <Text className="text-sm text-gray-400 text-center mt-2">
               รหัสจะหมดอายุใน {formatTime(countdown)}

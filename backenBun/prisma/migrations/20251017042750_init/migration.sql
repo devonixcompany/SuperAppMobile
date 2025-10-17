@@ -44,12 +44,14 @@ CREATE TYPE "UserType" AS ENUM ('NORMAL', 'BUSINESS');
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "firebaseUid" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
     "phoneNumber" TEXT NOT NULL,
     "password" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "typeUser" "UserType",
+    "refresh_token" TEXT,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
@@ -212,6 +214,9 @@ CREATE TABLE "notifications" (
 CREATE UNIQUE INDEX "User_firebaseUid_key" ON "User"("firebaseUid");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "User_phoneNumber_key" ON "User"("phoneNumber");
 
 -- CreateIndex
@@ -236,16 +241,16 @@ ALTER TABLE "charge_points" ADD CONSTRAINT "charge_points_ownerId_fkey" FOREIGN 
 ALTER TABLE "connectors" ADD CONSTRAINT "connectors_chargePointId_fkey" FOREIGN KEY ("chargePointId") REFERENCES "charge_points"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "transactions" ADD CONSTRAINT "transactions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "transactions" ADD CONSTRAINT "transactions_vehicleId_fkey" FOREIGN KEY ("vehicleId") REFERENCES "user_vehicles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "transactions" ADD CONSTRAINT "transactions_chargePointId_fkey" FOREIGN KEY ("chargePointId") REFERENCES "charge_points"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "transactions" ADD CONSTRAINT "transactions_connectorId_fkey" FOREIGN KEY ("connectorId") REFERENCES "connectors"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "transactions" ADD CONSTRAINT "transactions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "transactions" ADD CONSTRAINT "transactions_vehicleId_fkey" FOREIGN KEY ("vehicleId") REFERENCES "user_vehicles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "meter_values" ADD CONSTRAINT "meter_values_transactionId_fkey" FOREIGN KEY ("transactionId") REFERENCES "transactions"("id") ON DELETE CASCADE ON UPDATE CASCADE;

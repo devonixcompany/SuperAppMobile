@@ -1,11 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { PhoneAuthProvider } from 'firebase/auth';
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -16,64 +15,84 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth, firebaseConfig } from '../firebaseConfig';
+import ENV from '../config/env';
+import { storeCredentials, storeTokens } from '../utils/keychain';
 
 export default function LoginScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
-  const recaptchaVerifier = useRef(null);
 
-  const formatPhoneNumber = (phone: string) => {
-    // Remove all non-digit characters
-    const cleaned = phone.replace(/\D/g, '');
-    
-    // Add +66 prefix if it doesn't start with country code
-    if (cleaned.startsWith('0')) {
-      return '+66' + cleaned.substring(1);
-    } else if (!cleaned.startsWith('66')) {
-      return '+66' + cleaned;
-    } else if (!cleaned.startsWith('+66')) {
-      return '+' + cleaned;
-    }
-    
-    return phone;
-  };
-
-  const sendOTP = async () => {
+  const handleLogin = async () => {
     if (!phoneNumber.trim()) {
       Alert.alert('ข้อผิดพลาด', 'กรุณากรอกหมายเลขโทรศัพท์');
       return;
     }
 
+    if (!password.trim()) {
+      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกรหัสผ่าน');
+      return;
+    }
+
     setLoading(true);
-    
+
     try {
-      const formattedPhone = formatPhoneNumber(phoneNumber);
-      
-      // Use PhoneAuthProvider with reCAPTCHA verifier
-      const phoneProvider = new PhoneAuthProvider(auth);
-      const verificationId = await phoneProvider.verifyPhoneNumber(
-        formattedPhone,
-        recaptchaVerifier.current!
-      );
-      
-      // Navigate to OTP screen with confirmation result
-      router.push({
-        pathname: '/otp-verification' as any,
-        params: { 
-          phoneNumber: formattedPhone,
-          verificationId: verificationId 
-        }
+      const response = await fetch(`${ENV.apiUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumber: phoneNumber.trim(),
+          password,
+        }),
       });
-      
-    } catch (error: any) {
-      console.error('Error sending OTP:', error);
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(responseData.message || 'Login failed');
+      }
+
+      console.log('✅ Login successful:', responseData);
+
+      // Store credentials securely using keychain
+      const credentialsStored = await storeCredentials({
+        phoneNumber: phoneNumber.trim(),
+        password
+      });
+      console.log('🔐 Credentials stored:', credentialsStored);
+
+      // Store authentication tokens
+      if (responseData.data?.accessToken && responseData.data?.refreshToken) {
+        const tokensStored = await storeTokens({
+          accessToken: responseData.data.accessToken,
+          refreshToken: responseData.data.refreshToken,
+        });
+        console.log('🎫 Tokens stored:', tokensStored);
+        console.log('📦 Access Token:', responseData.data.accessToken.substring(0, 20) + '...');
+        console.log('🔄 Refresh Token:', responseData.data.refreshToken.substring(0, 20) + '...');
+      } else {
+        console.warn('⚠️ No tokens received from server');
+      }
+
       Alert.alert(
-        'ข้อผิดพลาด', 
-        error.message || 'ไม่สามารถส่ง OTP ได้ กรุณาลองใหม่อีกครั้ง'
+        'สำเร็จ!',
+        'เข้าสู่ระบบสำเร็จ',
+        [
+          {
+            text: 'ตกลง',
+            onPress: () => router.replace('/explore' as any)
+          }
+        ]
+      );
+
+    } catch (error: any) {
+      console.error('Login error:', error);
+      Alert.alert(
+        'เกิดข้อผิดพลาด',
+        error.message || 'ไม่สามารถเข้าสู่ระบบได้ กรุณาลองใหม่อีกครั้ง'
       );
     } finally {
       setLoading(false);
@@ -86,17 +105,10 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-[#F8FAFC]">
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaVerifier}
-        firebaseConfig={firebaseConfig}
-        attemptInvisibleVerification={false}
-        title="กรุณายืนยันตัวตน"
-        cancelLabel="ยกเลิก"
-      />
-      
+
       {/* Back Button */}
       <View className="pt-4 pb-2">
-        <TouchableOpacity 
+        <TouchableOpacity
           className="w-10 h-10 rounded-[20px] bg-white items-center justify-center shadow-sm"
           onPress={() => router.replace('/terms')}
         >
@@ -104,7 +116,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
@@ -115,19 +127,21 @@ export default function LoginScreen() {
               <View className="items-center my-8">
                 <Image source={require('../assets/img/logo.png')} style={{ width: 220, height: 100 }} />
               </View>
-              
+
               <Text className="text-[28px] font-bold text-[#51BC8E] mb-2">เข้าสู่ระบบ</Text>
               <Text className="text-base mt-4 text-[#6B7280] text-center leading-6">
-               ผู้ใช้สามารถเข้าสู่ระบบ{'\n'}ด้วยหมายเลขโทรศัพท์
-และรหัสผ่านที่ลงทะเบียนไว้แล้ว
+                ผู้ใช้สามารถเข้าสู่ระบบ{'\n'}ด้วยหมายเลขโทรศัพท์
+                และรหัสผ่านที่ลงทะเบียนไว้แล้ว
               </Text>
             </View>
 
+
+
             {/* Form Section */}
-            <View className="mb-6 mt-6">
+            <View className="mb-6 mt-2">
               {/* Phone Number Field */}
               <View className="mb-5">
-                 <TextInput
+                <TextInput
                   className="border border-[#D1D5DB] rounded-xl px-4 py-4 text-base bg-white text-[#1F2937]"
                   placeholder="หมายเลขโทรศัพท์"
                   placeholderTextColor="#9CA3AF"
@@ -141,7 +155,7 @@ export default function LoginScreen() {
 
               {/* Password Field */}
               <View className="mb-5">
-                 <View className="flex-row items-center border border-[#D1D5DB] rounded-xl bg-white">
+                <View className="flex-row items-center border border-[#D1D5DB] rounded-xl bg-white">
                   <TextInput
                     className="flex-1 px-4 py-4 text-base text-[#1F2937]"
                     placeholder="รหัสผ่าน"
@@ -163,44 +177,44 @@ export default function LoginScreen() {
                 </View>
               </View>
 
-              {/* Remember Me and Forgot Password */}
-              <View className="flex-row justify-between items-center mt-4">
-                <TouchableOpacity
-                  className="flex-row items-center ml-2"
-                  onPress={() => setRememberMe(!rememberMe)}
-                >
-             
+              {/* Forgot Password */}
+              <View className="flex-row justify-end items-center mt-4">
+                <TouchableOpacity className="ml-2">
                   <Text className="text-sm text-[#565b64]">ลืมรหัสผ่าน</Text>
                 </TouchableOpacity>
-                
-
               </View>
             </View>
 
             {/* Login Button */}
-            <View className="mb-6 mt-24 rounded-2xl">
-              <TouchableOpacity
-              style={{borderRadius:'20px'}}
-              className='rounded-2xl'
-                onPress={sendOTP}
-                disabled={loading}
+            <TouchableOpacity
+              onPress={handleLogin}
+              disabled={loading}
+              className="mb-6"
+            >
+              <LinearGradient
+                colors={['#1F274B', '#5EC1A0']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{
+                  paddingVertical: 15,
+                  borderRadius: 8,
+                  alignItems: 'center',
+                  opacity: loading ? 0.7 : 1
+                }}
+                className="rounded-xl py-4 px-6 items-center justify-center"
               >
-                <LinearGradient
-                           style={{borderRadius:'20px'}}
-                  colors={['#1F274B', '#5EC1A0']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  className="rounded-2xl py-4 items-center  text-center"
-                >
-                  <Text            style={{borderRadius:'20px'}} className="text-white py-4 text-center rounded-2xl text-lg   font-bold">
-                    {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
+                {loading ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <Text className="text-whit py-2 text-white text-xl font-semibold">
+                    เข้าสู่ระบบ
                   </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
 
 
-        
+
 
             {/* Register Link */}
             <View className="flex-row justify-start items-center">
