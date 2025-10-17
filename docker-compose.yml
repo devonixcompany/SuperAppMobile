@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: csms-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: csms
+      POSTGRES_USER: csms_user
+      POSTGRES_PASSWORD: csms_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - csms-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U csms_user -d csms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  postgres_data:
+    driver: local
+
+
+networks:
+  csms-network:
+    driver: bridge

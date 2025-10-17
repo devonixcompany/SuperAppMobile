@@ -1,129 +1,405 @@
-import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { jwt } from '@elysiajs/jwt';
-import { PrismaClient } from '@prisma/client';
-import { hash, compare } from 'bcrypt';
+import { swagger } from '@elysiajs/swagger';
+import { Elysia } from 'elysia';
+import { prisma } from './lib/prisma';
+import { serviceContainer } from './services';
+
+// Get services from container
+const { jwtService } = serviceContainer;
 
 const app = new Elysia()
   .use(cors())
+  .use(swagger({
+    documentation: {
+      info: {
+        title: 'SuperApp API',
+        version: '1.0.0',
+        description: `
+# SuperApp Backend API
+
+A comprehensive backend service for SuperApp mobile application built with Bun, Elysia, and Prisma.
+
+## Features
+- 🔐 JWT-based authentication
+- 👤 User management system
+- 📱 Mobile-first design
+- 🏢 Support for individual and corporate users
+- 🔒 Secure password handling
+- 📊 Health monitoring
+
+## Authentication
+Most endpoints require authentication via Bearer token in the Authorization header:
+\`\`\`
+Authorization: Bearer <your-jwt-token>
+\`\`\`
+
+## Error Handling
+All endpoints return consistent error responses:
+\`\`\`json
+{
+  "success": false,
+  "message": "Error description"
+}
+\`\`\`
+        `,
+        contact: {
+          name: 'SuperApp Development Team',
+          email: 'dev@superapp.com'
+        },
+        license: {
+          name: 'MIT',
+          url: 'https://opensource.org/licenses/MIT'
+        }
+      },
+      servers: [
+        {
+          url: 'http://localhost:3000',
+          description: 'Development server'
+        },
+        {
+          url: 'https://api.superapp.com',
+          description: 'Production server'
+        }
+      ],
+      tags: [
+        {
+          name: 'Authentication',
+          description: '🔐 User authentication and authorization endpoints including registration, login, and token refresh'
+        },
+        {
+          name: 'User Management',
+          description: '👤 User profile management endpoints for viewing, updating, and managing user accounts'
+        },
+        {
+          name: 'Health',
+          description: '🏥 System health check and monitoring endpoints'
+        }
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+            description: 'JWT token for authentication'
+          }
+        },
+        schemas: {
+          User: {
+            type: 'object',
+            properties: {
+              id: { 
+                type: 'string', 
+                description: 'Unique user identifier',
+                example: 'clp123abc456def789' 
+              },
+              email: { 
+                type: 'string', 
+                format: 'email',
+                description: 'User email address',
+                example: 'john.doe@example.com' 
+              },
+              firstName: { 
+                type: 'string',
+                description: 'User first name',
+                example: 'John' 
+              },
+              lastName: { 
+                type: 'string',
+                description: 'User last name', 
+                example: 'Doe' 
+              },
+              userType: { 
+                type: 'string', 
+                enum: ['INDIVIDUAL', 'CORPORATE'],
+                description: 'Type of user account',
+                example: 'INDIVIDUAL' 
+              },
+              status: { 
+                type: 'string', 
+                enum: ['ACTIVE', 'INACTIVE', 'PENDING'],
+                description: 'Current user account status',
+                example: 'ACTIVE' 
+              },
+              phoneNumber: { 
+                type: 'string',
+                description: 'User phone number',
+                example: '+66812345678' 
+              },
+              dateOfBirth: { 
+                type: 'string', 
+                format: 'date',
+                description: 'User date of birth (YYYY-MM-DD)',
+                example: '1990-05-15' 
+              },
+              address: { 
+                type: 'string',
+                description: 'User address',
+                example: '123 Main St, Bangkok, Thailand' 
+              },
+              companyName: { 
+                type: 'string',
+                description: 'Company name (for corporate users)',
+                example: 'Tech Solutions Ltd.' 
+              },
+              taxId: { 
+                type: 'string',
+                description: 'Tax identification number (for corporate users)',
+                example: '1234567890123' 
+              },
+              createdAt: { 
+                type: 'string', 
+                format: 'date-time',
+                description: 'Account creation timestamp',
+                example: '2024-01-15T10:30:00Z' 
+              },
+              updatedAt: { 
+                type: 'string', 
+                format: 'date-time',
+                description: 'Last update timestamp',
+                example: '2024-01-20T14:45:00Z' 
+              }
+            },
+            required: ['id', 'email', 'firstName', 'lastName', 'userType', 'status']
+          },
+          SuccessResponse: {
+            type: 'object',
+            properties: {
+              success: { 
+                type: 'boolean', 
+                description: 'Indicates if the operation was successful',
+                example: true 
+              },
+              message: { 
+                type: 'string',
+                description: 'Success message in Thai or English',
+                example: 'ดำเนินการสำเร็จ' 
+              },
+              data: { 
+                type: 'object',
+                description: 'Response data (varies by endpoint)',
+                additionalProperties: true
+              }
+            },
+            required: ['success']
+          },
+          ErrorResponse: {
+            type: 'object',
+            properties: {
+              success: { 
+                type: 'boolean', 
+                description: 'Always false for error responses',
+                example: false 
+              },
+              message: { 
+                type: 'string',
+                description: 'Error message in Thai or English',
+                example: 'เกิดข้อผิดพลาด' 
+              },
+              error: { 
+                type: 'string',
+                description: 'Error code or type (optional)',
+                example: 'VALIDATION_ERROR' 
+              },
+              details: { 
+                type: 'object',
+                description: 'Additional error details (optional)',
+                additionalProperties: true
+              }
+            },
+            required: ['success', 'message']
+          },
+          ValidationError: {
+            type: 'object',
+            properties: {
+              success: { 
+                type: 'boolean', 
+                example: false 
+              },
+              message: { 
+                type: 'string',
+                example: 'ข้อมูลไม่ถูกต้อง' 
+              },
+              errors: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    field: { 
+                      type: 'string',
+                      description: 'Field name that failed validation',
+                      example: 'email' 
+                    },
+                    message: { 
+                      type: 'string',
+                      description: 'Validation error message',
+                      example: 'รูปแบบอีเมลไม่ถูกต้อง' 
+                    }
+                  }
+                }
+              }
+            }
+          },
+          AuthTokens: {
+            type: 'object',
+            properties: {
+              accessToken: { 
+                type: 'string',
+                description: 'JWT access token for API authentication',
+                example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' 
+              },
+              refreshToken: { 
+                type: 'string',
+                description: 'JWT refresh token for token renewal',
+                example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' 
+              },
+              expiresIn: { 
+                type: 'number',
+                description: 'Access token expiration time in seconds',
+                example: 3600 
+              }
+            },
+            required: ['accessToken', 'refreshToken', 'expiresIn']
+          }
+        }
+      },
+      security: [
+        {
+          bearerAuth: []
+        }
+      ]
+    }
+  }))
   .use(jwt({
     name: 'jwt',
     secret: process.env.JWT_SECRET || 'your-secret-key'
-  }));
+  }))
+  .use(serviceContainer.getAuthController())
+  .use(serviceContainer.getUserController())
+  .derive(async ({ request, set }: { request: Request; set: any }) => {
+    const authHeader = request.headers.get('authorization');
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return {
+        user: null
+      };
+    }
 
-const prisma = new PrismaClient();
+    const token = authHeader.substring(7);
+    const payload = await jwtService.verifyToken(token);
 
-// Auth routes
-app.post('/api/auth/signup', async ({ body }) => {
-  const { phoneNumber, password } = body as { phoneNumber: string; password: string };
+    if (!payload) {
+      return {
+        user: null
+      };
+    }
 
-  try {
-    // เข้ารหัสรหัสผ่านก่อนบันทึก
-    const hashedPassword = await hash(password, 10);
-
-    const user = await prisma.user.create({
-      data: {
-        phoneNumber,
-        password: hashedPassword,
-        status: 'PENDING',
-      },
+    // Fetch user from database to ensure they still exist and are active
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        id: true,
+        phoneNumber: true,
+        status: true,
+        typeUser: true,
+        createdAt: true
+      }
     });
 
-    return {
-      message: 'User registered successfully',
-      userId: user.id,
-    };
-  } catch (error) {
-    console.error('Registration error:', error);
-    return new Response(JSON.stringify({
-      error: 'Registration failed'
-    }), { status: 400 });
-  }
-});
-
-app.post('/api/auth/verify-otp', async ({ body }) => {
-  const { phoneNumber, firebaseUid } = body as { phoneNumber: string; firebaseUid: string };
-
-  try {
-    // อัปเดตผู้ใช้ด้วย Firebase UID และเปลี่ยนสถานะเป็น ACTIVE
-    const user = await prisma.user.update({
-      where: { phoneNumber },
-      data: {
-        firebaseUid,
-        status: 'ACTIVE',
-      },
-    });
+    if (!user || user.status !== 'ACTIVE') {
+      return {
+        user: null
+      };
+    }
 
     return {
-      message: 'User verified successfully',
       user
     };
-  } catch (error) {
-    console.error('Verification error:', error);
-    return new Response(JSON.stringify({
-      error: 'Verification failed'
-    }), { status: 400 });
-  }
-});
-
-app.post('/api/auth/login', async ({ body, jwt }) => {
-  const { phoneNumber, password } = body as { phoneNumber: string; password: string };
-
-  try {
-    const user = await prisma.user.findUnique({
-      where: { phoneNumber }
-    });
-
-    if (!user) {
-      return new Response(JSON.stringify({
-        error: 'User not found'
-      }), { status: 404 });
-    }
-
-    if (user.status !== 'ACTIVE') {
-      return new Response(JSON.stringify({
-        error: 'User account is not active'
-      }), { status: 403 });
-    }
-
-    // ตรวจสอบรหัสผ่าน
-    const isValidPassword = await compare(password, user.password);
-    if (!isValidPassword) {
-      return new Response(JSON.stringify({
-        error: 'Invalid password'
-      }), { status: 401 });
-    }
-
-    // สร้าง JWT token
-    const token = await jwt.sign({
-      userId: user.id,
-      phoneNumber: user.phoneNumber
-    });
-
-    return {
-      message: 'Login successful',
-      token,
-      user: {
-        id: user.id,
-        phoneNumber: user.phoneNumber,
-        status: user.status
+  })
+  .guard(
+    ({ user }: any) => !!user,
+    (app: any) =>
+      app.get('/api/profile', ({ user }: any) => {
+        return {
+          success: true,
+          data: {
+            user
+          }
+        };
+      })
+  )
+  .get('/health', () => ({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development'
+  }), {
+    detail: {
+      tags: ['Health'],
+      summary: '🏥 Health Check',
+      description: 'Returns the current status and health information of the API server',
+      responses: {
+        200: {
+          description: 'Server is healthy',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string', example: 'ok' },
+                  timestamp: { type: 'string', format: 'date-time' },
+                  uptime: { type: 'number', description: 'Server uptime in seconds' },
+                  version: { type: 'string', example: '1.0.0' },
+                  environment: { type: 'string', example: 'development' }
+                }
+              }
+            }
+          }
+        }
       }
-    };
-  } catch (error) {
-    console.error('Login error:', error);
-    return new Response(JSON.stringify({
-      error: 'Login failed'
-    }), { status: 400 });
-  }
-});
+    }
+  })
+  .onError(({ code, error, set }: { code: any; error: any; set: any }) => {
+    switch (code) {
+      case 'VALIDATION':
+        set.status = 400;
+        return {
+          success: false,
+          message: 'Invalid input data',
+          errors: error.all
+        };
+      case 'NOT_FOUND':
+        set.status = 404;
+        return {
+          success: false,
+          message: 'Resource not found'
+        };
+      case 'INTERNAL_SERVER_ERROR':
+        set.status = 500;
+        return {
+          success: false,
+          message: 'Internal server error'
+        };
+      default:
+        set.status = 500;
+        return {
+          success: false,
+          message: 'An unexpected error occurred'
+        };
+    }
+  });
 
-// Health check
-app.get('/health', () => ({
-  status: 'ok'
-}));
-
-const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+const port = process.env.PORT ? parseInt(process.env.PORT) : 8080;
 
 app.listen(port, () => {
   console.log(`🦊 Server is running on port ${port}`);
+  console.log(`📚 Swagger Documentation: http://localhost:${port}/swagger`);
+  console.log(`📝 API Endpoints:`);
+  console.log(`   POST /api/auth/register - User registration`);
+  console.log(`   POST /api/auth/login - User login`);
+  console.log(`   POST /api/auth/refresh - Refresh token`);
+  console.log(`   GET /api/profile - Get user profile (protected)`);
+  console.log(`   GET /health - Health check`);
 });
