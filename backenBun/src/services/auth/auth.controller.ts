@@ -184,7 +184,6 @@ Register a new user account in the SuperApp system.
         },
         body: t.Object({
           firebaseUid: t.String(),
-          phoneNumber: t.String(),
           userType: t.Union([t.Literal('individual'), t.Literal('corporate')]),
           fullName: t.String(),
           email: t.String(),

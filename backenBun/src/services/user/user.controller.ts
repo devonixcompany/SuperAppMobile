@@ -1,7 +1,6 @@
 import { Elysia, t } from 'elysia';
-import { UserService } from './user.service';
 import { ValidationService } from '../validation/validation.service';
-import { ValidationError } from '../../lib/validation';
+import { UserService } from './user.service';
 
 export const userController = (userService: UserService, validationService: ValidationService) =>
   new Elysia({ prefix: '/api/users' })

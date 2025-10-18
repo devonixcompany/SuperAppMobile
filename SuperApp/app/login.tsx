@@ -83,7 +83,7 @@ export default function LoginScreen() {
         [
           {
             text: 'ตกลง',
-            onPress: () => router.replace('/explore' as any)
+            onPress: () => router.replace('/(tabs)/home' as any)
           }
         ]
       );
