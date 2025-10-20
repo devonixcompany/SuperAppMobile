@@ -17,7 +17,7 @@ export default function InitialScreen() {
     <View className="flex-1 bg-[#EEF0F6] justify-center items-center">
       <View className="items-center justify-center">
         <Image
-          source={require('../assets/img/logo.png')}
+          source={require('@/assets/img/logo.png')}
           style={{ width: 220, height: 180 }}
           resizeMode="contain"
         />

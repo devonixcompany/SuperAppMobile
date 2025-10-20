@@ -1,8 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
+import { router, useLocalSearchParams } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,33 +12,48 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import ENV from '../config/env';
-import { storeTokens } from '../utils/keychain';
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { authService } from "@/services/api";
+import { storeTokens } from "@/utils/keychain";
 
 export default function SuccessScreen() {
   const params = useLocalSearchParams();
   const firebaseUidFromParams = params.firebaseUid as string;
   const phoneNumberFromParams = params.phoneNumber as string;
-  
-  const [userType, setUserType] = useState('individual'); // 'individual' or 'corporate'
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const [userType, setUserType] = useState("individual"); // 'individual' or 'corporate'
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Memoize handlers to prevent re-renders
-  const handleFullNameChange = useCallback((text: string) => setFullName(text), []);
+  const handleFullNameChange = useCallback(
+    (text: string) => setFullName(text),
+    [],
+  );
   const handleEmailChange = useCallback((text: string) => setEmail(text), []);
-  const handlePasswordChange = useCallback((text: string) => setPassword(text), []);
-  const handleConfirmPasswordChange = useCallback((text: string) => setConfirmPassword(text), []);
-  const toggleShowPassword = useCallback(() => setShowPassword(prev => !prev), []);
-  const toggleShowConfirmPassword = useCallback(() => setShowConfirmPassword(prev => !prev), []);
+  const handlePasswordChange = useCallback(
+    (text: string) => setPassword(text),
+    [],
+  );
+  const handleConfirmPasswordChange = useCallback(
+    (text: string) => setConfirmPassword(text),
+    [],
+  );
+  const toggleShowPassword = useCallback(
+    () => setShowPassword((prev) => !prev),
+    [],
+  );
+  const toggleShowConfirmPassword = useCallback(
+    () => setShowConfirmPassword((prev) => !prev),
+    [],
+  );
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -47,32 +62,32 @@ export default function SuccessScreen() {
 
   const validateForm = () => {
     if (!fullName.trim()) {
-      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกชื่อ-นามสกุล');
+      Alert.alert("ข้อผิดพลาด", "กรุณากรอกชื่อ-นามสกุล");
       return false;
     }
 
     if (!email.trim()) {
-      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกอีเมล');
+      Alert.alert("ข้อผิดพลาด", "กรุณากรอกอีเมล");
       return false;
     }
 
     if (!validateEmail(email)) {
-      Alert.alert('ข้อผิดพลาด', 'รูปแบบอีเมลไม่ถูกต้อง');
+      Alert.alert("ข้อผิดพลาด", "รูปแบบอีเมลไม่ถูกต้อง");
       return false;
     }
 
     if (!password.trim()) {
-      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกรหัสผ่าน');
+      Alert.alert("ข้อผิดพลาด", "กรุณากรอกรหัสผ่าน");
       return false;
     }
 
     if (password.length < 6) {
-      Alert.alert('ข้อผิดพลาด', 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+      Alert.alert("ข้อผิดพลาด", "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร");
       return false;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('ข้อผิดพลาด', 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน');
+      Alert.alert("ข้อผิดพลาด", "รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน");
       return false;
     }
 
@@ -89,12 +104,15 @@ export default function SuccessScreen() {
 
       // Validate Firebase UID and phone number
       if (!firebaseUidFromParams) {
-        Alert.alert('ข้อผิดพลาด', 'ไม่พบข้อมูลการยืนยันตัวตน กรุณาลองใหม่อีกครั้ง');
+        Alert.alert(
+          "ข้อผิดพลาด",
+          "ไม่พบข้อมูลการยืนยันตัวตน กรุณาลองใหม่อีกครั้ง",
+        );
         return;
       }
 
       if (!phoneNumberFromParams) {
-        Alert.alert('ข้อผิดพลาด', 'ไม่พบหมายเลขโทรศัพท์ กรุณาลองใหม่อีกครั้ง');
+        Alert.alert("ข้อผิดพลาด", "ไม่พบหมายเลขโทรศัพท์ กรุณาลองใหม่อีกครั้ง");
         return;
       }
 
@@ -108,24 +126,12 @@ export default function SuccessScreen() {
         confirmPassword,
       };
 
-      console.log('Registration data:', registrationData);
+      console.log("Registration data:", registrationData);
 
-      // Send data to backend API
-      const response = await fetch(`${ENV.apiUrl}/api/auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(registrationData),
-      });
+      // Send data to backend API using auth service
+      const responseData = await authService.register(registrationData);
 
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        throw new Error(responseData.message || 'Registration failed');
-      }
-
-      console.log('✅ Registration successful:', responseData);
+      console.log("✅ Registration successful:", responseData);
 
       // Store authentication tokens if provided
       if (responseData.data?.token && responseData.data?.refreshToken) {
@@ -133,43 +139,42 @@ export default function SuccessScreen() {
           accessToken: responseData.data.token,
           refreshToken: responseData.data.refreshToken,
         });
-        console.log('🎫 Tokens stored after registration:', tokensStored);
-        console.log('📦 Access Token:', responseData.data.token.substring(0, 20) + '...');
-        console.log('🔄 Refresh Token:', responseData.data.refreshToken.substring(0, 20) + '...');
+        console.log("🎫 Tokens stored after registration:", tokensStored);
+        console.log(
+          "📦 Access Token:",
+          responseData.data.token.substring(0, 20) + "...",
+        );
+        console.log(
+          "🔄 Refresh Token:",
+          responseData.data.refreshToken.substring(0, 20) + "...",
+        );
       } else {
-        console.warn('⚠️ No tokens received from registration');
+        console.warn("⚠️ No tokens received from registration");
       }
 
-      Alert.alert(
-        'สำเร็จ!',
-        'การลงทะเบียนเสร็จสมบูรณ์',
-        [
-          {
-            text: 'ตกลง',
-            onPress: () => router.replace('/login')
-          }
-        ]
-      );
-
+      Alert.alert("สำเร็จ!", "การลงทะเบียนเสร็จสมบูรณ์", [
+        {
+          text: "ตกลง",
+          onPress: () => router.replace("/login"),
+        },
+      ]);
     } catch (error: any) {
-      console.error('Registration error:', error);
+      console.error("Registration error:", error);
       Alert.alert(
-        'เกิดข้อผิดพลาด',
-        error.message || 'ไม่สามารถลงทะเบียนได้ กรุณาลองใหม่อีกครั้ง'
+        "เกิดข้อผิดพลาด",
+        error.message || "ไม่สามารถลงทะเบียนได้ กรุณาลองใหม่อีกครั้ง",
       );
     } finally {
       setLoading(false);
     }
   };
 
-
-
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         className="flex-1"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
         <ScrollView
           contentContainerStyle={{ flexGrow: 1 }}
@@ -180,9 +185,8 @@ export default function SuccessScreen() {
             {/* Header */}
             <View className="items-center  mb-10">
               <Image
-                source={require('../assets/img/logo.png')}
+                source={require("@/assets/img/logo.png")}
                 style={{ width: 220, height: 110 }}
-
               />
               <Text className="text-2xl font-bold text-[#5EC1A0] mb-2">
                 ลงทะเบียน
@@ -201,19 +205,23 @@ export default function SuccessScreen() {
                 </Text>
                 <View className="flex-row bg-gray-100 rounded-lg p-1">
                   <TouchableOpacity
-                    onPress={() => setUserType('individual')}
-                    className={`flex-1 py-3 px-4 rounded-md items-center ${userType === 'individual' ? 'bg-[#00C58E]' : 'bg-transparent'}`}
+                    onPress={() => setUserType("individual")}
+                    className={`flex-1 py-3 px-4 rounded-md items-center ${userType === "individual" ? "bg-[#00C58E]" : "bg-transparent"}`}
                   >
-                    <Text className={`text-sm ${userType === 'individual' ? 'text-white font-semibold' : 'text-gray-600 font-normal'}`}>
+                    <Text
+                      className={`text-sm ${userType === "individual" ? "text-white font-semibold" : "text-gray-600 font-normal"}`}
+                    >
                       บุคคลธรรมดา
                     </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    onPress={() => setUserType('corporate')}
-                    className={`flex-1 py-3 px-4 rounded-md items-center ${userType === 'corporate' ? 'bg-[#00C58E]' : 'bg-transparent'}`}
+                    onPress={() => setUserType("corporate")}
+                    className={`flex-1 py-3 px-4 rounded-md items-center ${userType === "corporate" ? "bg-[#00C58E]" : "bg-transparent"}`}
                   >
-                    <Text className={`text-sm ${userType === 'corporate' ? 'text-white font-semibold' : 'text-gray-600 font-normal'}`}>
+                    <Text
+                      className={`text-sm ${userType === "corporate" ? "text-white font-semibold" : "text-gray-600 font-normal"}`}
+                    >
                       นิติบุคคล
                     </Text>
                   </TouchableOpacity>
@@ -274,7 +282,7 @@ export default function SuccessScreen() {
                     className="absolute right-4 top-4 p-1"
                   >
                     <Ionicons
-                      name={showPassword ? 'eye' : 'eye-off'}
+                      name={showPassword ? "eye" : "eye-off"}
                       size={20}
                       color="#666"
                     />
@@ -301,7 +309,7 @@ export default function SuccessScreen() {
                     className="absolute right-4 top-4 p-1"
                   >
                     <Ionicons
-                      name={showConfirmPassword ? 'eye' : 'eye-off'}
+                      name={showConfirmPassword ? "eye" : "eye-off"}
                       size={20}
                       color="#666"
                     />
@@ -316,11 +324,12 @@ export default function SuccessScreen() {
                 className="mt-2"
               >
                 <LinearGradient
-                  colors={['#1D2144', '#00C58E']}
+                  colors={["#1D2144", "#00C58E"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
-                  className={`py-4 rounded-lg items-center shadow-sm ${loading ? 'opacity-70' : 'opacity-100'
-                    }`}
+                  className={`py-4 rounded-lg items-center shadow-sm ${
+                    loading ? "opacity-70" : "opacity-100"
+                  }`}
                 >
                   {loading ? (
                     <ActivityIndicator color="#fff" />
@@ -336,10 +345,10 @@ export default function SuccessScreen() {
             {/* Login Link */}
             <View className="items-center mt-auto mb-5">
               <Text className="text-gray-600 text-sm">
-                มีบัญชีอยู่แล้ว?{' '}
+                มีบัญชีอยู่แล้ว?{" "}
                 <Text
                   className="text-[#00C58E] font-medium"
-                  onPress={() => router.push('/login')}
+                  onPress={() => router.push("/login")}
                 >
                   เข้าสู่ระบบ
                 </Text>

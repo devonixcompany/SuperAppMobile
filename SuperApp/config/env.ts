@@ -1,24 +1,29 @@
 // Environment configuration
+import Constants from "expo-constants";
 
-const ENV = {
-  dev: {
-    apiUrl: 'https://bw6z7nqh-8080.asse.devtunnels.ms',
-  },
-  staging: {
-    apiUrl: 'https://staging-api.yourdomain.com',
-  },
-  prod: {
-    apiUrl: 'https://api.yourdomain.com',
-  },
-};
+interface EnvConfig {
+  apiUrl: string;
+  appEnv: string;
+}
 
-const getEnvVars = () => {
-  // __DEV__ is true when running in development
-  if (__DEV__) {
-    return ENV.dev;
+const getEnvVars = (): EnvConfig => {
+  // Get from Expo Constants (which reads from app.config.js)
+  const apiUrl = Constants.expoConfig?.extra?.apiUrl;
+  const appEnv = Constants.expoConfig?.extra?.appEnv || "development";
+
+  // Fallback to default if not set
+  if (!apiUrl) {
+    console.warn("API_URL not set in environment variables, using default");
+    return {
+      apiUrl: "http://localhost:3000/api",
+      appEnv: "development",
+    };
   }
-  // You can add more conditions based on your needs
-  return ENV.prod;
+
+  return {
+    apiUrl,
+    appEnv,
+  };
 };
 
 export default getEnvVars();

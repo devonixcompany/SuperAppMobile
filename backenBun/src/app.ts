@@ -277,6 +277,7 @@ All endpoints return consistent error responses:
   }))
   .use(serviceContainer.getAuthController())
   .use(serviceContainer.getUserController())
+  .use(serviceContainer.getChargePointController())
   .derive(async ({ request, set }: { request: Request; set: any }) => {
     const authHeader = request.headers.get('authorization');
     

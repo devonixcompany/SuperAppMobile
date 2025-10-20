@@ -1,7 +1,7 @@
-import * as Keychain from 'react-native-keychain';
+import * as SecureStore from "expo-secure-store";
 
-// Service name for keychain storage
-const SERVICE_NAME = 'SuperApp';
+// Service name for secure storage
+const SERVICE_NAME = "SuperApp";
 
 export interface LoginCredentials {
   phoneNumber: string;
@@ -14,37 +14,37 @@ export interface AuthTokens {
 }
 
 /**
- * Store login credentials securely in keychain
+ * Store login credentials securely in secure store
  */
-export const storeCredentials = async (credentials: LoginCredentials): Promise<boolean> => {
+export const storeCredentials = async (
+  credentials: LoginCredentials,
+): Promise<boolean> => {
   try {
-    await Keychain.setInternetCredentials(
-      SERVICE_NAME,
-      credentials.phoneNumber,
-      credentials.password
+    await SecureStore.setItemAsync(
+      `${SERVICE_NAME}_credentials`,
+      JSON.stringify(credentials),
     );
     return true;
   } catch (error) {
-    console.error('Error storing credentials:', error);
+    console.error("Error storing credentials:", error);
     return false;
   }
 };
 
 /**
- * Retrieve login credentials from keychain
+ * Retrieve login credentials from secure store
  */
 export const getCredentials = async (): Promise<LoginCredentials | null> => {
   try {
-    const credentials = await Keychain.getInternetCredentials(SERVICE_NAME);
-    if (credentials && credentials.username && credentials.password) {
-      return {
-        phoneNumber: credentials.username,
-        password: credentials.password,
-      };
+    const credentialsStr = await SecureStore.getItemAsync(
+      `${SERVICE_NAME}_credentials`,
+    );
+    if (credentialsStr) {
+      return JSON.parse(credentialsStr);
     }
     return null;
   } catch (error) {
-    console.error('Error retrieving credentials:', error);
+    console.error("Error retrieving credentials:", error);
     return null;
   }
 };
@@ -54,14 +54,13 @@ export const getCredentials = async (): Promise<LoginCredentials | null> => {
  */
 export const storeTokens = async (tokens: AuthTokens): Promise<boolean> => {
   try {
-    await Keychain.setInternetCredentials(
+    await SecureStore.setItemAsync(
       `${SERVICE_NAME}_tokens`,
-      'tokens',
-      JSON.stringify(tokens)
+      JSON.stringify(tokens),
     );
     return true;
   } catch (error) {
-    console.error('Error storing tokens:', error);
+    console.error("Error storing tokens:", error);
     return false;
   }
 };
@@ -71,13 +70,13 @@ export const storeTokens = async (tokens: AuthTokens): Promise<boolean> => {
  */
 export const getTokens = async (): Promise<AuthTokens | null> => {
   try {
-    const credentials = await Keychain.getInternetCredentials(`${SERVICE_NAME}_tokens`);
-    if (credentials && credentials.password) {
-      return JSON.parse(credentials.password);
+    const tokensStr = await SecureStore.getItemAsync(`${SERVICE_NAME}_tokens`);
+    if (tokensStr) {
+      return JSON.parse(tokensStr);
     }
     return null;
   } catch (error) {
-    console.error('Error retrieving tokens:', error);
+    console.error("Error retrieving tokens:", error);
     return null;
   }
 };
@@ -87,12 +86,11 @@ export const getTokens = async (): Promise<AuthTokens | null> => {
  */
 export const clearCredentials = async (): Promise<boolean> => {
   try {
-    // Use resetGenericPassword instead of resetInternetCredentials for better compatibility
-    const result1 = await Keychain.resetGenericPassword({ service: SERVICE_NAME });
-    const result2 = await Keychain.resetGenericPassword({ service: `${SERVICE_NAME}_tokens` });
+    await SecureStore.deleteItemAsync(`${SERVICE_NAME}_credentials`);
+    await SecureStore.deleteItemAsync(`${SERVICE_NAME}_tokens`);
     return true;
   } catch (error) {
-    console.error('Error clearing credentials:', error);
+    console.error("Error clearing credentials:", error);
     return false;
   }
 };
@@ -102,10 +100,12 @@ export const clearCredentials = async (): Promise<boolean> => {
  */
 export const hasCredentials = async (): Promise<boolean> => {
   try {
-    const credentials = await Keychain.getInternetCredentials(SERVICE_NAME);
-    return credentials && credentials.username && credentials.password ? true : false;
+    const credentialsStr = await SecureStore.getItemAsync(
+      `${SERVICE_NAME}_credentials`,
+    );
+    return credentialsStr !== null;
   } catch (error) {
-    console.error('Error checking credentials:', error);
+    console.error("Error checking credentials:", error);
     return false;
   }
 };

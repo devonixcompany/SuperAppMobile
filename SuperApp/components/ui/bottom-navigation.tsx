@@ -1,28 +1,35 @@
+// นำเข้า Ionicons สำหรับไอคอนต่างๆ
 import { Ionicons } from "@expo/vector-icons";
+// นำเข้า LinearGradient สำหรับสร้างพื้นหลังไล่สี
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
+// นำเข้า components พื้นฐานจาก React Native
 import { Text, TouchableOpacity, View } from "react-native";
 
+// Interface กำหนด props ที่ component นี้รับ
 interface BottomNavigationProps {
-  activeTab: string;
-  onTabPress: (tab: string) => void;
-  onQRPress?: () => void;
+  activeTab: string; // ชื่อ tab ที่กำลังใช้งานอยู่
+  onTabPress: (tab: string) => void; // ฟังก์ชันเมื่อกด tab ปกติ
+  onQRPress?: () => void; // ฟังก์ชันเมื่อกดปุ่ม QR (optional)
 }
 
+// Component หลักของ Bottom Navigation Bar
 export default function BottomNavigation({
   activeTab,
   onTabPress,
   onQRPress,
 }: BottomNavigationProps) {
+  // ข้อมูล tabs ทั้งหมด
   const tabs = [
-    { id: "home", icon: "home-outline", activeIcon: "home", label: "บ้าน" },
+    { id: "home", icon: "home-outline", activeIcon: "home", label: "หน้าหลัก" },
     {
       id: "charging",
       icon: "flash-outline",
       activeIcon: "flash",
       label: "เครื่องชาร์จ",
     },
-    { id: "qr", icon: "qr-code-outline", activeIcon: "qr-code", label: "" }, // QR button (will be floating)
-    { id: "card", icon: "card-outline", activeIcon: "card", label: "บัตร" },
+    { id: "qr", icon: "qr-code-outline", activeIcon: "qr-code", label: "" }, // ปุ่ม QR (จะเป็นแบบลอย)
+    { id: "card", icon: "card-outline", activeIcon: "card", label: "เป๋าตัง" },
     {
       id: "settings",
       icon: "settings-outline",
@@ -31,45 +38,62 @@ export default function BottomNavigation({
     },
   ];
 
+  // ฟังก์ชันสร้างปุ่มแต่ละ tab
   const renderTabButton = (tab: any, index: number) => {
-    const isActive = activeTab === tab.id;
-    const isQRButton = tab.id === "qr";
+    const isActive = activeTab === tab.id; // เช็คว่าเป็น tab ที่กำลังใช้งานหรือไม่
+    const isQRButton = tab.id === "qr"; // เช็คว่าเป็นปุ่ม QR หรือไม่
 
+    // ถ้าเป็นปุ่ม QR ให้สร้างแบบพิเศษ (Floating Button)
     if (isQRButton) {
       return (
         <View
           key={tab.id}
           className="flex-1 items-center justify-center relative"
         >
-          {/* Floating QR Button */}
+          {/* ปุ่ม QR แบบลอย */}
           <TouchableOpacity
             onPress={onQRPress}
-            className="absolute -top-6 w-14 h-14 bg-gradient-to-r from-[#1F274B] to-[#5EC1A0] rounded-full items-center justify-center shadow-lg"
-            style={{
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-              elevation: 8,
-            }}
+            // -top-8: ยกปุ่มขึ้นด้านบน 32px
+            className="absolute -top-8"
+            activeOpacity={0.8} // ความโปร่งใสเมื่อกด
           >
-            <Ionicons name="qr-code-outline" size={28} color="white" />
+            {/* พื้นหลังไล่สีจากน้ำเงินเข้มไปเขียว */}
+            <LinearGradient
+              colors={["#1F274B", "#5EC1A0"]} // สีไล่จากซ้ายไปขวา
+              start={{ x: 0, y: 0 }} // จุดเริ่มต้น
+              end={{ x: 1, y: 0 }} // จุดสิ้นสุด
+              className="w-16 h-16 rounded-full items-center justify-center" // วงกลมขนาด 64x64px
+              style={{
+                // เงาโค้งมน
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                elevation: 8, // เงาสำหรับ Android
+              }}
+            >
+              {/* ไอคอน QR สีขาว */}
+              <Ionicons name="qr-code-outline" size={32} color="white" />
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       );
     }
 
+    // ปุ่ม tab ปกติ (ไม่ใช่ QR)
     return (
       <TouchableOpacity
         key={tab.id}
-        onPress={() => onTabPress(tab.id)}
+        onPress={() => onTabPress(tab.id)} // เรียกฟังก์ชันพร้อมส่ง id ของ tab
         className="flex-1 items-center justify-center py-2"
       >
+        {/* ไอคอน: ถ้าเป็น active ใช้ไอคอนแบบเต็ม ถ้าไม่ใช้แบบ outline */}
         <Ionicons
           name={isActive ? tab.activeIcon : tab.icon}
           size={24}
-          color={isActive ? "#51BC8E" : "#9CA3AF"}
+          color={isActive ? "#51BC8E" : "#9CA3AF"} // สีเขียวถ้า active, เทาถ้าไม่ active
         />
+        {/* ข้อความใต้ไอคอน */}
         <Text
           className={`text-xs mt-1 ${
             isActive ? "text-[#51BC8E] font-semibold" : "text-[#9CA3AF]"
@@ -82,8 +106,15 @@ export default function BottomNavigation({
   };
 
   return (
+    // แถบ Bottom Navigation หลัก
+    // bg-white: พื้นหลังสีขาว
+    // border-t: เส้นขอบด้านบน
+    // px-4: padding ซ้าย-ขวา
+    // pb-2 pt-2: padding บน-ล่าง
     <View className="bg-white border-t border-gray-200 px-4 pb-2 pt-2">
+      {/* แถวของ tabs */}
       <View className="flex-row items-center justify-around">
+        {/* วนลูปสร้างปุ่มแต่ละ tab */}
         {tabs.map((tab, index) => renderTabButton(tab, index))}
       </View>
     </View>

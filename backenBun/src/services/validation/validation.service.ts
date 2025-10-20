@@ -98,4 +98,59 @@ export class ValidationService {
       errors
     };
   }
+
+  /**
+   * Validate time format (HH:MM)
+   */
+  validateTimeFormat(time: string): boolean {
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    return timeRegex.test(time);
+  }
+
+  /**
+   * Validate pricing time periods
+   */
+  validatePricingTimes(peakStart?: string, peakEnd?: string, offPeakStart?: string, offPeakEnd?: string): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // Validate time formats
+    if (peakStart && !this.validateTimeFormat(peakStart)) {
+      errors.push('รูปแบบเวลาเริ่มต้น Peak ไม่ถูกต้อง (ใช้รูปแบบ HH:MM)');
+    }
+    
+    if (peakEnd && !this.validateTimeFormat(peakEnd)) {
+      errors.push('รูปแบบเวลาสิ้นสุด Peak ไม่ถูกต้อง (ใช้รูปแบบ HH:MM)');
+    }
+    
+    if (offPeakStart && !this.validateTimeFormat(offPeakStart)) {
+      errors.push('รูปแบบเวลาเริ่มต้น Off-Peak ไม่ถูกต้อง (ใช้รูปแบบ HH:MM)');
+    }
+    
+    if (offPeakEnd && !this.validateTimeFormat(offPeakEnd)) {
+      errors.push('รูปแบบเวลาสิ้นสุด Off-Peak ไม่ถูกต้อง (ใช้รูปแบบ HH:MM)');
+    }
+
+    // Validate time logic
+    if (peakStart && peakEnd) {
+      const peakStartMinutes = this.timeToMinutes(peakStart);
+      const peakEndMinutes = this.timeToMinutes(peakEnd);
+      
+      if (peakStartMinutes >= peakEndMinutes) {
+        errors.push('เวลาเริ่มต้น Peak ต้องน้อยกว่าเวลาสิ้นสุด Peak');
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Convert time string to minutes for comparison
+   */
+  private timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  }
 }
