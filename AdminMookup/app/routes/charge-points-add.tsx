@@ -1,19 +1,32 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { apiService, type CreateChargePointRequest } from '../services/api';
 import { Navigation } from '../components/Navigation';
+import { apiService, type CreateChargePointRequest } from '../services/api';
 
 interface FormErrors {
   id?: string;
   name?: string;
   stationName?: string;
   location?: string;
+  latitude?: string;
+  longitude?: string;
+  openingHours?: string;
+  brand?: string;
   serialNumber?: string;
+  powerRating?: string;
   chargePointIdentity?: string;
   protocol?: string;
-  brand?: string;
-  powerRating?: string;
   connectorCount?: string;
+  ownerId?: string;
+  ownershipType?: string;
+  baseRate?: string;
+  peakRate?: string;
+  offPeakRate?: string;
+  peakStartTime?: string;
+  peakEndTime?: string;
+  offPeakStartTime?: string;
+  offPeakEndTime?: string;
+  maxPower?: string;
   general?: string;
 }
 
@@ -30,29 +43,37 @@ export default function AddChargePoint() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [formData, setFormData] = useState<CreateChargePointRequest>({
-    id: '', // จะถูกสร้างอัตโนมัติโดย backend
     name: '',
     stationName: '',
     location: '',
-    serialNumber: '',
-    chargePointIdentity: '',
-    protocol: 'OCPP16',
+    latitude: 0,
+    longitude: 0,
+    openingHours: '06:00-22:00',
+    is24Hours: false,
     brand: '',
+    serialNumber: '',
     powerRating: 0,
+    protocol: 'OCPP16',
+    chargePointIdentity: '',
     connectorCount: 1,
+    ownerId: 'user_123',
+    ownershipType: 'PUBLIC',
+    isPublic: true,
+    baseRate: 0,
+    peakRate: 0,
+    offPeakRate: 0,
+    peakStartTime: '09:00',
+    peakEndTime: '17:00',
+    offPeakStartTime: '22:00',
+    offPeakEndTime: '06:00',
+    maxPower: 0,
     isWhitelisted: false
   });
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
-    // ไม่ต้องตรวจสอบ ID เพราะจะถูกสร้างอัตโนมัติ
-    // if (!formData.id.trim()) {
-    //   newErrors.id = 'กรุณากรอก ID เครื่องชาร์จ';
-    // } else if (!/^[A-Za-z0-9_-]+$/.test(formData.id)) {
-    //   newErrors.id = 'ID ต้องประกอบด้วยตัวอักษร ตัวเลข _ และ - เท่านั้น';
-    // }
-
+    // Basic Information
     if (!formData.name.trim()) {
       newErrors.name = 'กรุณากรอกชื่อเครื่องชาร์จ';
     } else if (formData.name.length < 3) {
@@ -69,6 +90,23 @@ export default function AddChargePoint() {
       newErrors.location = 'ที่อยู่ต้องมีอย่างน้อย 10 ตัวอักษร';
     }
 
+    // Coordinates validation
+    if (formData.latitude < -90 || formData.latitude > 90) {
+      newErrors.latitude = 'ละติจูดต้องอยู่ระหว่าง -90 ถึง 90';
+    }
+
+    if (formData.longitude < -180 || formData.longitude > 180) {
+      newErrors.longitude = 'ลองจิจูดต้องอยู่ระหว่าง -180 ถึง 180';
+    }
+
+    // Opening hours validation
+    if (!formData.is24Hours && !formData.openingHours.trim()) {
+      newErrors.openingHours = 'กรุณากรอกเวลาเปิด-ปิด';
+    } else if (!formData.is24Hours && !/^\d{2}:\d{2}-\d{2}:\d{2}$/.test(formData.openingHours)) {
+      newErrors.openingHours = 'รูปแบบเวลาไม่ถูกต้อง (เช่น 06:00-22:00)';
+    }
+
+    // Technical specifications
     if (!formData.serialNumber.trim()) {
       newErrors.serialNumber = 'กรุณากรอกหมายเลขซีเรียล';
     }
@@ -87,10 +125,56 @@ export default function AddChargePoint() {
       newErrors.powerRating = 'กำลังไฟต้องไม่เกิน 1000 kW';
     }
 
+    if (formData.maxPower <= 0) {
+      newErrors.maxPower = 'กำลังไฟสูงสุดต้องมากกว่า 0';
+    } else if (formData.maxPower > 1000) {
+      newErrors.maxPower = 'กำลังไฟสูงสุดต้องไม่เกิน 1000 kW';
+    }
+
     if (formData.connectorCount && formData.connectorCount < 1) {
       newErrors.connectorCount = 'จำนวนหัวชาร์จต้องอย่างน้อย 1';
     } else if (formData.connectorCount && formData.connectorCount > 10) {
       newErrors.connectorCount = 'จำนวนหัวชาร์จต้องไม่เกิน 10';
+    }
+
+    // Ownership validation
+    if (!formData.ownerId.trim()) {
+      newErrors.ownerId = 'กรุณากรอก Owner ID';
+    }
+
+    if (!formData.ownershipType.trim()) {
+      newErrors.ownershipType = 'กรุณาเลือกประเภทความเป็นเจ้าของ';
+    }
+
+    // Pricing validation
+    if (formData.baseRate < 0) {
+      newErrors.baseRate = 'ราคาพื้นฐานต้องไม่ติดลบ';
+    }
+
+    if (formData.peakRate < 0) {
+      newErrors.peakRate = 'ราคาช่วงเวลาเร่งด่วนต้องไม่ติดลบ';
+    }
+
+    if (formData.offPeakRate < 0) {
+      newErrors.offPeakRate = 'ราคาช่วงเวลาปกติต้องไม่ติดลบ';
+    }
+
+    // Time validation
+    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timeRegex.test(formData.peakStartTime)) {
+      newErrors.peakStartTime = 'รูปแบบเวลาไม่ถูกต้อง (เช่น 09:00)';
+    }
+
+    if (!timeRegex.test(formData.peakEndTime)) {
+      newErrors.peakEndTime = 'รูปแบบเวลาไม่ถูกต้อง (เช่น 17:00)';
+    }
+
+    if (!timeRegex.test(formData.offPeakStartTime)) {
+      newErrors.offPeakStartTime = 'รูปแบบเวลาไม่ถูกต้อง (เช่น 22:00)';
+    }
+
+    if (!timeRegex.test(formData.offPeakEndTime)) {
+      newErrors.offPeakEndTime = 'รูปแบบเวลาไม่ถูกต้อง (เช่น 06:00)';
     }
 
     setErrors(newErrors);
@@ -268,6 +352,95 @@ export default function AddChargePoint() {
               {errors.location && <p className="mt-1 text-sm text-red-600">{errors.location}</p>}
             </div>
 
+            {/* Coordinates Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="latitude" className="block text-sm font-medium text-gray-700 mb-2">
+                  ละติจูด (Latitude) *
+                </label>
+                <input
+                  type="number"
+                  id="latitude"
+                  name="latitude"
+                  required
+                  step="0.000001"
+                  min="-90"
+                  max="90"
+                  value={formData.latitude}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    errors.latitude ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                  } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                  placeholder="เช่น 13.7563"
+                />
+                {errors.latitude && <p className="mt-1 text-sm text-red-600">{errors.latitude}</p>}
+              </div>
+
+              <div>
+                <label htmlFor="longitude" className="block text-sm font-medium text-gray-700 mb-2">
+                  ลองจิจูด (Longitude) *
+                </label>
+                <input
+                  type="number"
+                  id="longitude"
+                  name="longitude"
+                  required
+                  step="0.000001"
+                  min="-180"
+                  max="180"
+                  value={formData.longitude}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    errors.longitude ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                  } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                  placeholder="เช่น 100.5018"
+                />
+                {errors.longitude && <p className="mt-1 text-sm text-red-600">{errors.longitude}</p>}
+              </div>
+            </div>
+
+            {/* Opening Hours Section */}
+            <div>
+              <div className="flex items-center mb-4">
+                <input
+                  type="checkbox"
+                  id="is24Hours"
+                  name="is24Hours"
+                  checked={formData.is24Hours}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="is24Hours" className="ml-3 block text-sm font-medium text-gray-700">
+                  เปิดบริการ 24 ชั่วโมง
+                </label>
+              </div>
+
+              {!formData.is24Hours && (
+                <div>
+                  <label htmlFor="openingHours" className="block text-sm font-medium text-gray-700 mb-2">
+                    เวลาเปิด-ปิด *
+                  </label>
+                  <input
+                    type="text"
+                    id="openingHours"
+                    name="openingHours"
+                    required={!formData.is24Hours}
+                    value={formData.openingHours}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                      errors.openingHours ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                    placeholder="เช่น 06:00-22:00"
+                  />
+                  {errors.openingHours && <p className="mt-1 text-sm text-red-600">{errors.openingHours}</p>}
+                </div>
+              )}
+            </div>
+
             {/* Serial Number */}
             <div>
               <label htmlFor="serialNumber" className="block text-sm font-medium text-gray-700 mb-2">
@@ -378,6 +551,30 @@ export default function AddChargePoint() {
               {errors.powerRating && <p className="mt-1 text-sm text-red-600">{errors.powerRating}</p>}
             </div>
 
+            {/* Max Power */}
+            <div>
+              <label htmlFor="maxPower" className="block text-sm font-medium text-gray-700 mb-2">
+                กำลังไฟสูงสุด (kW) *
+              </label>
+              <input
+                type="number"
+                id="maxPower"
+                name="maxPower"
+                required
+                min="1"
+                max="1000"
+                step="0.1"
+                value={formData.maxPower}
+                onChange={handleInputChange}
+                disabled={loading}
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                  errors.maxPower ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                placeholder="120"
+              />
+              {errors.maxPower && <p className="mt-1 text-sm text-red-600">{errors.maxPower}</p>}
+            </div>
+
             {/* Connector Count */}
             <div>
               <label htmlFor="connectorCount" className="block text-sm font-medium text-gray-700 mb-2">
@@ -399,6 +596,220 @@ export default function AddChargePoint() {
                 placeholder="2"
               />
               {errors.connectorCount && <p className="mt-1 text-sm text-red-600">{errors.connectorCount}</p>}
+            </div>
+
+            {/* Ownership Section */}
+            <div className="bg-gray-50 p-6 rounded-lg space-y-4">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">ข้อมูลความเป็นเจ้าของ</h3>
+              
+              <div>
+                <label htmlFor="ownerId" className="block text-sm font-medium text-gray-700 mb-2">
+                  Owner ID *
+                </label>
+                <input
+                  type="text"
+                  id="ownerId"
+                  name="ownerId"
+                  required
+                  value={formData.ownerId}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    errors.ownerId ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                  } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                  placeholder="เช่น user_123"
+                />
+                {errors.ownerId && <p className="mt-1 text-sm text-red-600">{errors.ownerId}</p>}
+              </div>
+
+              <div>
+                <label htmlFor="ownershipType" className="block text-sm font-medium text-gray-700 mb-2">
+                  ประเภทความเป็นเจ้าของ *
+                </label>
+                <select
+                  id="ownershipType"
+                  name="ownershipType"
+                  required
+                  value={formData.ownershipType}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    errors.ownershipType ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                  } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                >
+                  <option value="">เลือกประเภทความเป็นเจ้าของ</option>
+                  <option value="PUBLIC">สาธารณะ (PUBLIC)</option>
+                  <option value="PRIVATE">ส่วนตัว (PRIVATE)</option>
+                  <option value="CORPORATE">องค์กร (CORPORATE)</option>
+                </select>
+                {errors.ownershipType && <p className="mt-1 text-sm text-red-600">{errors.ownershipType}</p>}
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="isPublic"
+                  name="isPublic"
+                  checked={formData.isPublic}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="isPublic" className="ml-3 block text-sm text-gray-900">
+                  เปิดให้บริการสาธารณะ
+                </label>
+              </div>
+            </div>
+
+            {/* Pricing Section */}
+            <div className="bg-blue-50 p-6 rounded-lg space-y-4">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">ข้อมูลราคา</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label htmlFor="baseRate" className="block text-sm font-medium text-gray-700 mb-2">
+                    ราคาพื้นฐาน (บาท/kWh) *
+                  </label>
+                  <input
+                    type="number"
+                    id="baseRate"
+                    name="baseRate"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={formData.baseRate}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                      errors.baseRate ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                    placeholder="8.5"
+                  />
+                  {errors.baseRate && <p className="mt-1 text-sm text-red-600">{errors.baseRate}</p>}
+                </div>
+
+                <div>
+                  <label htmlFor="peakRate" className="block text-sm font-medium text-gray-700 mb-2">
+                    ราคาช่วงเร่งด่วน (บาท/kWh) *
+                  </label>
+                  <input
+                    type="number"
+                    id="peakRate"
+                    name="peakRate"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={formData.peakRate}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                      errors.peakRate ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                    placeholder="12"
+                  />
+                  {errors.peakRate && <p className="mt-1 text-sm text-red-600">{errors.peakRate}</p>}
+                </div>
+
+                <div>
+                  <label htmlFor="offPeakRate" className="block text-sm font-medium text-gray-700 mb-2">
+                    ราคาช่วงปกติ (บาท/kWh) *
+                  </label>
+                  <input
+                    type="number"
+                    id="offPeakRate"
+                    name="offPeakRate"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={formData.offPeakRate}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                      errors.offPeakRate ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                    placeholder="6.5"
+                  />
+                  {errors.offPeakRate && <p className="mt-1 text-sm text-red-600">{errors.offPeakRate}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label htmlFor="peakStartTime" className="block text-sm font-medium text-gray-700 mb-2">
+                    เวลาเริ่มช่วงเร่งด่วน *
+                  </label>
+                  <input
+                    type="time"
+                    id="peakStartTime"
+                    name="peakStartTime"
+                    required
+                    value={formData.peakStartTime}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                      errors.peakStartTime ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                  />
+                  {errors.peakStartTime && <p className="mt-1 text-sm text-red-600">{errors.peakStartTime}</p>}
+                </div>
+
+                <div>
+                  <label htmlFor="peakEndTime" className="block text-sm font-medium text-gray-700 mb-2">
+                    เวลาสิ้นสุดช่วงเร่งด่วน *
+                  </label>
+                  <input
+                    type="time"
+                    id="peakEndTime"
+                    name="peakEndTime"
+                    required
+                    value={formData.peakEndTime}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                      errors.peakEndTime ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                  />
+                  {errors.peakEndTime && <p className="mt-1 text-sm text-red-600">{errors.peakEndTime}</p>}
+                </div>
+
+                <div>
+                  <label htmlFor="offPeakStartTime" className="block text-sm font-medium text-gray-700 mb-2">
+                    เวลาเริ่มช่วงปกติ *
+                  </label>
+                  <input
+                    type="time"
+                    id="offPeakStartTime"
+                    name="offPeakStartTime"
+                    required
+                    value={formData.offPeakStartTime}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                      errors.offPeakStartTime ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                  />
+                  {errors.offPeakStartTime && <p className="mt-1 text-sm text-red-600">{errors.offPeakStartTime}</p>}
+                </div>
+
+                <div>
+                  <label htmlFor="offPeakEndTime" className="block text-sm font-medium text-gray-700 mb-2">
+                    เวลาสิ้นสุดช่วงปกติ *
+                  </label>
+                  <input
+                    type="time"
+                    id="offPeakEndTime"
+                    name="offPeakEndTime"
+                    required
+                    value={formData.offPeakEndTime}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                      errors.offPeakEndTime ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    } ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                  />
+                  {errors.offPeakEndTime && <p className="mt-1 text-sm text-red-600">{errors.offPeakEndTime}</p>}
+                </div>
+              </div>
             </div>
 
             {/* Whitelist Setting */}

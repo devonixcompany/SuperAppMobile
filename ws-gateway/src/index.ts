@@ -21,6 +21,15 @@ export function getChargePointFromCache(chargePointId: string): any {
 }
 
 /**
+ * ฟังก์ชั่นดึงข้อมูลแคชทั้งหมด
+ * Get all cache data
+ * @returns Map ของข้อมูลแคชทั้งหมด
+ */
+export function getAllCacheData(): Map<string, any> {
+  return chargePointCache;
+}
+
+/**
  * ฟังก์ชั่นเริ่มต้นแคชด้วยข้อมูล charge point จาก API
  * Initialize cache with charge point data from backend API
  * Step 1: เรียก API เพื่อดึงข้อมูล charge points ทั้งหมด
@@ -48,30 +57,195 @@ async function initializeCache() {
     });
     
     // Step 3: แสดงผลสรุปการโหลดข้อมูล
-    console.log(`Cache initialized with ${chargePoints.length} charge points`);
+    console.log(`✅ Cache initialized with ${chargePoints.length} charge points`);
+    
   } catch (error) {
-    console.error('Failed to initialize cache:', error);
-    console.log('Cache will remain empty - charge points will be validated via API calls');
+    console.error('❌ Failed to initialize cache:', error);
+    console.log('⚠️ Server will continue without cache data');
   }
 }
 
 // สร้าง HTTP server
-// Create HTTP server
-const server = createServer();
+const server = createServer((req, res) => {
+  // ตั้งค่า CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
+  const url = new URL(req.url || '', `http://${req.headers.host}`);
+  
+  // API Routes สำหรับดูสถานะ WebSocket และข้อมูลใน cache
+  if (url.pathname === '/api/health') {
+    // Health check endpoint
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      version: process.version
+    }));
+    return;
+  }
+  
+  if (url.pathname === '/api/sessions') {
+    // Sessions information endpoint
+    try {
+      const activeSessions = sessionManager.getActiveSessions();
+      const sessionStats = sessionManager.getStats();
+      
+      const sessionsInfo = activeSessions.map(session => 
+        sessionManager.getSessionInfo(session.sessionId)
+      );
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        data: {
+          stats: sessionStats,
+          sessions: sessionsInfo
+        }
+      }));
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        error: 'Failed to get session information'
+      }));
+    }
+    return;
+  }
+  
+  if (url.pathname === '/api/sessions/stats') {
+    // Session statistics endpoint
+    try {
+      const sessionStats = sessionManager.getStats();
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        data: sessionStats
+      }));
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        error: 'Failed to get session statistics'
+      }));
+    }
+    return;
+  }
+  
+  if (url.pathname === '/api/cache') {
+    // Cache information endpoint
+    try {
+      const cacheData = Array.from(chargePointCache.entries()).map(([key, value]) => ({
+        chargePointId: key,
+        ...value
+      }));
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        data: {
+          count: chargePointCache.size,
+          chargePoints: cacheData
+        }
+      }));
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        error: 'Failed to get cache information'
+      }));
+    }
+    return;
+  }
+  
+  if (url.pathname.startsWith('/api/sessions/')) {
+    // Individual session information endpoint
+    const sessionId = url.pathname.split('/')[3];
+    
+    try {
+      const sessionInfo = sessionManager.getSessionInfo(sessionId);
+      
+      if (!sessionInfo) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: false,
+          error: 'Session not found'
+        }));
+        return;
+      }
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        data: sessionInfo
+      }));
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        error: 'Failed to get session information'
+      }));
+    }
+    return;
+  }
+  
+  // Default response for unknown routes
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    success: false,
+    error: 'Not found',
+    availableEndpoints: [
+      '/api/health',
+      '/api/sessions',
+      '/api/sessions/stats',
+      '/api/sessions/{sessionId}',
+      '/api/cache'
+    ]
+  }));
+});
 
 /**
- * สร้าง WebSocket server พร้อมการตรวจสอบ client
- * Create WebSocket server with client verification
+ * สร้าง WebSocket server พร้อมการตรวจสอบ client และ subprotocol negotiation
+ * Create WebSocket server with client verification and subprotocol negotiation
  * Step 1: กำหนดค่า server options
  * Step 2: ตั้งค่า verifyClient callback สำหรับตรวจสอบการเชื่อมต่อ
+ * Step 3: จัดการ subprotocol negotiation สำหรับ OCPP
  */
 const wss = new WebSocketServer({ 
   server,
   verifyClient: (info: any) => {
-    console.log('Verifying client connection:', info.req.url);
+   
     // การตรวจสอบพื้นฐาน - สามารถขยายได้
     // Basic verification - can be extended
     return true;
+  },
+  handleProtocols: (protocols: Set<string>, request: any) => {
+    console.log('Handling subprotocol negotiation:', Array.from(protocols));
+    
+    // รายการ subprotocols ที่รองรับ
+    const supportedProtocols = ['ocpp1.6', 'ocpp2.0', 'ocpp2.0.1'];
+    
+    // หา subprotocol แรกที่รองรับ
+    for (const protocol of protocols) {
+      if (supportedProtocols.includes(protocol)) {
+        console.log(`Selected subprotocol: ${protocol}`);
+        return protocol;
+      }
+    }
+    
+    // ถ้าไม่มี subprotocol ที่รองรับ ใช้ ocpp1.6 เป็นค่าเริ่มต้น
+    console.log('No supported subprotocol found, defaulting to ocpp1.6');
+    return 'ocpp1.6';
   }
 });
 
@@ -98,7 +272,6 @@ wss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
       ws.close(1008, 'Charge point ID required');
       return;
     }
-    console.log("websocket detail:",  ws)
         console.log("websocket protocol:",  ws.protocol)
     // Step 3: แยก OCPP version จาก subprotocol หรือใช้ค่าเริ่มต้น 1.6
     const subprotocol = ws.protocol || 'ocpp1.6';
@@ -127,7 +300,7 @@ wss.on('error', (error) => {
  * เริ่มต้นการตรวจสอบ session
  * Start session monitoring every 30 seconds
  */
-sessionMonitor.startMonitoring(3000); // Monitor every 30 seconds
+sessionMonitor.startMonitoring(30000); // Monitor every 30 seconds
 
 /**
  * ทำความสะอาด session ที่หมดอายุทุก 5 นาที

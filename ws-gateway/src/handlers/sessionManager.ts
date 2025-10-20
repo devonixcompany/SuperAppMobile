@@ -202,7 +202,9 @@ export class SessionManager {
     if (session && session.ws.readyState === WebSocket.OPEN) {
       try {
         // Step 2: ส่งข้อความและอัปเดตสถิติ
-        session.ws.send(JSON.stringify(message));
+        // ไม่ต้อง JSON.stringify เพราะ formatOCPPResponse ได้ return JSON string มาแล้ว
+        const messageToSend = typeof message === 'string' ? message : JSON.stringify(message);
+        session.ws.send(messageToSend);
         session.messagesSent++;
         // Step 3: อัปเดตเวลาที่เห็นล่าสุด
         session.lastSeen = new Date();

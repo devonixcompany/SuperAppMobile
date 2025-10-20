@@ -351,7 +351,7 @@ async function fetchChargePointConfiguration(chargePointId: string): Promise<voi
 /**
  * Handle Heartbeat messages for OCPP 1.6
  * - Updates lastSeen timestamp of Charge Point
- * - Calls backend API to record latest heartbeat time
+ * - Calls backend API to record latest heartbeat time (optional)
  * - Sends response with currentTime
  */
 export async function handleHeartbeat(
@@ -361,9 +361,24 @@ export async function handleHeartbeat(
 ): Promise<any> {
   console.log(`💓 Heartbeat from ${chargePointId}`);
 
+  // Always send response first - OCPP communication should not depend on backend
+  const response = {
+    currentTime: new Date().toISOString()
+  };
+
+  // Try to update backend if available (optional operation)
   try {
-    // Update lastSeen timestamp in backend
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
+    const skipBackendUpdate = process.env.SKIP_BACKEND_UPDATE === 'true';
+    
+    if (skipBackendUpdate) {
+      console.log(`⏭️ Skipping backend heartbeat update for ${chargePointId} (SKIP_BACKEND_UPDATE=true)`);
+      return response;
+    }
+
+    // Set a timeout for backend call to avoid hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
     
     const heartbeatResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/heartbeat`, {
       method: 'POST',
@@ -372,27 +387,32 @@ export async function handleHeartbeat(
       },
       body: JSON.stringify({
         timestamp: new Date().toISOString()
-      })
+      }),
+      signal: controller.signal
     });
 
+    clearTimeout(timeoutId);
+
     if (!heartbeatResponse.ok) {
-      console.error(`❌ Failed to update heartbeat for ${chargePointId}: ${heartbeatResponse.status}`);
+      const errorText = await heartbeatResponse.text().catch(() => 'Unknown error');
+      console.warn(`⚠️ Backend heartbeat update failed for ${chargePointId}: ${heartbeatResponse.status} - ${errorText}`);
+      console.log(`ℹ️ OCPP heartbeat response sent successfully despite backend error`);
     } else {
-      console.log(`✅ Successfully updated heartbeat for ${chargePointId}`);
+      console.log(`✅ Successfully updated heartbeat for ${chargePointId} in backend`);
     }
 
-    // Send response with currentTime
-    return {
-      currentTime: new Date().toISOString()
-    };
-
-  } catch (error) {
-    console.error(`💥 Error handling Heartbeat from ${chargePointId}:`, error);
-    
-    return {
-      currentTime: new Date().toISOString()
-    };
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.warn(`⏰ Backend heartbeat update timeout for ${chargePointId}`);
+    } else if (error.code === 'ECONNREFUSED') {
+      console.warn(`🔌 Backend not available for heartbeat update (${chargePointId})`);
+    } else {
+      console.warn(`⚠️ Backend heartbeat update error for ${chargePointId}:`, error.message);
+    }
+    console.log(`ℹ️ OCPP heartbeat response sent successfully despite backend error`);
   }
+
+  return response;
 }
 
 /**

@@ -124,12 +124,65 @@ export function handleTransactionEvent(payload: OCPP201TransactionEventRequest):
   return response;
 }
 
-export function handleHeartbeat(payload: any): any {
-  console.log('OCPP 2.0.1 - Handling Heartbeat:', payload);
-  
-  return {
+export async function handleHeartbeat(
+  chargePointId: string,
+  messageId: string,
+  payload: any
+): Promise<any> {
+  console.log(`💓 OCPP 2.0.1 - Heartbeat from ${chargePointId}`);
+
+  // Always send response first - OCPP communication should not depend on backend
+  const response = {
     currentTime: new Date().toISOString()
   };
+
+  // Try to update backend if available (optional operation)
+  try {
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
+    const skipBackendUpdate = process.env.SKIP_BACKEND_UPDATE === 'true';
+    
+    if (skipBackendUpdate) {
+      console.log(`⏭️ Skipping backend heartbeat update for ${chargePointId} (SKIP_BACKEND_UPDATE=true)`);
+      return response;
+    }
+
+    // Set a timeout for backend call to avoid hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    
+    const heartbeatResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/heartbeat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        timestamp: new Date().toISOString()
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!heartbeatResponse.ok) {
+      const errorText = await heartbeatResponse.text().catch(() => 'Unknown error');
+      console.warn(`⚠️ Backend heartbeat update failed for ${chargePointId}: ${heartbeatResponse.status} - ${errorText}`);
+      console.log(`ℹ️ OCPP heartbeat response sent successfully despite backend error`);
+    } else {
+      console.log(`✅ Successfully updated heartbeat for ${chargePointId} in backend`);
+    }
+
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.warn(`⏰ Backend heartbeat update timeout for ${chargePointId}`);
+    } else if (error.code === 'ECONNREFUSED') {
+      console.warn(`🔌 Backend not available for heartbeat update (${chargePointId})`);
+    } else {
+      console.warn(`⚠️ Backend heartbeat update error for ${chargePointId}:`, error.message);
+    }
+    console.log(`ℹ️ OCPP heartbeat response sent successfully despite backend error`);
+  }
+
+  return response;
 }
 
 export function handleAuthorize(payload: {
@@ -233,7 +286,12 @@ export function handleNotifyReport(payload: {
   return {}; // Empty response for NotifyReport
 }
 
-export async function handleMessage(messageType: string, payload: any): Promise<any> {
+export async function handleMessage(
+  messageType: string, 
+  payload: any, 
+  chargePointId?: string, 
+  messageId?: string
+): Promise<any> {
   console.log(`OCPP 2.0.1 - Routing message type: ${messageType}`);
   
   switch (messageType) {
@@ -247,7 +305,7 @@ export async function handleMessage(messageType: string, payload: any): Promise<
       return handleTransactionEvent(payload);
     
     case 'Heartbeat':
-      return handleHeartbeat(payload);
+      return handleHeartbeat(chargePointId || 'unknown', messageId || 'unknown', payload);
     
     case 'Authorize':
       return handleAuthorize(payload);

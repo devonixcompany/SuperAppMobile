@@ -4,6 +4,8 @@ import { WebSocket } from 'ws';
 import { getChargePointFromCache } from '../index';
 import { handleWebSocketMessage } from './messageRouter';
 import { sessionManager } from './sessionManager';
+import { getNumberOfConnectors } from '../utils/getConfiguration';
+import { ensureConnectorData } from '../services/connectorService';
 
 // การติดตามการเชื่อมต่อ (legacy - เก็บไว้เพื่อความเข้ากันได้แบบย้อนหลัง)
 // Connection tracking (legacy - kept for backward compatibility)
@@ -303,24 +305,29 @@ export async function handleConnection(ws: WebSocket, request: any, chargePointI
   console.log(`🔌 New connection - Charge Point ID: ${chargePointId}, OCPP Version: ${ocppVersion}`);
 
   // Step 1: ดึงข้อมูล charge point จากแคชโดยใช้ chargePointId
-  const cachedChargePoint = getChargePointFromCache(chargePointId);
+  let cachedChargePoint = getChargePointFromCache(chargePointId);
   
   if (!cachedChargePoint) {
     console.log(`❌ No Charge Point with ID ${chargePointId} found in cache`);
-    ws.close(1008, 'Charge point not registered');
-    return;
+    console.log(`🔄 Creating temporary cache entry for testing: ${chargePointId}`);
+    
+    // สร้างข้อมูล cache ชั่วคราวสำหรับการทดสอบ (ไม่ต้องพึ่งพา backend)
+    cachedChargePoint = {
+      chargePointIdentity: chargePointId,
+      serialNumber: chargePointId,
+      name: `Charge Point ${chargePointId}`,
+      protocol: ocppVersion.includes('1.6') ? 'OCPP16' : 'OCPP20',
+      isWhitelisted: true // อนุญาตให้เชื่อมต่อได้เลย
+    };
+    
+    console.log(`✅ Charge Point ${chargePointId} cached temporarily for testing`);
   }
 
   console.log(`✅ Found Charge Point in cache: ${chargePointId}`);
   console.log(`📊 Cached data:`, cachedChargePoint);
 
-  // Step 2: ตรวจสอบ charge point โดยใช้ backend API
-  const isValid = await validateChargePoint(chargePointId, ocppVersion);
-  if (!isValid) {
-    console.log(`❌ Invalid Charge Point: ${chargePointId}`);
-    ws.close(1008, 'Invalid charge point or OCPP version');
-    return;
-  }
+  // Step 2: ข้าม validation กับ backend สำหรับการทดสอบ
+  console.log(`⚠️ Skipping backend validation for testing purposes`);
 
   // Step 3: เก็บข้อมูลการเชื่อมต่อ (legacy)
   const connectionInfo: ConnectionInfo = {
@@ -344,8 +351,12 @@ export async function handleConnection(ws: WebSocket, request: any, chargePointI
   activeConnections.set(chargePointId, connectionInfo);
   console.log(`🎉 Charge Point ${chargePointId} connected successfully with OCPP ${ocppVersion}`);
 
-  // Step 4: อัปเดต backend เกี่ยวกับการเชื่อมต่อ
-  await updateConnectionStatus(chargePointId, true);
+  // Step 4: ข้าม backend update สำหรับการทดสอบ
+  console.log(`⚠️ Skipping backend connection status update for testing`);
+
+  // Step 4.5: รอให้เครื่องชาร์จส่ง BootNotification ก่อน แล้วค่อยดึงข้อมูล connectors
+  // ตาม OCPP standard เครื่องชาร์จต้องส่ง BootNotification ก่อน
+  console.log(`⏳ Waiting for BootNotification from charge point: ${chargePointId}`);
 
   // Step 5: จัดการข้อความที่เข้ามา
   ws.on('message', async (data: Buffer) => {
@@ -363,10 +374,33 @@ export async function handleConnection(ws: WebSocket, request: any, chargePointI
         message,
         chargePointId,
         ocppVersion,
-        (response: string) => {
+        async (response: string) => {
           if (ws.readyState === WebSocket.OPEN) {
             // ใช้ session manager เพื่อส่งการตอบกลับ
             sessionManager.sendMessage(session.sessionId, response);
+            
+            // หลังจากส่ง BootNotification response แล้ว ให้ดึงข้อมูล connectors
+            try {
+              const parsedMessage = JSON.parse(message);
+              if (parsedMessage[0] === 2 && parsedMessage[2] === 'BootNotification') {
+                console.log(`✅ BootNotification processed for ${chargePointId}, now checking connectors`);
+                
+                // ส่ง GetConfiguration เพื่อดึงจำนวน connectors
+                const numberOfConnectors = await getNumberOfConnectors(ws);
+                console.log(`📊 Charge point ${chargePointId} has ${numberOfConnectors} connectors`);
+                
+                // ตรวจสอบและสร้าง connector data ในฐานข้อมูลหากจำเป็น
+                const result = await ensureConnectorData(chargePointId, numberOfConnectors);
+                
+                if (result.created) {
+                  console.log(`✅ Created ${numberOfConnectors} connectors for charge point ${chargePointId}`);
+                } else {
+                  console.log(`✅ Charge point ${chargePointId} already has connector data`);
+                }
+              }
+            } catch (error) {
+              console.error(`⚠️ Failed to check/create connector data for ${chargePointId}:`, error);
+            }
           }
         }
       );

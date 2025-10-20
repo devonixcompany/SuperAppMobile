@@ -197,9 +197,13 @@ export async function handleWebSocketMessage(
   if (message.messageTypeId === 2) {
     let responseMessage: string;
 
+    console.log(`🔄 Processing CALL message: ${message.action} from ${chargePointId}`);
+    console.log(`📊 Route result - Success: ${result.success}, Response:`, result.response);
+
     if (result.success && result.response !== null) {
       // สร้างข้อความ CALLRESULT
       responseMessage = formatOCPPResponse(message.messageId, result.response);
+      console.log(`✅ Sending CALLRESULT for ${message.action} to ${chargePointId}:`, responseMessage);
     } else if (!result.success && result.error) {
       // สร้างข้อความ CALLERROR
       responseMessage = formatOCPPError(
@@ -208,12 +212,18 @@ export async function handleWebSocketMessage(
         result.error.description,
         result.error.details
       );
+      console.log(`❌ Sending CALLERROR for ${message.action} to ${chargePointId}:`, responseMessage);
     } else {
       // การตอบกลับเริ่มต้นสำหรับข้อความที่ไม่ต้องการข้อมูลตอบกลับ
       responseMessage = formatOCPPResponse(message.messageId, {});
+      console.log(`📤 Sending empty CALLRESULT for ${message.action} to ${chargePointId}:`, responseMessage);
     }
 
     // ส่งการตอบกลับไปยัง charge point
+    console.log(`🚀 About to send response to ${chargePointId} via sendResponse function`);
     sendResponse(responseMessage);
+    console.log(`✅ Response sent to ${chargePointId} for ${message.action}`);
+  } else {
+    console.log(`ℹ️ Message type ${message.messageTypeId} from ${chargePointId} does not require response`);
   }
 }

@@ -1495,4 +1495,93 @@ export const chargePointController = (
           radius: t.Optional(t.String())
         })
       }
-    );
+    )
+
+    /**
+     * ตรวจสอบว่าเครื่องชาร์จมีข้อมูล connectors ในฐานข้อมูลหรือไม่
+     */
+    .get('/check-connectors/:chargePointIdentity', async ({ params, set }) => {
+      try {
+        const { chargePointIdentity } = params;
+        
+        if (!chargePointIdentity) {
+          set.status = 400;
+          return { error: 'Charge point identity is required' };
+        }
+
+        const result = await chargePointService.hasConnectorData(chargePointIdentity);
+        
+        return {
+          success: true,
+          data: result
+        };
+      } catch (error: any) {
+        console.error('Error checking connector data:', error);
+        set.status = 500;
+        return { 
+          error: 'Failed to check connector data',
+          message: error.message 
+        };
+      }
+    }, {
+      detail: {
+        tags: ['Charge Points'],
+        summary: '🔌 Check Connector Data',
+        description: 'ตรวจสอบว่าเครื่องชาร์จมีข้อมูล connectors ในฐานข้อมูลหรือไม่'
+      },
+      params: t.Object({
+        chargePointIdentity: t.String()
+      })
+    })
+
+    /**
+     * สร้าง connectors สำหรับเครื่องชาร์จ
+     */
+    .post('/create-connectors', async ({ body, set }) => {
+      try {
+        const { chargePointIdentity, numberOfConnectors } = body as { 
+          chargePointIdentity: string; 
+          numberOfConnectors: number; 
+        };
+        
+        if (!chargePointIdentity || !numberOfConnectors) {
+          set.status = 400;
+          return { error: 'Charge point identity and number of connectors are required' };
+        }
+
+        if (numberOfConnectors < 1 || numberOfConnectors > 10) {
+          set.status = 400;
+          return { error: 'Number of connectors must be between 1 and 10' };
+        }
+
+        const connectors = await chargePointService.createConnectorsForChargePoint(
+          chargePointIdentity, 
+          numberOfConnectors
+        );
+        
+        return {
+          success: true,
+          data: {
+            message: `Created ${numberOfConnectors} connectors successfully`,
+            connectors
+          }
+        };
+      } catch (error: any) {
+        console.error('Error creating connectors:', error);
+        set.status = 500;
+        return { 
+          error: 'Failed to create connectors',
+          message: error.message 
+        };
+      }
+    }, {
+      detail: {
+        tags: ['Charge Points'],
+        summary: '🔌 Create Connectors',
+        description: 'สร้าง connectors สำหรับเครื่องชาร์จตามจำนวนที่ระบุ'
+      },
+      body: t.Object({
+        chargePointIdentity: t.String(),
+        numberOfConnectors: t.Number()
+      })
+    });

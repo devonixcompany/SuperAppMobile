@@ -8,4 +8,6 @@ export default [
   route("dashboard", "routes/dashboard.tsx"),
   route("users", "routes/users.tsx"),
   route("settings", "routes/settings.tsx"),
+  // Catch-all route for Chrome DevTools and other unknown paths
+  route("*", "routes/not-found.tsx"),
 ] satisfies RouteConfig;

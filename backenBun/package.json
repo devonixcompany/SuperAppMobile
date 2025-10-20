@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.16",
+    "@types/ws": "^8.18.1",
     "bun-types": "latest",
     "prisma": "^5.9.1"
   }

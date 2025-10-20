@@ -568,4 +568,81 @@ export class ChargePointService {
       throw new Error(`Failed to create charge point: ${error.message}`);
     }
   }
+
+  /**
+   * ตรวจสอบว่าเครื่องชาร์จมีข้อมูล connectors ในฐานข้อมูลหรือไม่
+   */
+  async hasConnectorData(chargePointIdentity: string): Promise<{ hasConnectors: boolean; connectorCount: number; connectors?: any[] }> {
+    try {
+      const chargePoint = await this.prisma.chargePoint.findUnique({
+        where: { chargePointIdentity },
+        include: {
+          connectors: true
+        }
+      });
+
+      if (!chargePoint) {
+        throw new Error(`Charge point with identity ${chargePointIdentity} not found`);
+      }
+
+      const hasConnectors = chargePoint.connectors.length > 0;
+      const connectorCount = chargePoint.connectors.length;
+
+      return {
+        hasConnectors,
+        connectorCount,
+        connectors: hasConnectors ? chargePoint.connectors : undefined
+      };
+    } catch (error: any) {
+      console.error('Error checking connector data:', error);
+      throw new Error(`Failed to check connector data: ${error.message}`);
+    }
+  }
+
+  /**
+   * สร้าง connectors สำหรับเครื่องชาร์จตามจำนวนที่ระบุ
+   */
+  async createConnectorsForChargePoint(chargePointIdentity: string, numberOfConnectors: number): Promise<any[]> {
+    try {
+      const chargePoint = await this.prisma.chargePoint.findUnique({
+        where: { chargePointIdentity }
+      });
+
+      if (!chargePoint) {
+        throw new Error(`Charge point with identity ${chargePointIdentity} not found`);
+      }
+
+      const connectors = [];
+      
+      // สร้าง connectors ตามจำนวนที่ระบุ (เริ่มจาก connectorId = 1)
+      for (let i = 1; i <= numberOfConnectors; i++) {
+        const connector = await this.prisma.connector.upsert({
+          where: {
+            chargePointId_connectorId: {
+              chargePointId: chargePoint.id,
+              connectorId: i
+            }
+          },
+          update: {
+            // อัปเดตเฉพาะ status หากมีอยู่แล้ว
+            status: 'AVAILABLE'
+          },
+          create: {
+            chargePointId: chargePoint.id,
+            connectorId: i,
+            type: 'TYPE_2', // Default connector type
+            status: 'AVAILABLE'
+          }
+        });
+        
+        connectors.push(connector);
+      }
+
+      console.log(`Created/updated ${numberOfConnectors} connectors for charge point ${chargePointIdentity}`);
+      return connectors;
+    } catch (error: any) {
+      console.error('Error creating connectors:', error);
+      throw new Error(`Failed to create connectors: ${error.message}`);
+     }
+   }
 }

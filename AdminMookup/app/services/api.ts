@@ -33,16 +33,31 @@ export interface ChargePoint {
 }
 
 export interface CreateChargePointRequest {
-  id: string;
+  id?: string; // Optional since it's auto-generated
   name: string;
   stationName: string;
   location: string;
-  serialNumber: string;
-  chargePointIdentity: string;
-  protocol: string;
+  latitude: number;
+  longitude: number;
+  openingHours: string;
+  is24Hours: boolean;
   brand: string;
+  serialNumber: string;
   powerRating: number;
+  protocol: string;
+  chargePointIdentity: string;
   connectorCount?: number;
+  ownerId: string;
+  ownershipType: string;
+  isPublic: boolean;
+  baseRate: number;
+  peakRate: number;
+  offPeakRate: number;
+  peakStartTime: string;
+  peakEndTime: string;
+  offPeakStartTime: string;
+  offPeakEndTime: string;
+  maxPower: number;
   isWhitelisted?: boolean;
 }
 
