@@ -9,6 +9,491 @@ export const chargePointController = (
 ) =>
   new Elysia({ prefix: '/api/chargepoints' })
     
+    /**
+     * Update connection status
+     */
+    .put(
+      '/:chargePointIdentity/connection-status',
+      async ({ params, body, set }) => {
+        try {
+          const { chargePointIdentity } = params;
+          const { isConnected } = body as { isConnected: boolean };
+          
+          const updatedChargePoint = await chargePointService.updateConnectionStatus(
+            chargePointIdentity,
+            isConnected
+          );
+          
+          return {
+            success: true,
+            data: updatedChargePoint,
+            message: 'Connection status updated successfully'
+          };
+        } catch (error: any) {
+          set.status = 500;
+          return {
+            success: false,
+            error: error.message,
+            message: 'Failed to update connection status'
+          };
+        }
+      },
+      {
+        params: t.Object({
+          chargePointIdentity: t.String()
+        }),
+        body: t.Object({
+          isConnected: t.Boolean()
+        })
+      }
+    )
+
+    /**
+     * Admin API สำหรับเพิ่มเครื่องชาร์จเข้า whitelist
+     * ใช้สำหรับการอนุญาตให้เครื่องชาร์จสามารถเชื่อมต่อ OCPP ได้
+     */
+    .post(
+      '/admin/charge-points',
+      async ({ body, set }) => {
+        try {
+          console.log('🔐 คำขอเพิ่ม Charge Point เข้า whitelist:', body);
+          
+          const data = body as any;
+          
+          // ตรวจสอบข้อมูลที่จำเป็นทั้งหมด (ไม่รวม id เพราะจะ auto-generate)
+          if (!data.name || !data.stationName || !data.location || 
+              !data.serialNumber || !data.chargePointIdentity || !data.protocol || 
+              !data.brand || !data.powerRating) {
+            console.error('❌ ข้อมูลไม่ครบถ้วนสำหรับการเพิ่มเข้า whitelist');
+            set.status = 400;
+            return {
+              success: false,
+              message: 'กรุณาระบุข้อมูลที่จำเป็น: name, stationName, location, serialNumber, chargePointIdentity, protocol, brand, powerRating'
+            };
+          }
+
+          // ตรวจสอบความซ้ำซ้อนของ serialNumber
+          const existingSerial = await chargePointService.findBySerialNumber(data.serialNumber);
+          if (existingSerial) {
+            console.error(`❌ serialNumber ${data.serialNumber} มีอยู่ในระบบแล้ว`);
+            set.status = 400;
+            return {
+              success: false,
+              message: 'Serial Number นี้มีอยู่ในระบบแล้ว'
+            };
+          }
+
+          // ตรวจสอบความซ้ำซ้อนของ chargePointIdentity
+          const existingIdentity = await chargePointService.findByChargePointIdentity(data.chargePointIdentity);
+          if (existingIdentity) {
+            console.error(`❌ chargePointIdentity ${data.chargePointIdentity} มีอยู่ในระบบแล้ว`);
+            set.status = 400;
+            return {
+              success: false,
+              message: 'Charge Point Identity นี้มีอยู่ในระบบแล้ว'
+            };
+          }
+
+          // สร้างเครื่องชาร์จใหม่ในระบบ
+          const chargePoint = await chargePointService.createChargePointForWhitelist({
+            id: data.id,
+            name: data.name,
+            stationName: data.stationName,
+            location: data.location,
+            serialNumber: data.serialNumber,
+            chargePointIdentity: data.chargePointIdentity,
+            protocol: data.protocol,
+            brand: data.brand,
+            powerRating: data.powerRating,
+            connectorCount: data.connectorCount || 2,
+            isWhitelisted: data.isWhitelisted ?? true // เพิ่มเข้า whitelist ทันที
+          });
+
+          console.log(`✅ เพิ่ม Charge Point ${data.chargePointIdentity} เข้า whitelist สำเร็จ`);
+
+          set.status = 201;
+          return {
+            success: true,
+            message: 'เพิ่มเครื่องชาร์จเข้า whitelist สำเร็จ',
+            data: chargePoint
+          };
+        } catch (error: any) {
+          console.error('💥 เกิดข้อผิดพลาดในการเพิ่มเครื่องชาร์จเข้า whitelist:', error);
+          set.status = 500;
+          return {
+            success: false,
+            message: 'เกิดข้อผิดพลาดในการเพิ่มเครื่องชาร์จ'
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['Admin'],
+          summary: '🔐 Add Charge Point to Whitelist',
+          description: `
+เพิ่มเครื่องชาร์จเข้าระบบ whitelist สำหรับอนุญาตให้เชื่อมต่อ OCPP
+
+**หลักการ:**
+- serialNumber และ chargePointIdentity ต้อง unique
+- เซ็ต isWhitelisted=true เพื่ออนุญาตให้เชื่อมต่อ
+- connectorCount ใส่คร่าว ๆ ได้ แต่หลังเชื่อมต่อเราจะ "ยืนยัน/ปรับ" จากค่าคอนฟิกจริง
+          `,
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    id: { 
+                      type: 'string', 
+                      description: 'รหัสจุดชาร์จ',
+                      example: 'CP_BKK_001' 
+                    },
+                    name: { 
+                      type: 'string', 
+                      description: 'ชื่อจุดชาร์จ',
+                      example: 'สถานีทดสอบบางนา' 
+                    },
+                    stationName: { 
+                      type: 'string', 
+                      description: 'ชื่อสถานี',
+                      example: 'Devonix Test Site' 
+                    },
+                    location: { 
+                      type: 'string', 
+                      description: 'ที่อยู่',
+                      example: 'บางนา, กรุงเทพมหานคร' 
+                    },
+                    serialNumber: { 
+                      type: 'string', 
+                      description: 'Serial Number',
+                      example: 'SN-AUTEL-23-001234' 
+                    },
+                    chargePointIdentity: { 
+                      type: 'string', 
+                      description: 'Charge Point Identity',
+                      example: 'ChargeStationOne-001' 
+                    },
+                    protocol: { 
+                      type: 'string', 
+                      enum: ['OCPP16', 'OCPP20', 'OCPP21'],
+                      description: 'เวอร์ชัน OCPP',
+                      example: 'OCPP16' 
+                    },
+                    brand: { 
+                      type: 'string', 
+                      description: 'ยี่ห้อ/รุ่น',
+                      example: 'Autel MaxiCharger AC' 
+                    },
+                    powerRating: { 
+                      type: 'number', 
+                      description: 'กำลังไฟ (kW)',
+                      example: 22.0 
+                    },
+                    connectorCount: { 
+                      type: 'integer', 
+                      description: 'จำนวนหัวชาร์จ',
+                      example: 2 
+                    },
+                    isWhitelisted: { 
+                      type: 'boolean', 
+                      description: 'อนุญาตให้เชื่อมต่อหรือไม่',
+                      example: true 
+                    }
+                  },
+                  required: ['name', 'stationName', 'location', 'serialNumber', 'chargePointIdentity', 'protocol', 'brand', 'powerRating']
+                }
+              }
+            }
+          },
+          responses: {
+            201: {
+              description: 'เพิ่มเครื่องชาร์จเข้า whitelist สำเร็จ',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      message: { type: 'string', example: 'เพิ่มเครื่องชาร์จเข้า whitelist สำเร็จ' },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string', example: 'CP_BKK_001' },
+                          name: { type: 'string', example: 'สถานีทดสอบบางนา' },
+                          serialNumber: { type: 'string', example: 'SN-AUTEL-23-001234' },
+                          chargePointIdentity: { type: 'string', example: 'ChargeStationOne-001' },
+                          isWhitelisted: { type: 'boolean', example: true }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        body: t.Object({
+          id: t.Optional(t.String()),
+          name: t.String(),
+          stationName: t.String(),
+          location: t.String(),
+          serialNumber: t.String(),
+          chargePointIdentity: t.String(),
+          protocol: t.String(),
+          brand: t.String(),
+          powerRating: t.Number(),
+          connectorCount: t.Optional(t.Number({ default: 2 })),
+          isWhitelisted: t.Optional(t.Boolean({ default: true }))
+        })
+      }
+    )
+    
+    /**
+     * Heartbeat endpoint สำหรับอัปเดต lastSeen
+     * ใช้อัปเดต timestamp ล่าสุดที่เครื่องชาร์จส่ง heartbeat มา
+     */
+    .post(
+      '/:chargePointIdentity/heartbeat',
+      async ({ params, body, set }) => {
+        try {
+          console.log('💓 รับ Heartbeat จาก Charge Point:', params.chargePointIdentity, body);
+          
+          const { chargePointIdentity } = params;
+          const { lastSeen } = body as { lastSeen: string };
+
+          if (!lastSeen) {
+            console.error('❌ ไม่มี lastSeen timestamp ใน heartbeat request');
+            set.status = 400;
+            return {
+              success: false,
+              message: 'กรุณาระบุ lastSeen'
+            };
+          }
+
+          const updatedChargePoint = await chargePointService.updateHeartbeat(chargePointIdentity, lastSeen);
+          
+          if (!updatedChargePoint) {
+            console.error(`❌ ไม่พบเครื่องชาร์จ chargePointIdentity: ${chargePointIdentity} สำหรับการอัปเดต heartbeat`);
+            set.status = 404;
+            return {
+              success: false,
+              message: 'ไม่พบเครื่องชาร์จ'
+            };
+          }
+
+          console.log(`✅ อัปเดต heartbeat สำเร็จสำหรับ Charge Point: ${chargePointIdentity}`);
+
+          return {
+            success: true,
+            message: 'อัปเดต heartbeat สำเร็จ',
+            data: updatedChargePoint
+          };
+        } catch (error: any) {
+          console.error('💥 เกิดข้อผิดพลาดในการอัปเดต heartbeat:', error);
+          set.status = 500;
+          return {
+            success: false,
+            message: 'เกิดข้อผิดพลาดในการอัปเดต heartbeat'
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['OCPP'],
+          summary: '💓 Update Heartbeat',
+          description: 'อัปเดต lastSeen timestamp จาก Heartbeat message'
+        },
+        body: t.Object({
+          lastSeen: t.String()
+        })
+      }
+    )
+    
+    // Status notification endpoint สำหรับอัปเดตสถานะ connector
+    .post(
+      '/:chargePointIdentity/status',
+      async ({ params, body, set }) => {
+        try {
+          const { chargePointIdentity } = params;
+          const statusData = body as {
+            connectorId: number;
+            status: string;
+            errorCode: string;
+            timestamp?: string;
+            info?: string;
+            vendorId?: string;
+            vendorErrorCode?: string;
+          };
+
+          if (!statusData.connectorId || !statusData.status || !statusData.errorCode) {
+            set.status = 400;
+            return {
+              success: false,
+              message: 'กรุณาระบุ connectorId, status และ errorCode'
+            };
+          }
+
+          const result = await chargePointService.updateConnectorStatus(chargePointIdentity, statusData);
+          
+          return {
+            success: true,
+            message: 'อัปเดตสถานะ connector สำเร็จ',
+            data: result
+          };
+        } catch (error: any) {
+          console.error('Error updating connector status:', error);
+          set.status = 500;
+          return {
+            success: false,
+            message: 'เกิดข้อผิดพลาดในการอัปเดตสถานะ connector'
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['OCPP'],
+          summary: '🔌 Update Connector Status',
+          description: 'อัปเดตสถานะ connector จาก StatusNotification message'
+        },
+        body: t.Object({
+          connectorId: t.Number(),
+          status: t.String(),
+          errorCode: t.String(),
+          timestamp: t.Optional(t.String()),
+          info: t.Optional(t.String()),
+          vendorId: t.Optional(t.String()),
+          vendorErrorCode: t.Optional(t.String())
+        })
+      }
+    )
+    
+    /**
+     * Validate whitelist endpoint สำหรับ ws-gateway
+     * ใช้ตรวจสอบว่าเครื่องชาร์จได้รับอนุญาตให้เชื่อมต่อหรือไม่
+     */
+    .post(
+      '/validate-whitelist',
+      async ({ body, set }) => {
+        try {
+          console.log('🔍 ตรวจสอบ whitelist สำหรับ Charge Point:', body);
+          
+          const { serialNumber, chargePointIdentity } = body as { serialNumber: string; chargePointIdentity: string };
+          
+          if (!serialNumber || !chargePointIdentity) {
+            console.error('❌ ข้อมูลไม่ครบถ้วนสำหรับการตรวจสอบ whitelist');
+            set.status = 400;
+            return {
+              success: false,
+              message: 'กรุณาระบุ serialNumber และ chargePointIdentity'
+            };
+          }
+
+          // ค้นหาเครื่องชาร์จด้วย serialNumber และ chargePointIdentity
+          const chargePoint = await chargePointService.findBySerialAndIdentity(serialNumber, chargePointIdentity);
+          
+          if (!chargePoint) {
+            console.warn(`⚠️ ไม่พบเครื่องชาร์จ serialNumber: ${serialNumber}, identity: ${chargePointIdentity}`);
+            set.status = 404;
+            return {
+              success: false,
+              message: 'ไม่พบเครื่องชาร์จในระบบ',
+              data: { isValid: false }
+            };
+          }
+
+          // ตรวจสอบว่าอยู่ใน whitelist หรือไม่
+          const isValid = chargePoint.isWhitelisted === true;
+          
+          console.log(`${isValid ? '✅' : '❌'} Charge Point ${chargePointIdentity}: ${isValid ? 'ได้รับอนุญาต' : 'ไม่ได้รับอนุญาต'}`);
+          
+          return {
+            success: true,
+            message: isValid ? 'เครื่องชาร์จได้รับอนุญาต' : 'เครื่องชาร์จไม่ได้รับอนุญาต',
+            data: {
+              isValid,
+              chargePointId: chargePoint.id
+            }
+          };
+        } catch (error: any) {
+          console.error('💥 เกิดข้อผิดพลาดในการตรวจสอบ whitelist:', error);
+          set.status = 500;
+          return {
+            success: false,
+            message: 'เกิดข้อผิดพลาดในการตรวจสอบ whitelist'
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['OCPP'],
+          summary: '🔍 Validate Charge Point Whitelist',
+          description: 'ตรวจสอบว่าเครื่องชาร์จได้รับอนุญาตให้เชื่อมต่อหรือไม่ โดยใช้ serialNumber และ chargePointIdentity'
+        },
+        body: t.Object({
+          serialNumber: t.String(),
+          chargePointIdentity: t.String()
+        })
+      }
+    )
+    
+    /**
+     * Update from BootNotification endpoint
+     * ใช้อัปเดตข้อมูลเครื่องชาร์จจาก BootNotification message
+     */
+    .post(
+      '/:chargePointIdentity/update-from-boot',
+      async ({ params, body, set }) => {
+        try {
+          console.log('🔄 อัปเดตข้อมูลจาก BootNotification สำหรับ Charge Point:', params.chargePointIdentity, body);
+          
+          const { chargePointIdentity } = params;
+          const updateData = body as {
+            vendor?: string;
+            model?: string;
+            firmwareVersion?: string;
+            serialNumber?: string;
+            lastSeen?: string;
+            heartbeatIntervalSec?: number;
+            ocppProtocolRaw?: string;
+          };
+
+          const updatedChargePoint = await chargePointService.updateFromBootNotification(chargePointIdentity, updateData);
+          
+          if (!updatedChargePoint) {
+            console.error(`❌ ไม่พบเครื่องชาร์จ chargePointIdentity: ${chargePointIdentity} สำหรับการอัปเดต`);
+            set.status = 404;
+            return {
+              success: false,
+              message: 'ไม่พบเครื่องชาร์จ'
+            };
+          }
+
+          console.log(`✅ อัปเดตข้อมูลจาก BootNotification สำเร็จสำหรับ Charge Point: ${chargePointIdentity}`);
+
+          return {
+            success: true,
+            message: 'อัปเดตข้อมูลจาก BootNotification สำเร็จ',
+            data: updatedChargePoint
+          };
+        } catch (error: any) {
+          console.error('💥 เกิดข้อผิดพลาดในการอัปเดตข้อมูลจาก BootNotification:', error);
+          set.status = 500;
+          return {
+            success: false,
+            message: 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล'
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['OCPP'],
+          summary: '🔄 Update from BootNotification',
+          description: 'อัปเดตข้อมูลเครื่องชาร์จจาก BootNotification message'
+        }
+      }
+    )
+    
     // สร้างเครื่องชาร์จใหม่
     .post(
       '/',
@@ -587,11 +1072,11 @@ export const chargePointController = (
 
     // ดึงข้อมูลเครื่องชาร์จตาม ID
     .get(
-      '/:id',
+      '/:chargePointIdentity',
       async ({ params, set }) => {
         try {
-          const { id } = params;
-          const chargePoint = await chargePointService.findChargePointById(id);
+          const { chargePointIdentity } = params;
+          const chargePoint = await chargePointService.findByChargePointIdentity(chargePointIdentity);
           
           if (!chargePoint) {
             set.status = 404;
@@ -621,7 +1106,7 @@ export const chargePointController = (
           description: 'ดึงข้อมูลเครื่องชาร์จตาม ID พร้อมข้อมูลรายละเอียด',
           parameters: [
             {
-              name: 'id',
+              name: 'chargePointIdentity',
               in: 'path',
               required: true,
               description: 'ID ของเครื่องชาร์จ',
@@ -630,21 +1115,21 @@ export const chargePointController = (
           ]
         },
         params: t.Object({
-          id: t.String()
+          chargePointIdentity: t.String()
         })
       }
     )
 
     // อัปเดตข้อมูลเครื่องชาร์จ
     .put(
-      '/:id',
+      '/:chargePointIdentity',
       async ({ params, body, set }) => {
         try {
-          const { id } = params;
+          const { chargePointIdentity } = params;
           const updateData = body as any;
           
           // ตรวจสอบว่าเครื่องชาร์จมีอยู่จริง
-          const existingChargePoint = await chargePointService.findChargePointById(id);
+          const existingChargePoint = await chargePointService.findByChargePointIdentity(chargePointIdentity);
           if (!existingChargePoint) {
             set.status = 404;
             return {
@@ -653,7 +1138,7 @@ export const chargePointController = (
             };
           }
 
-          const updatedChargePoint = await chargePointService.updateChargePoint(id, updateData);
+          const updatedChargePoint = await chargePointService.updateChargePoint(chargePointIdentity, updateData);
           
           return {
             success: true,
@@ -676,7 +1161,7 @@ export const chargePointController = (
           description: 'อัปเดตข้อมูลเครื่องชาร์จ หากเปลี่ยนเวอร์ชัน OCPP จะสร้าง WebSocket URL ใหม่',
           parameters: [
             {
-              name: 'id',
+              name: 'chargePointIdentity',
               in: 'path',
               required: true,
               description: 'ID ของเครื่องชาร์จ',
@@ -685,7 +1170,7 @@ export const chargePointController = (
           ]
         },
         params: t.Object({
-          id: t.String()
+          chargePointIdentity: t.String()
         }),
         body: t.Object({
           name: t.Optional(t.String()),
@@ -721,13 +1206,13 @@ export const chargePointController = (
 
     // ลบเครื่องชาร์จ (เปลี่ยนสถานะเป็น UNAVAILABLE)
     .delete(
-      '/:id',
+      '/:chargePointIdentity',
       async ({ params, set }) => {
         try {
-          const { id } = params;
+          const { chargePointIdentity } = params;
           
           // ตรวจสอบว่าเครื่องชาร์จมีอยู่จริง
-          const existingChargePoint = await chargePointService.findChargePointById(id);
+          const existingChargePoint = await chargePointService.findByChargePointIdentity(chargePointIdentity);
           if (!existingChargePoint) {
             set.status = 404;
             return {
@@ -736,7 +1221,7 @@ export const chargePointController = (
             };
           }
 
-          await chargePointService.deleteChargePoint(id);
+          await chargePointService.deleteChargePoint(chargePointIdentity);
           
           return {
             success: true,
@@ -758,7 +1243,7 @@ export const chargePointController = (
           description: 'ปิดใช้งานเครื่องชาร์จ (เปลี่ยนสถานะเป็น UNAVAILABLE)',
           parameters: [
             {
-              name: 'id',
+              name: 'chargePointIdentity',
               in: 'path',
               required: true,
               description: 'ID ของเครื่องชาร์จ',
@@ -767,17 +1252,17 @@ export const chargePointController = (
           ]
         },
         params: t.Object({
-          id: t.String()
+          chargePointIdentity: t.String()
         })
       }
     )
 
     // อัปเดต Pricing Schedule แยกต่างหาก
     .put(
-      '/:id/pricing',
+      '/:chargePointIdentity/pricing',
       async ({ params, body, set }) => {
         try {
-          const { id } = params;
+          const { chargePointIdentity } = params;
           const pricingData = body as {
             baseRate?: number;
             peakRate?: number;
@@ -839,7 +1324,7 @@ export const chargePointController = (
            }
           }
 
-          const updatedChargePoint = await chargePointService.updatePricingSchedule(id, pricingData);
+          const updatedChargePoint = await chargePointService.updatePricingSchedule(chargePointIdentity, pricingData);
 
           return {
             success: true,
@@ -862,7 +1347,7 @@ export const chargePointController = (
           description: 'อัปเดต Pricing Schedule สำหรับเครื่องชาร์จ รวมถึงราคาและช่วงเวลา Peak/Off-Peak',
           parameters: [
             {
-              name: 'id',
+              name: 'chargePointIdentity',
               in: 'path',
               required: true,
               description: 'ID ของเครื่องชาร์จ',
@@ -871,7 +1356,7 @@ export const chargePointController = (
           ]
         },
         params: t.Object({
-          id: t.String()
+          chargePointIdentity: t.String()
         }),
         body: t.Object({
           baseRate: t.Optional(t.Number({ minimum: 0.01 })),
@@ -895,17 +1380,17 @@ export const chargePointController = (
 
     // ตรวจสอบการเชื่อมต่อ OCPP
     .post(
-      '/:id/validate-ocpp',
+      '/:chargePointIdentity/validate-ocpp',
       async ({ params, body, set }) => {
         try {
-          const { id } = params;
-          const { version } = body as { version: OCPPVersion };
+          const { chargePointIdentity } = params;
+          const { ocppVersion } = body as { ocppVersion: string };
           
-          const validation = await chargePointService.validateOCPPConnection(id, version);
+          const result = await chargePointService.validateOCPPConnection(chargePointIdentity, ocppVersion);
           
           return {
-            success: true,
-            data: validation
+            success: result.isValid,
+            data: result
           };
         } catch (error: any) {
           console.error('Error validating OCPP connection:', error);
@@ -923,7 +1408,7 @@ export const chargePointController = (
           description: 'ตรวจสอบว่าเวอร์ชัน OCPP ที่เครื่องชาร์จส่งมาตรงกับที่กำหนดไว้หรือไม่',
           parameters: [
             {
-              name: 'id',
+              name: 'chargePointIdentity',
               in: 'path',
               required: true,
               description: 'ID ของเครื่องชาร์จ',
@@ -932,10 +1417,10 @@ export const chargePointController = (
           ]
         },
         params: t.Object({
-          id: t.String()
+          chargePointIdentity: t.String()
         }),
         body: t.Object({
-          version: t.String()
+          ocppVersion: t.String()
         })
       }
     )

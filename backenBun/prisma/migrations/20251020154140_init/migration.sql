@@ -40,12 +40,22 @@ CREATE TYPE "NotificationType" AS ENUM ('CHARGING_STARTEDChargePoint', 'CHARGING
 -- CreateEnum
 CREATE TYPE "UserType" AS ENUM ('NORMAL', 'BUSINESS');
 
+-- CreateEnum
+CREATE TYPE "PricingTierType" AS ENUM ('STANDARD', 'PEAK_OFF_PEAK', 'TIME_OF_USE', 'DYNAMIC');
+
+-- CreateEnum
+CREATE TYPE "PricingPeriod" AS ENUM ('STANDARD', 'PEAK', 'OFF_PEAK', 'SUPER_OFF_PEAK');
+
+-- CreateEnum
+CREATE TYPE "DayOfWeek" AS ENUM ('MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY');
+
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "firebaseUid" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "phoneNumber" TEXT NOT NULL,
+    "fullName" TEXT,
     "password" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -74,18 +84,35 @@ CREATE TABLE "user_vehicles" (
 CREATE TABLE "charge_points" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "stationName" TEXT NOT NULL,
     "location" TEXT NOT NULL,
     "latitude" DECIMAL(65,30),
     "longitude" DECIMAL(65,30),
+    "openingHours" TEXT,
+    "is24Hours" BOOLEAN NOT NULL DEFAULT false,
+    "brand" TEXT NOT NULL,
+    "serialNumber" TEXT NOT NULL,
+    "powerRating" DOUBLE PRECISION NOT NULL,
     "protocol" "OCPPVersion" NOT NULL,
+    "chargePointIdentity" TEXT NOT NULL,
     "status" "ChargePointStatus" NOT NULL DEFAULT 'AVAILABLE',
     "maxPower" DOUBLE PRECISION,
     "connectorCount" INTEGER NOT NULL DEFAULT 1,
+    "lastSeen" TIMESTAMP(3),
+    "heartbeatIntervalSec" INTEGER,
+    "vendor" TEXT,
+    "model" TEXT,
+    "firmwareVersion" TEXT,
+    "ocppProtocolRaw" TEXT,
+    "ocppSessionId" TEXT,
+    "isWhitelisted" BOOLEAN NOT NULL DEFAULT true,
     "ownerId" TEXT,
     "ownershipType" "OwnershipType" NOT NULL DEFAULT 'PUBLIC',
     "isPublic" BOOLEAN NOT NULL DEFAULT true,
+    "defaultPricingTierId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "urlwebSocket" TEXT,
 
     CONSTRAINT "charge_points_pkey" PRIMARY KEY ("id")
 );
@@ -111,12 +138,15 @@ CREATE TABLE "transactions" (
     "vehicleId" TEXT,
     "chargePointId" TEXT NOT NULL,
     "connectorId" TEXT NOT NULL,
+    "pricingTierId" TEXT,
     "startTime" TIMESTAMP(3) NOT NULL,
     "endTime" TIMESTAMP(3),
     "startMeterValue" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "endMeterValue" DOUBLE PRECISION,
     "totalEnergy" DOUBLE PRECISION,
     "totalCost" DOUBLE PRECISION,
+    "appliedRate" DOUBLE PRECISION,
+    "pricingPeriod" "PricingPeriod",
     "status" "TransactionStatus" NOT NULL DEFAULT 'ACTIVE',
     "stopReason" TEXT,
 
@@ -210,6 +240,42 @@ CREATE TABLE "notifications" (
     CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "pricing_tiers" (
+    "id" TEXT NOT NULL,
+    "chargePointId" TEXT,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "tierType" "PricingTierType" NOT NULL DEFAULT 'STANDARD',
+    "baseRate" DOUBLE PRECISION NOT NULL,
+    "peakRate" DOUBLE PRECISION,
+    "offPeakRate" DOUBLE PRECISION,
+    "currency" TEXT NOT NULL DEFAULT 'THB',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "validFrom" TIMESTAMP(3),
+    "validTo" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "pricing_tiers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "pricing_schedules" (
+    "id" TEXT NOT NULL,
+    "pricingTierId" TEXT NOT NULL,
+    "dayOfWeek" "DayOfWeek",
+    "startTime" TEXT NOT NULL,
+    "endTime" TEXT NOT NULL,
+    "periodType" "PricingPeriod" NOT NULL DEFAULT 'STANDARD',
+    "rate" DOUBLE PRECISION NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "pricing_schedules_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_firebaseUid_key" ON "User"("firebaseUid");
 
@@ -221,6 +287,12 @@ CREATE UNIQUE INDEX "User_phoneNumber_key" ON "User"("phoneNumber");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "user_vehicles_licensePlate_key" ON "user_vehicles"("licensePlate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "charge_points_serialNumber_key" ON "charge_points"("serialNumber");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "charge_points_chargePointIdentity_key" ON "charge_points"("chargePointIdentity");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "connectors_chargePointId_connectorId_key" ON "connectors"("chargePointId", "connectorId");
@@ -253,6 +325,9 @@ ALTER TABLE "transactions" ADD CONSTRAINT "transactions_userId_fkey" FOREIGN KEY
 ALTER TABLE "transactions" ADD CONSTRAINT "transactions_vehicleId_fkey" FOREIGN KEY ("vehicleId") REFERENCES "user_vehicles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "transactions" ADD CONSTRAINT "transactions_pricingTierId_fkey" FOREIGN KEY ("pricingTierId") REFERENCES "pricing_tiers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "meter_values" ADD CONSTRAINT "meter_values_transactionId_fkey" FOREIGN KEY ("transactionId") REFERENCES "transactions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -260,3 +335,9 @@ ALTER TABLE "charging_sessions" ADD CONSTRAINT "charging_sessions_chargePointId_
 
 -- AddForeignKey
 ALTER TABLE "charging_sessions" ADD CONSTRAINT "charging_sessions_connectorId_fkey" FOREIGN KEY ("connectorId") REFERENCES "connectors"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "pricing_tiers" ADD CONSTRAINT "pricing_tiers_chargePointId_fkey" FOREIGN KEY ("chargePointId") REFERENCES "charge_points"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "pricing_schedules" ADD CONSTRAINT "pricing_schedules_pricingTierId_fkey" FOREIGN KEY ("pricingTierId") REFERENCES "pricing_tiers"("id") ON DELETE CASCADE ON UPDATE CASCADE;

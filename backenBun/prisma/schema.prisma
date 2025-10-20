@@ -63,6 +63,17 @@ model ChargePoint {
   maxPower         Float?            // กำลังไฟสูงสุด เช่น 22.0 (kW), 50.0 (kW) - deprecated, ใช้ powerRating แทน
   connectorCount   Int               @default(1) // จำนวนหัวชาร์จ เช่น 1, 2, 4 (≥ 1)
   
+  // ฟิลด์ใหม่สำหรับ OCPP connection tracking
+  lastSeen             DateTime?         // อัปเดตตอน Heartbeat/Boot
+  heartbeatIntervalSec Int?              // จาก BootNotification หรือ Config
+  vendor               String?           // จาก BootNotification
+  model                String?           // จาก BootNotification
+  firmwareVersion      String?           // จาก BootNotification (ถ้ามี)
+  ocppProtocolRaw      String?           // เช่น "ocpp1.6"
+  ocppSessionId        String?           // ไอดีภายในของการเชื่อมต่อปัจจุบัน (ถ้ามี)
+  // helper flags
+  isWhitelisted        Boolean           @default(true) // เปิด/ปิดอนุญาตเชื่อมต่อ
+  
   ownerId          String?           // ID ของเจ้าของ (null = สาธารณะ)
   ownershipType    OwnershipType     @default(PUBLIC) // ประเภทความเป็นเจ้าของ: PUBLIC, PRIVATE, SHARED
   isPublic         Boolean           @default(true) // เปิดให้บริการสาธารณะหรือไม่

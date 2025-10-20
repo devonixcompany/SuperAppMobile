@@ -1,131 +1,222 @@
-import { v4 as uuidv4 } from 'uuid';
-import { WebSocketServer } from 'ws';
+import { IncomingMessage, createServer } from 'http';
+import { URL } from 'url';
+import WebSocket, { WebSocketServer } from 'ws';
 import { handleConnection } from './handlers/connection';
+import { sessionManager } from './handlers/sessionManager';
+import { sessionMonitor } from './handlers/sessionMonitor';
+import { subprotocolToVersion } from './handlers/versionNegotiation';
 
-const PORT = process.env.PORT || 8081;
-
-// OCPP supported subprotocols
-const SUPPORTED_SUBPROTOCOLS = [
-  'ocpp1.6',
-  'ocpp2.0',
-  'ocpp2.0.1'
-];
-
-// In-memory storage for charge point data
-interface ChargePointData {
-  id: string;
-  serialNumber: string;
-  urlwebSocket: string;
-  chargePointIdentity: string;
-}
-
-let chargePointsCache: Map<string, ChargePointData> = new Map();
+// แคชสำหรับเก็บข้อมูล charge point
+// Cache for storing charge point data
+const chargePointCache = new Map<string, any>();
 
 /**
- * Load all charge points from database and cache them in memory
+ * ฟังก์ชั่นดึงข้อมูล charge point จากแคชโดยใช้ chargePointId เป็นคีย์หลัก
+ * Get charge point from cache using chargePointId as primary key
+ * @param chargePointId - รหัสประจำตัว charge point
+ * @returns ข้อมูล charge point หรือ undefined หากไม่พบ
  */
-async function loadChargePointsFromDatabase(): Promise<void> {
+export function getChargePointFromCache(chargePointId: string): any {
+  return chargePointCache.get(chargePointId);
+}
+
+/**
+ * ฟังก์ชั่นเริ่มต้นแคชด้วยข้อมูล charge point จาก API
+ * Initialize cache with charge point data from backend API
+ * Step 1: เรียก API เพื่อดึงข้อมูล charge points ทั้งหมด
+ * Step 2: เก็บข้อมูลลงในแคชโดยใช้ chargePointIdentity เป็นคีย์
+ * Step 3: แสดงผลการโหลดข้อมูลในคอนโซล
+ */
+async function initializeCache() {
   try {
-    console.log('Loading charge points from database...');
+    console.log('Initializing charge point cache...');
+    
+    // Step 1: เรียก API เพื่อดึงข้อมูล charge points
     const response = await fetch('http://localhost:8080/api/chargepoints/ws-gateway/chargepoints');
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     
-    const result = await response.json() as { success?: boolean; data?: any[] };
+    const result = await response.json() as { success: boolean; data: any[] };
+    const chargePoints = result.data as any[];
     
-    if (result.success && result.data) {
-      const chargePoints = result.data;
-      chargePoints.forEach((cp: any) => {
-        chargePointsCache.set(cp.serialNumber, {
-          id: cp.id,
-          serialNumber: cp.serialNumber,
-          urlwebSocket: cp.urlwebSocket,
-          chargePointIdentity: cp.chargePointIdentity
-        });
-      });
-      
-      console.log(`Loaded ${chargePoints.length} charge points into cache`);
-      console.log('Cached charge points (by serial):', Array.from(chargePointsCache.keys()));
-    } else {
-      console.log('No charge points found or invalid response structure');
-    }
+    // Step 2: เก็บข้อมูล charge point ลงในแคชโดยใช้ chargePointIdentity เป็นคีย์หลัก
+    chargePoints.forEach(cp => {
+      chargePointCache.set(cp.chargePointIdentity, cp);
+      console.log(`Cached charge point: ${cp.chargePointIdentity} (Serial: ${cp.serialNumber})`);
+    });
+    
+    // Step 3: แสดงผลสรุปการโหลดข้อมูล
+    console.log(`Cache initialized with ${chargePoints.length} charge points`);
   } catch (error) {
-    console.error('Error loading charge points from database:', error);
+    console.error('Failed to initialize cache:', error);
+    console.log('Cache will remain empty - charge points will be validated via API calls');
   }
 }
 
-/**
- * Get charge point data from cache by serial number
- */
-export function getChargePointFromCache(serialNumber: string): ChargePointData | undefined {
-  return chargePointsCache.get(serialNumber);
-}
+// สร้าง HTTP server
+// Create HTTP server
+const server = createServer();
 
 /**
- * Get all cached charge points
+ * สร้าง WebSocket server พร้อมการตรวจสอบ client
+ * Create WebSocket server with client verification
+ * Step 1: กำหนดค่า server options
+ * Step 2: ตั้งค่า verifyClient callback สำหรับตรวจสอบการเชื่อมต่อ
  */
-export function getAllCachedChargePoints(): Map<string, ChargePointData> {
-  return chargePointsCache;
-}
+const wss = new WebSocketServer({ 
+  server,
+  verifyClient: (info: any) => {
+    console.log('Verifying client connection:', info.req.url);
+    // การตรวจสอบพื้นฐาน - สามารถขยายได้
+    // Basic verification - can be extended
+    return true;
+  }
+});
 
 /**
- * Update charge point cache by serial number
+ * จัดการการเชื่อมต่อ WebSocket ใหม่
+ * Handle new WebSocket connections
+ * Step 1: แยก charge point ID จาก URL path
+ * Step 2: ตรวจสอบความถูกต้องของ charge point ID
+ * Step 3: แยก OCPP version จาก subprotocol
+ * Step 4: เรียกใช้ handleConnection เพื่อจัดการการเชื่อมต่อ
  */
-export function updateChargePointCache(serialNumber: string, data: ChargePointData): void {
-  chargePointsCache.set(serialNumber, data);
-}
-
-// Create WebSocket server with OCPP subprotocol support
-const wss = new WebSocketServer({
-  port: Number(PORT),
-  handleProtocols: (protocols: Set<string>) => {
-    // Find the first supported protocol from client's request
-    for (const protocol of protocols) {
-      if (SUPPORTED_SUBPROTOCOLS.includes(protocol)) {
-        return protocol;
-      }
+wss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
+  console.log('New WebSocket connection attempt');
+  
+  try {
+    // Step 1: แยก charge point ID จาก URL path
+    const url = new URL(request.url || '', `http://${request.headers.host}`);
+    const pathParts = url.pathname.split('/');
+    const chargePointId = pathParts[pathParts.length - 1];
+    
+    // Step 2: ตรวจสอบว่ามี charge point ID หรือไม่
+    if (!chargePointId || chargePointId === 'ocpp') {
+      console.error('No charge point ID provided in URL');
+      ws.close(1008, 'Charge point ID required');
+      return;
     }
-    // Return false if no supported protocol found
-    return false;
+    console.log("websocket detail:",  ws)
+        console.log("websocket protocol:",  ws.protocol)
+    // Step 3: แยก OCPP version จาก subprotocol หรือใช้ค่าเริ่มต้น 1.6
+    const subprotocol = ws.protocol || 'ocpp1.6';
+    const ocppVersion = subprotocolToVersion(subprotocol) || '1.6';
+    
+    console.log(`Attempting connection for charge point: ${chargePointId} with OCPP ${ocppVersion}`);
+    
+    // Step 4: จัดการการเชื่อมต่อ
+    await handleConnection(ws, request, chargePointId, ocppVersion);
+    
+  } catch (error) {
+    console.error('Error handling WebSocket connection:', error);
+    ws.close(1011, 'Internal server error');
   }
 });
 
-// Load charge points when server starts
-loadChargePointsFromDatabase().then(() => {
-  console.log(`WebSocket Gateway starting on port ${PORT}...`);
-  console.log(`Supported OCPP protocols: ${SUPPORTED_SUBPROTOCOLS.join(', ')}`);
-});
-
-wss.on('connection', (ws, request) => {
-  // Generate unique connection ID
-  const connectionId = uuidv4();
-  
-  // Get the negotiated subprotocol
-  const subprotocol = ws.protocol;
-  
-  console.log(`New connection established: ${connectionId}`);
-  console.log(`Subprotocol: ${subprotocol}`);
-  console.log(`URL: ${request.url}`);
-  
-  // Extract chargePointId from URL path
-  const url = new URL(request.url || '', `http://${request.headers.host}`);
-  const pathParts = url.pathname.split('/');
-  const chargePointId = pathParts[pathParts.length - 1] || '';
-  
-  // Handle the connection
-  handleConnection(ws, request, chargePointId, subprotocol);
-});
-
+/**
+ * จัดการข้อผิดพลาดของ WebSocket server
+ * Handle WebSocket server errors
+ */
 wss.on('error', (error) => {
   console.error('WebSocket server error:', error);
 });
 
+/**
+ * เริ่มต้นการตรวจสอบ session
+ * Start session monitoring every 30 seconds
+ */
+sessionMonitor.startMonitoring(3000); // Monitor every 30 seconds
+
+/**
+ * ทำความสะอาด session ที่หมดอายุทุก 5 นาที
+ * Cleanup stale sessions periodically every 5 minutes
+ */
+setInterval(() => {
+  const cleanedCount = sessionManager.cleanupStaleSessions();
+  if (cleanedCount > 0) {
+    console.log(`Cleaned up ${cleanedCount} stale sessions`);
+  }
+}, 5 * 60 * 1000); // Every 5 minutes
+
+/**
+ * จัดการการปิดโปรแกรมอย่างสุภาพเมื่อได้รับสัญญาณ SIGTERM
+ * Graceful shutdown on SIGTERM signal
+ * Step 1: หยุดการตรวจสอบ session
+ * Step 2: ปิด session ที่ยังใช้งานอยู่ทั้งหมด
+ * Step 3: ปิด WebSocket server
+ */
 process.on('SIGTERM', () => {
-  console.log('Shutting down WebSocket Gateway...');
+  console.log('Received SIGTERM, shutting down gracefully...');
+  
+  // Step 1: หยุดการตรวจสอบ session
+  sessionMonitor.stopMonitoring();
+  
+  // Step 2: ปิด session ที่ยังใช้งานอยู่ทั้งหมด
+  const activeSessions = sessionManager.getActiveSessions();
+  activeSessions.forEach(session => {
+    sessionManager.closeSession(session.sessionId);
+  });
+  
+  // Step 3: ปิด WebSocket server
   wss.close(() => {
-    console.log('WebSocket Gateway stopped');
+    console.log('WebSocket server closed');
     process.exit(0);
   });
 });
+
+/**
+ * จัดการการปิดโปรแกรมอย่างสุภาพเมื่อได้รับสัญญาณ SIGINT (Ctrl+C)
+ * Graceful shutdown on SIGINT signal (Ctrl+C)
+ * Step 1: หยุดการตรวจสอบ session
+ * Step 2: ปิด session ที่ยังใช้งานอยู่ทั้งหมด
+ * Step 3: ปิด WebSocket server
+ */
+process.on('SIGINT', () => {
+  console.log('Received SIGINT, shutting down gracefully...');
+  
+  // Step 1: หยุดการตรวจสอบ session
+  sessionMonitor.stopMonitoring();
+  
+  // Step 2: ปิด session ที่ยังใช้งานอยู่ทั้งหมด
+  const activeSessions = sessionManager.getActiveSessions();
+  activeSessions.forEach(session => {
+    sessionManager.closeSession(session.sessionId);
+  });
+  
+  // Step 3: ปิด WebSocket server
+  wss.close(() => {
+    console.log('WebSocket server closed');
+    process.exit(0);
+  });
+});
+
+/**
+ * เริ่มต้น server และทำการตั้งค่าเริ่มต้น
+ * Start the server and perform initial setup
+ * Step 1: เริ่มต้น HTTP server บนพอร์ตที่กำหนด
+ * Step 2: แสดงข้อมูล server ในคอนโซล
+ * Step 3: เริ่มต้นแคชด้วยข้อมูล charge point
+ * Step 4: แสดงสถิติ session เริ่มต้น
+ */
+const PORT = process.env.PORT || 8081;
+server.listen(PORT, async () => {
+  // Step 1 & 2: เริ่มต้น server และแสดงข้อมูล
+  console.log(`OCPP WebSocket server running on port ${PORT}`);
+  console.log(`WebSocket endpoint: ws://localhost:${PORT}/ocpp/{chargePointId}`);
+  console.log('Session monitoring started');
+  
+  // Step 3: เริ่มต้นแคชด้วยข้อมูล charge point
+  await initializeCache();
+  
+  // Step 4: แสดงสถิติ session เริ่มต้นหลังจาก 1 วินาที
+  setTimeout(() => {
+    const stats = sessionManager.getStats();
+    console.log('Initial session stats:', stats);
+  }, 1000);
+});
+
+// ส่งออก server สำหรับการทดสอบ
+// Export server for testing
+export { server, wss };

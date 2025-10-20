@@ -37,9 +37,12 @@ export class ProtocolAdapterManager extends EventEmitter {
 
   /**
    * แปลงข้อความจาก OCPP เป็น Internal Standard Message
+   * ใช้สำหรับแปลงข้อความจากเวอร์ชัน OCPP ต่างๆ ให้เป็นรูปแบบมาตรฐานภายใน
    */
   convertToInternal(ocppMessage: OCPPMessage, chargePointId: string, protocol: 'OCPP16' | 'OCPP20' | 'OCPP21'): InternalStandardMessage {
     try {
+      console.log(`🔄 แปลงข้อความจาก ${protocol} เป็น Internal Standard Message:`, ocppMessage);
+      
       let internalMessage: InternalStandardMessage;
       
       switch (protocol) {
@@ -57,7 +60,7 @@ export class ProtocolAdapterManager extends EventEmitter {
       }
 
       if (this.config.enableLogging) {
-        console.log(`Converted OCPP ${protocol} message to internal format:`, internalMessage);
+        console.log(`✅ แปลงข้อความ ${protocol} เป็น Internal Standard Message สำเร็จ:`, internalMessage);
       }
 
       // ส่งข้อความที่แปลงแล้วไปยัง Layer 3 (Core Business Logic)
@@ -65,7 +68,7 @@ export class ProtocolAdapterManager extends EventEmitter {
       
       return internalMessage;
     } catch (error) {
-      console.error(`Error converting OCPP ${protocol} message to internal format:`, error);
+      console.error(`💥 เกิดข้อผิดพลาดในการแปลงข้อความ ${protocol} เป็น Internal Standard Message:`, error);
       this.emit('conversionError', { error, ocppMessage, protocol, chargePointId });
       throw error;
     }

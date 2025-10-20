@@ -121,9 +121,12 @@ export class OCPP16Adapter extends EventEmitter {
   }
 
   /**
-   * แปลง BootNotification payload
+   * แปลง BootNotification payload จาก OCPP 1.6
+   * ใช้สำหรับแปลงข้อมูลเครื่องชาร์จจาก BootNotification message
    */
   private convertBootNotification(payload: OCPP16Payload): any {
+    console.log('🔄 แปลง BootNotification payload จาก OCPP 1.6:', payload);
+    
     return {
       chargePointVendor: payload.chargePointVendor,
       chargePointModel: payload.chargePointModel,
@@ -138,9 +141,12 @@ export class OCPP16Adapter extends EventEmitter {
   }
 
   /**
-   * แปลง Heartbeat payload
+   * แปลง Heartbeat payload จาก OCPP 1.6
+   * ใช้สำหรับแปลงข้อมูล heartbeat message
    */
   private convertHeartbeat(payload: OCPP16Payload): any {
+    console.log('💓 แปลง Heartbeat payload จาก OCPP 1.6:', payload);
+    
     return {
       timestamp: new Date()
     };
@@ -194,9 +200,12 @@ export class OCPP16Adapter extends EventEmitter {
   }
 
   /**
-   * แปลง StatusNotification payload
+   * แปลง StatusNotification payload จาก OCPP 1.6
+   * ใช้สำหรับแปลงข้อมูลสถานะ connector จาก StatusNotification message
    */
   private convertStatusNotification(payload: OCPP16Payload): any {
+    console.log('🔌 แปลง StatusNotification payload จาก OCPP 1.6:', payload);
+    
     return {
       connectorId: payload.connectorId,
       status: payload.status,
