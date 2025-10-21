@@ -181,7 +181,8 @@ export async function handleBootNotification(
         vendor: payload.chargePointVendor,
         model: payload.chargePointModel,
         firmwareVersion: payload.firmwareVersion || 'Unknown',
-        chargePointIdentity: payload.chargePointSerialNumber || chargePointId,
+        chargePointIdentity:  chargePointId,
+        serialNumber: payload.chargePointSerialNumber || 'Unknown',
         lastSeen: new Date().toISOString(),
         heartbeatIntervalSec: 300, // 5 minutes
         ocppProtocolRaw: 'OCPP16'

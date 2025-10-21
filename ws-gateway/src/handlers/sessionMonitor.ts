@@ -3,8 +3,8 @@
 // ให้ความสามารถในการตรวจสอบ, บันทึกข้อมูล และตรวจสอบสุขภาพของ session
 // Provides monitoring, logging, and health check capabilities for sessions
 
-import type { ChargePointSession } from './sessionManager';
-import { sessionManager } from './sessionManager';
+import type { ChargePointEntry } from './gatewaySessionManager';
+import { gatewaySessionManager } from './gatewaySessionManager';
 
 /**
  * คลาสตรวจสอบ Session
@@ -72,48 +72,48 @@ export class SessionMonitor {
    * Step 4: ตรวจสอบ session ที่ไม่มี heartbeat
    */
   performHealthCheck(): void {
-    // Step 1: ดึงสถิติและข้อมูล session ทั้งหมด
-    const stats = sessionManager.getStats();
-    const activeSessions = sessionManager.getActiveSessions();
+    // Step 1: ดึงสถิติและข้อมูล charge points ทั้งหมด
+    const stats = gatewaySessionManager.getStats();
+    const activeChargePoints = gatewaySessionManager.getAllChargePoints();
     
     // Step 2: แสดงสถิติการเชื่อมต่อ
-    console.log('=== Session Health Check ===');
-    console.log(`Total Sessions: ${stats.totalSessions}`);
-    console.log(`Active Sessions: ${stats.activeSessions}`);
-    console.log(`Authenticated Sessions: ${stats.authenticatedSessions}`);
-    console.log(`Sessions with Recent Heartbeat: ${stats.sessionsWithHeartbeat}`);
-    console.log(`Messages Sent: ${stats.messagesSent}`);
-    console.log(`Messages Received: ${stats.messagesReceived}`);
+    console.log('=== Gateway Session Health Check ===');
+    console.log(`Total Charge Points: ${stats.totalChargePoints}`);
+    console.log(`Active Charge Points: ${stats.activeChargePoints}`);
+    console.log(`Authenticated Charge Points: ${stats.authenticatedChargePoints}`);
+    console.log(`Charge Points with Recent Heartbeat: ${stats.chargePointsWithHeartbeat}`);
+    console.log(`Messages Sent: ${stats.totalMessagesSent}`);
+    console.log(`Messages Received: ${stats.totalMessagesReceived}`);
     console.log(`Average Connection Time: ${Math.round(stats.averageConnectionTime / 1000)}s`);
 
-    // Step 3: ตรวจสอบ session ที่ไม่ได้ใช้งาน (stale)
+    // Step 3: ตรวจสอบ charge points ที่ไม่ได้ใช้งาน (stale)
     const now = new Date();
     const staleThreshold = 5 * 60 * 1000; // 5 นาที
-    const staleSessions = activeSessions.filter((session: ChargePointSession) => {
-      const timeSinceLastSeen = now.getTime() - session.lastSeen.getTime();
+    const staleChargePoints = activeChargePoints.filter((chargePoint: ChargePointEntry) => {
+      const timeSinceLastSeen = now.getTime() - chargePoint.lastSeen.getTime();
       return timeSinceLastSeen > staleThreshold;
     });
 
-    if (staleSessions.length > 0) {
-      console.log(`⚠️  Found ${staleSessions.length} stale sessions:`);
-      staleSessions.forEach((session: ChargePointSession) => {
-        const timeSinceLastSeen = Math.round((now.getTime() - session.lastSeen.getTime()) / 1000);
-        console.log(`  - ${session.chargePointId} (${timeSinceLastSeen}s ago)`);
+    if (staleChargePoints.length > 0) {
+      console.log(`⚠️  Found ${staleChargePoints.length} stale charge points:`);
+      staleChargePoints.forEach((chargePoint: ChargePointEntry) => {
+        const timeSinceLastSeen = Math.round((now.getTime() - chargePoint.lastSeen.getTime()) / 1000);
+        console.log(`  - ${chargePoint.chargePointId} (${timeSinceLastSeen}s ago)`);
       });
     }
 
-    // Step 4: ตรวจสอบ session ที่ไม่มี heartbeat
+    // Step 4: ตรวจสอบ charge points ที่ไม่มี heartbeat
     const heartbeatThreshold = 2 * 60 * 1000; // 2 นาที
-    const noHeartbeatSessions = activeSessions.filter((session: ChargePointSession) => {
-      const timeSinceHeartbeat = now.getTime() - session.lastHeartbeat.getTime();
+    const noHeartbeatChargePoints = activeChargePoints.filter((chargePoint: ChargePointEntry) => {
+      const timeSinceHeartbeat = now.getTime() - chargePoint.lastHeartbeat.getTime();
       return timeSinceHeartbeat > heartbeatThreshold;
     });
 
-    if (noHeartbeatSessions.length > 0) {
-      console.log(`💔 Found ${noHeartbeatSessions.length} sessions without recent heartbeat:`);
-      noHeartbeatSessions.forEach((session: ChargePointSession) => {
-        const timeSinceHeartbeat = Math.round((now.getTime() - session.lastHeartbeat.getTime()) / 1000);
-        console.log(`  - ${session.chargePointId} (${timeSinceHeartbeat}s ago)`);
+    if (noHeartbeatChargePoints.length > 0) {
+      console.log(`💔 Found ${noHeartbeatChargePoints.length} charge points without recent heartbeat:`);
+      noHeartbeatChargePoints.forEach((chargePoint: ChargePointEntry) => {
+        const timeSinceHeartbeat = Math.round((now.getTime() - chargePoint.lastHeartbeat.getTime()) / 1000);
+        console.log(`  - ${chargePoint.chargePointId} (${timeSinceHeartbeat}s ago)`);
       });
     }
 
@@ -122,237 +122,183 @@ export class SessionMonitor {
 
   /**
    * ดึงสถิติของ session
-   * Get session statistics
-   * @returns ข้อมูลสถิติของ session ทั้งหมด
+   * Get monitoring statistics
+   * รวบรวมข้อมูลสถิติสำหรับการแสดงผลหรือการวิเคราะห์
+   * @returns ข้อมูลสถิติของ session
    */
-  getSessionStats() {
-    return sessionManager.getStats();
-  }
-
-  /**
-   * ดึงข้อมูลรายละเอียดของ session ทั้งหมด
-   * Get detailed session information
-   * @returns Array ของข้อมูลรายละเอียด session
-   */
-  getDetailedSessionInfo(): any[] {
-    const activeSessions = sessionManager.getActiveSessions();
-    return activeSessions.map(session => sessionManager.getSessionInfo(session.sessionId));
-  }
-
-  /**
-   * บันทึกกิจกรรมของ session
-   * Log session activity
-   * ใช้สำหรับบันทึกเหตุการณ์สำคัญของ session เช่น การเชื่อมต่อ การส่งข้อความ
-   * @param sessionId - รหัส session
-   * @param activity - กิจกรรมที่เกิดขึ้น
-   * @param details - รายละเอียดเพิ่มเติม (optional)
-   */
-  logSessionActivity(sessionId: string, activity: string, details?: any): void {
-    const session = sessionManager.getSession(sessionId);
-    if (session) {
-      const timestamp = new Date().toISOString();
-      console.log(`[${timestamp}] Session ${sessionId} (${session.chargePointId}): ${activity}`, details || '');
-    }
-  }
-
-  /**
-   * จัดกลุ่ม session ตามสถานะ
-   * Get sessions by status
-   * Step 1: ดึง session ทั้งหมดและ session ที่ยืนยันตัวตนแล้ว
-   * Step 2: กรอง session ที่ไม่ได้ใช้งาน (stale)
-   * Step 3: กรอง session ที่ไม่มี heartbeat
-   * @returns Object ที่จัดกลุ่ม session ตามสถานะ
-   */
-  getSessionsByStatus(): {
-    active: ChargePointSession[];
-    authenticated: ChargePointSession[];
-    stale: ChargePointSession[];
-    noHeartbeat: ChargePointSession[];
-  } {
-    // Step 1: ดึง session ทั้งหมดและ session ที่ยืนยันตัวตนแล้ว
-    const activeSessions = sessionManager.getActiveSessions();
-    const authenticatedSessions = sessionManager.getAuthenticatedSessions();
+  getMonitoringStats(): any {
+    const stats = gatewaySessionManager.getStats();
+    const activeChargePoints = gatewaySessionManager.getAllChargePoints();
     
     const now = new Date();
     const staleThreshold = 5 * 60 * 1000; // 5 นาที
     const heartbeatThreshold = 2 * 60 * 1000; // 2 นาที
-
-    // Step 2: กรอง session ที่ไม่ได้ใช้งาน (stale)
-    const staleSessions = activeSessions.filter((session: ChargePointSession) => {
-      const timeSinceLastSeen = now.getTime() - session.lastSeen.getTime();
+    
+    const staleCount = activeChargePoints.filter((cp: ChargePointEntry) => {
+      const timeSinceLastSeen = now.getTime() - cp.lastSeen.getTime();
       return timeSinceLastSeen > staleThreshold;
-    });
-
-    // Step 3: กรอง session ที่ไม่มี heartbeat
-    const noHeartbeatSessions = activeSessions.filter((session: ChargePointSession) => {
-      const timeSinceHeartbeat = now.getTime() - session.lastHeartbeat.getTime();
+    }).length;
+    
+    const noHeartbeatCount = activeChargePoints.filter((cp: ChargePointEntry) => {
+      const timeSinceHeartbeat = now.getTime() - cp.lastHeartbeat.getTime();
       return timeSinceHeartbeat > heartbeatThreshold;
-    });
+    }).length;
 
     return {
-      active: activeSessions,
-      authenticated: authenticatedSessions,
-      stale: staleSessions,
-      noHeartbeat: noHeartbeatSessions
+      ...stats,
+      staleChargePoints: staleCount,
+      noHeartbeatChargePoints: noHeartbeatCount,
+      isMonitoring: this.isMonitoring,
+      monitoringActive: this.monitoringInterval !== null
     };
   }
 
   /**
-   * บังคับทำความสะอาด session ที่ไม่ได้ใช้งาน
-   * Force cleanup of stale sessions
-   * @returns จำนวน session ที่ทำความสะอาด
+   * บันทึกกิจกรรมของ charge point
+   * Log charge point activity
+   * บันทึกเหตุการณ์สำคัญเช่น การเชื่อมต่อ, การตัดการเชื่อมต่อ, การส่งข้อความ
+   * @param chargePointId - รหัส charge point
+   * @param activity - ประเภกิจกรรม
+   * @param details - รายละเอียดเพิ่มเติม
    */
-  forceCleanup(): number {
-    console.log('Forcing cleanup of stale sessions...');
-    const cleanedCount = sessionManager.cleanupStaleSessions();
-    console.log(`Cleaned up ${cleanedCount} stale sessions`);
+  logActivity(chargePointId: string, activity: string, details?: any): void {
+    const timestamp = new Date().toISOString();
+    const chargePoint = gatewaySessionManager.getChargePoint(chargePointId);
+    
+    if (chargePoint) {
+      console.log(`[${timestamp}] ${activity} - ${chargePointId}`, details || '');
+    } else {
+      console.log(`[${timestamp}] ${activity} - ${chargePointId} (not found)`, details || '');
+    }
+  }
+
+  /**
+   * ตรวจสอบสุขภาพของ charge point เฉพาะ
+   * Check health of specific charge point
+   * ตรวจสอบสถานะและสุขภาพของ charge point ที่ระบุ
+   * @param chargePointId - รหัส charge point ที่ต้องการตรวจสอบ
+   * @returns ข้อมูลสุขภาพของ charge point
+   */
+  checkChargePointHealth(chargePointId: string): any {
+    const chargePoint = gatewaySessionManager.getChargePoint(chargePointId);
+    
+    if (!chargePoint) {
+      return {
+        chargePointId,
+        status: 'not_found',
+        message: 'Charge point not found'
+      };
+    }
+
+    const now = new Date();
+    const timeSinceLastSeen = now.getTime() - chargePoint.lastSeen.getTime();
+    const timeSinceHeartbeat = now.getTime() - chargePoint.lastHeartbeat.getTime();
+    const connectionDuration = now.getTime() - chargePoint.connectedAt.getTime();
+
+    // ตรวจสอบสถานะต่างๆ
+    const isStale = timeSinceLastSeen > 5 * 60 * 1000; // 5 นาที
+    const hasRecentHeartbeat = timeSinceHeartbeat <= 2 * 60 * 1000; // 2 นาที
+    const isWebSocketOpen = chargePoint.ws.readyState === 1; // WebSocket.OPEN
+
+    let status = 'healthy';
+    let issues = [];
+
+    if (!chargePoint.isAuthenticated) {
+      status = 'unauthenticated';
+      issues.push('Not authenticated');
+    }
+
+    if (isStale) {
+      status = 'stale';
+      issues.push(`No activity for ${Math.round(timeSinceLastSeen / 1000)}s`);
+    }
+
+    if (!hasRecentHeartbeat) {
+      status = 'no_heartbeat';
+      issues.push(`No heartbeat for ${Math.round(timeSinceHeartbeat / 1000)}s`);
+    }
+
+    if (!isWebSocketOpen) {
+      status = 'disconnected';
+      issues.push('WebSocket connection closed');
+    }
+
+    return {
+      chargePointId: chargePoint.chargePointId,
+      serialNumber: chargePoint.serialNumber,
+      status,
+      issues,
+      isAuthenticated: chargePoint.isAuthenticated,
+      connectionDuration: Math.round(connectionDuration / 1000),
+      timeSinceLastSeen: Math.round(timeSinceLastSeen / 1000),
+      timeSinceHeartbeat: Math.round(timeSinceHeartbeat / 1000),
+      messagesSent: chargePoint.messagesSent,
+      messagesReceived: chargePoint.messagesReceived,
+      pendingMessages: chargePoint.pendingMessages.length,
+      wsState: chargePoint.ws.readyState,
+      ocppVersion: chargePoint.ocppVersion
+    };
+  }
+
+  /**
+   * ทำความสะอาด charge points ที่หมดอายุ
+   * Cleanup stale charge points
+   * ลบ charge points ที่ไม่ได้ใช้งานเป็นเวลานาน
+   * @param maxStaleTime - เวลาสูงสุดที่ยอมให้ไม่มีกิจกรรม (มิลลิวินาที, ค่าเริ่มต้น 10 นาที)
+   * @returns จำนวน charge points ที่ถูกลบ
+   */
+  cleanupStaleChargePoints(maxStaleTime: number = 10 * 60 * 1000): number {
+    const activeChargePoints = gatewaySessionManager.getAllChargePoints();
+    const now = new Date();
+    let cleanedCount = 0;
+
+    activeChargePoints.forEach((chargePoint: ChargePointEntry) => {
+      const timeSinceLastSeen = now.getTime() - chargePoint.lastSeen.getTime();
+      
+      if (timeSinceLastSeen > maxStaleTime) {
+        console.log(`Cleaning up stale charge point: ${chargePoint.chargePointId} (${Math.round(timeSinceLastSeen / 1000)}s inactive)`);
+        gatewaySessionManager.removeChargePoint(chargePoint.chargePointId);
+        cleanedCount++;
+      }
+    });
+
+    if (cleanedCount > 0) {
+      console.log(`Cleaned up ${cleanedCount} stale charge points`);
+    }
+
     return cleanedCount;
   }
 
   /**
-   * ดึงข้อมูล session ตาม charge point ID พร้อมข้อมูลรายละเอียด
-   * Get session by charge point ID with detailed info
-   * รวมข้อมูลสุขภาพการเชื่อมต่อและจำนวนข้อความที่รอการประมวลผล
-   * @param chargePointId - รหัส charge point
-   * @returns ข้อมูลรายละเอียดของ session หรือ null หากไม่พบ
+   * ส่งข้อความ ping ไปยัง charge points ทั้งหมด
+   * Send ping message to all charge points
+   * ใช้สำหรับตรวจสอบการเชื่อมต่อและการตอบสนองของ charge points
+   * @returns จำนวน charge points ที่ส่ง ping สำเร็จ
    */
-  getSessionByChargePoint(chargePointId: string): any | null {
-    const session = sessionManager.getSessionByChargePointId(chargePointId);
-    if (!session) return null;
-    
-    return {
-      ...sessionManager.getSessionInfo(session.sessionId),
-      connectionHealth: this.getConnectionHealth(session),
-      pendingMessageCount: sessionManager.getPendingMessages(session.sessionId).length
+  pingAllChargePoints(): number {
+    const authenticatedChargePoints = gatewaySessionManager.getAuthenticatedChargePoints();
+    let pingCount = 0;
+
+    const pingMessage = {
+      messageTypeId: 2,
+      messageId: `ping_${Date.now()}`,
+      action: 'Heartbeat',
+      payload: {}
     };
-  }
 
-  /**
-   * ตรวจสอบสุขภาพการเชื่อมต่อของ session
-   * Get connection health for a session
-   * Step 1: คำนวณเวลาที่ผ่านไปตั้งแต่กิจกรรมล่าสุด
-   * Step 2: ตรวจสอบเงื่อนไขต่างๆ และกำหนดสถานะ
-   * Step 3: รวบรวมปัญหาที่พบ
-   * @param session - session ที่ต้องการตรวจสอบ
-   * @returns ข้อมูลสุขภาพการเชื่อมต่อ
-   */
-  private getConnectionHealth(session: ChargePointSession): {
-    status: 'healthy' | 'warning' | 'critical';
-    lastSeenAgo: number;
-    lastHeartbeatAgo: number;
-    issues: string[];
-  } {
-    // Step 1: คำนวณเวลาที่ผ่านไปตั้งแต่กิจกรรมล่าสุด
-    const now = new Date();
-    const lastSeenAgo = now.getTime() - session.lastSeen.getTime();
-    const lastHeartbeatAgo = now.getTime() - session.lastHeartbeat.getTime();
-    
-    const issues: string[] = [];
-    let status: 'healthy' | 'warning' | 'critical' = 'healthy';
-
-    // Step 2: ตรวจสอบเงื่อนไขต่างๆ และกำหนดสถานะ
-    // ตรวจสอบเวลาที่เห็นล่าสุด
-    if (lastSeenAgo > 5 * 60 * 1000) { // 5 นาที
-      issues.push('No activity for over 5 minutes');
-      status = 'critical';
-    } else if (lastSeenAgo > 2 * 60 * 1000) { // 2 นาที
-      issues.push('No activity for over 2 minutes');
-      status = 'warning';
-    }
-
-    // ตรวจสอบ heartbeat
-    if (lastHeartbeatAgo > 2 * 60 * 1000) { // 2 นาที
-      issues.push('No heartbeat for over 2 minutes');
-      if (status !== 'critical') status = 'warning';
-    }
-
-    // ตรวจสอบการยืนยันตัวตน
-    if (!session.isAuthenticated) {
-      issues.push('Session not authenticated');
-      if (status !== 'critical') status = 'warning';
-    }
-
-    // ตรวจสอบสถานะ WebSocket
-    if (session.ws.readyState !== 1) { // WebSocket.OPEN
-      issues.push('WebSocket connection not open');
-      status = 'critical';
-    }
-
-    return {
-      status,
-      lastSeenAgo: Math.round(lastSeenAgo / 1000),
-      lastHeartbeatAgo: Math.round(lastHeartbeatAgo / 1000),
-      issues
-    };
-  }
-
-  /**
-   * สร้างรายงานการตรวจสอบ
-   * Generate monitoring report
-   * Step 1: รวบรวมสถิติและข้อมูล session
-   * Step 2: สร้างรายงานสถิติทั่วไป
-   * Step 3: รายงาน session ที่มีปัญหา
-   * Step 4: รายงาน session ที่มีสุขภาพดี
-   * @returns รายงานในรูปแบบ string
-   */
-  generateReport(): string {
-    // Step 1: รวบรวมสถิติและข้อมูล session
-    const stats = sessionManager.getStats();
-    const sessionsByStatus = this.getSessionsByStatus();
-    
-    let report = '\n=== Session Monitoring Report ===\n';
-    report += `Generated at: ${new Date().toISOString()}\n\n`;
-    
-    // Step 2: สร้างรายงานสถิติทั่วไป
-    report += '📊 Statistics:\n';
-    report += `  Total Sessions: ${stats.totalSessions}\n`;
-    report += `  Active Sessions: ${stats.activeSessions}\n`;
-    report += `  Authenticated Sessions: ${stats.authenticatedSessions}\n`;
-    report += `  Sessions with Recent Heartbeat: ${stats.sessionsWithHeartbeat}\n`;
-    report += `  Messages Sent: ${stats.messagesSent}\n`;
-    report += `  Messages Received: ${stats.messagesReceived}\n`;
-    report += `  Average Connection Time: ${Math.round(stats.averageConnectionTime / 1000)}s\n\n`;
-    
-    // Step 3: รายงาน session ที่มีปัญหา
-    if (sessionsByStatus.stale.length > 0) {
-      report += '⚠️  Stale Sessions:\n';
-      sessionsByStatus.stale.forEach(session => {
-        const health = this.getConnectionHealth(session);
-        report += `  - ${session.chargePointId} (${health.lastSeenAgo}s ago)\n`;
-      });
-      report += '\n';
-    }
-    
-    if (sessionsByStatus.noHeartbeat.length > 0) {
-      report += '💔 Sessions without Heartbeat:\n';
-      sessionsByStatus.noHeartbeat.forEach(session => {
-        const health = this.getConnectionHealth(session);
-        report += `  - ${session.chargePointId} (${health.lastHeartbeatAgo}s ago)\n`;
-      });
-      report += '\n';
-    }
-    
-    // Step 4: รายงาน session ที่มีสุขภาพดี
-    report += '✅ Healthy Sessions:\n';
-    const healthySessions = sessionsByStatus.active.filter((session: ChargePointSession) => {
-      const health = this.getConnectionHealth(session);
-      return health.status === 'healthy';
+    authenticatedChargePoints.forEach((chargePoint: ChargePointEntry) => {
+      const success = gatewaySessionManager.sendMessage(chargePoint.chargePointId, JSON.stringify(pingMessage));
+      if (success) {
+        pingCount++;
+        this.logActivity(chargePoint.chargePointId, 'PING_SENT');
+      }
     });
-    
-    if (healthySessions.length === 0) {
-      report += '  None\n';
-    } else {
-      healthySessions.forEach((session: ChargePointSession) => {
-        report += `  - ${session.chargePointId} (${session.ocppVersion})\n`;
-      });
-    }
-    
-    report += '\n=== End Report ===\n';
-    
-    return report;
+
+    console.log(`Sent ping to ${pingCount} charge points`);
+    return pingCount;
   }
 }
 
-// ส่งออก singleton instance สำหรับใช้งานทั่วทั้งระบบ
-// Export singleton instance for system-wide usage
+// สร้าง instance เดียวสำหรับใช้งานทั่วทั้งแอปพลิเคชัน
+// Create single instance for application-wide use
 export const sessionMonitor = new SessionMonitor();

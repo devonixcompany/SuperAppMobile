@@ -2,7 +2,7 @@ import { IncomingMessage, createServer } from 'http';
 import { URL } from 'url';
 import WebSocket, { WebSocketServer } from 'ws';
 import { handleConnection } from './handlers/connection';
-import { sessionManager } from './handlers/sessionManager';
+import { gatewaySessionManager } from './handlers/gatewaySessionManager';
 import { sessionMonitor } from './handlers/sessionMonitor';
 import { subprotocolToVersion } from './handlers/versionNegotiation';
 
@@ -46,11 +46,10 @@ async function initializeCache() {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const result = await response.json() as { success: boolean; data: any[] };
     const chargePoints = result.data as any[];
-    
-    // Step 2: เก็บข้อมูล charge point ลงในแคชโดยใช้ chargePointIdentity เป็นคีย์หลัก
+        // Step 2: เก็บข้อมูล charge point ลงในแคชโดยใช้ chargePointIdentity เป็นคีย์หลัก
     chargePoints.forEach(cp => {
       chargePointCache.set(cp.chargePointIdentity, cp);
       console.log(`Cached charge point: ${cp.chargePointIdentity} (Serial: ${cp.serialNumber})`);
@@ -97,19 +96,30 @@ const server = createServer((req, res) => {
   if (url.pathname === '/api/sessions') {
     // Sessions information endpoint
     try {
-      const activeSessions = sessionManager.getActiveSessions();
-      const sessionStats = sessionManager.getStats();
+      const sessionStats = gatewaySessionManager.getStats();
+      const chargePoints = gatewaySessionManager.getAllChargePoints();
       
-      const sessionsInfo = activeSessions.map(session => 
-        sessionManager.getSessionInfo(session.sessionId)
-      );
+      const chargePointsInfo = chargePoints.map(cp => ({
+        chargePointId: cp.chargePointId,
+        serialNumber: cp.serialNumber,
+        isAuthenticated: cp.isAuthenticated,
+        connectedAt: cp.connectedAt,
+        lastSeen: cp.lastSeen,
+        lastHeartbeat: cp.lastHeartbeat,
+        ocppVersion: cp.ocppVersion,
+        messagesSent: cp.messagesSent,
+        messagesReceived: cp.messagesReceived,
+        connectionDuration: new Date().getTime() - cp.connectedAt.getTime(),
+        wsState: cp.ws.readyState,
+        pendingMessageCount: cp.pendingMessages.length
+      }));
       
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         success: true,
         data: {
           stats: sessionStats,
-          sessions: sessionsInfo
+          chargePoints: chargePointsInfo
         }
       }));
     } catch (error) {
@@ -125,7 +135,7 @@ const server = createServer((req, res) => {
   if (url.pathname === '/api/sessions/stats') {
     // Session statistics endpoint
     try {
-      const sessionStats = sessionManager.getStats();
+      const sessionStats = gatewaySessionManager.getStats();
       
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -170,12 +180,12 @@ const server = createServer((req, res) => {
   
   if (url.pathname.startsWith('/api/sessions/')) {
     // Individual session information endpoint
-    const sessionId = url.pathname.split('/')[3];
+    const chargePointId = url.pathname.split('/')[3];
     
     try {
-      const sessionInfo = sessionManager.getSessionInfo(sessionId);
+      const chargePoint = gatewaySessionManager.getChargePoint(chargePointId);
       
-      if (!sessionInfo) {
+      if (!chargePoint) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           success: false,
@@ -187,7 +197,20 @@ const server = createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         success: true,
-        data: sessionInfo
+        data: {
+          chargePointId: chargePoint.chargePointId,
+          serialNumber: chargePoint.serialNumber,
+          isAuthenticated: chargePoint.isAuthenticated,
+          connectedAt: chargePoint.connectedAt,
+          lastSeen: chargePoint.lastSeen,
+          lastHeartbeat: chargePoint.lastHeartbeat,
+          ocppVersion: chargePoint.ocppVersion,
+          messagesSent: chargePoint.messagesSent,
+          messagesReceived: chargePoint.messagesReceived,
+          connectionDuration: new Date().getTime() - chargePoint.connectedAt.getTime(),
+          wsState: chargePoint.ws.readyState,
+          pendingMessageCount: chargePoint.pendingMessages.length
+        }
       }));
     } catch (error) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -265,7 +288,7 @@ wss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
     const url = new URL(request.url || '', `http://${request.headers.host}`);
     const pathParts = url.pathname.split('/');
     const chargePointId = pathParts[pathParts.length - 1];
-    
+    console.log("chargePointId connect:", chargePointId)
     // Step 2: ตรวจสอบว่ามี charge point ID หรือไม่
     if (!chargePointId || chargePointId === 'ocpp') {
       console.error('No charge point ID provided in URL');
@@ -278,7 +301,6 @@ wss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
     const ocppVersion = subprotocolToVersion(subprotocol) || '1.6';
     
     console.log(`Attempting connection for charge point: ${chargePointId} with OCPP ${ocppVersion}`);
-    
     // Step 4: จัดการการเชื่อมต่อ
     await handleConnection(ws, request, chargePointId, ocppVersion);
     
@@ -303,13 +325,12 @@ wss.on('error', (error) => {
 sessionMonitor.startMonitoring(30000); // Monitor every 30 seconds
 
 /**
- * ทำความสะอาด session ที่หมดอายุทุก 5 นาที
  * Cleanup stale sessions periodically every 5 minutes
  */
 setInterval(() => {
-  const cleanedCount = sessionManager.cleanupStaleSessions();
+  const cleanedCount = gatewaySessionManager.cleanupStaleChargePoints();
   if (cleanedCount > 0) {
-    console.log(`Cleaned up ${cleanedCount} stale sessions`);
+    console.log(`Cleaned up ${cleanedCount} stale charge points`);
   }
 }, 5 * 60 * 1000); // Every 5 minutes
 
@@ -317,7 +338,7 @@ setInterval(() => {
  * จัดการการปิดโปรแกรมอย่างสุภาพเมื่อได้รับสัญญาณ SIGTERM
  * Graceful shutdown on SIGTERM signal
  * Step 1: หยุดการตรวจสอบ session
- * Step 2: ปิด session ที่ยังใช้งานอยู่ทั้งหมด
+ * Step 2: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
  * Step 3: ปิด WebSocket server
  */
 process.on('SIGTERM', () => {
@@ -326,16 +347,21 @@ process.on('SIGTERM', () => {
   // Step 1: หยุดการตรวจสอบ session
   sessionMonitor.stopMonitoring();
   
-  // Step 2: ปิด session ที่ยังใช้งานอยู่ทั้งหมด
-  const activeSessions = sessionManager.getActiveSessions();
-  activeSessions.forEach(session => {
-    sessionManager.closeSession(session.sessionId);
+  // Step 2: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
+  const activeChargePoints = gatewaySessionManager.getAllChargePoints();
+  activeChargePoints.forEach(chargePoint => {
+    gatewaySessionManager.removeChargePoint(chargePoint.chargePointId);
   });
   
   // Step 3: ปิด WebSocket server
   wss.close(() => {
     console.log('WebSocket server closed');
-    process.exit(0);
+    
+    // Step 4: ปิด HTTP server
+    server.close(() => {
+      console.log('HTTP server closed');
+      process.exit(0);
+    });
   });
 });
 
@@ -343,7 +369,7 @@ process.on('SIGTERM', () => {
  * จัดการการปิดโปรแกรมอย่างสุภาพเมื่อได้รับสัญญาณ SIGINT (Ctrl+C)
  * Graceful shutdown on SIGINT signal (Ctrl+C)
  * Step 1: หยุดการตรวจสอบ session
- * Step 2: ปิด session ที่ยังใช้งานอยู่ทั้งหมด
+ * Step 2: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
  * Step 3: ปิด WebSocket server
  */
 process.on('SIGINT', () => {
@@ -352,16 +378,21 @@ process.on('SIGINT', () => {
   // Step 1: หยุดการตรวจสอบ session
   sessionMonitor.stopMonitoring();
   
-  // Step 2: ปิด session ที่ยังใช้งานอยู่ทั้งหมด
-  const activeSessions = sessionManager.getActiveSessions();
-  activeSessions.forEach(session => {
-    sessionManager.closeSession(session.sessionId);
+  // Step 2: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
+  const activeChargePoints = gatewaySessionManager.getAllChargePoints();
+  activeChargePoints.forEach(chargePoint => {
+    gatewaySessionManager.removeChargePoint(chargePoint.chargePointId);
   });
   
   // Step 3: ปิด WebSocket server
   wss.close(() => {
     console.log('WebSocket server closed');
-    process.exit(0);
+    
+    // Step 4: ปิด HTTP server
+    server.close(() => {
+      console.log('HTTP server closed');
+      process.exit(0);
+    });
   });
 });
 
@@ -379,14 +410,16 @@ server.listen(PORT, async () => {
   console.log(`OCPP WebSocket server running on port ${PORT}`);
   console.log(`WebSocket endpoint: ws://localhost:${PORT}/ocpp/{chargePointId}`);
   console.log('Session monitoring started');
-  
+    // ✅ Step 3.1: เคลียร์ cache ก่อนเริ่มต้นใหม่
+  chargePointCache.clear();
+  console.log('🧹 Cleared old cache before initialization');
   // Step 3: เริ่มต้นแคชด้วยข้อมูล charge point
   await initializeCache();
   
   // Step 4: แสดงสถิติ session เริ่มต้นหลังจาก 1 วินาที
   setTimeout(() => {
-    const stats = sessionManager.getStats();
-    console.log('Initial session stats:', stats);
+    const stats = gatewaySessionManager.getStats();
+    console.log('Initial gateway session stats:', stats);
   }, 1000);
 });
 

@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import { ChargePointStatus, OCPPVersion, OwnershipType } from '@prisma/client';
+import { ChargePointStatus, ConnectorType, OCPPVersion, OwnershipType } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { prisma } from '../../lib/prisma';
 
@@ -39,12 +39,38 @@ export class ChargePointService {
    * ดึงข้อมูลเครื่องชาร์จทั้งหมดสำหรับ ws-gateway
    */
   async getAllChargePointsForWSGateway() {
-    return await this.prisma.chargePoint.findMany({
+    return await this.prisma.chargePoint.findMany(
+      {
       select: {
+        //ดึงทั้งหมดฃ
+      
         id: true,
+        name: true,
+        stationName: true,
+        location: true,
+        latitude: true,
+        longitude: true,
+        openingHours: true,
+        is24Hours: true,
+        brand: true,
         serialNumber: true,
-        urlwebSocket: true,
-        chargePointIdentity: true
+        powerRating: true,
+        protocol: true,
+        chargePointIdentity: true,
+        status: true,
+        connectorCount: true,
+        lastSeen: true,
+        heartbeatIntervalSec: true,
+        vendor: true,
+        model: true,
+        firmwareVersion: true,
+        ocppProtocolRaw: true,
+        isWhitelisted: true,
+        ownerId: true,
+        ownershipType: true,
+        isPublic: true,
+        defaultPricingTierId: true,
+        urlwebSocket: true
       }
     });
   }
@@ -67,6 +93,51 @@ export class ChargePointService {
       'ocpp2.0.1': 'OCPP21'
     };
     return protocolMap[protocol.toLowerCase()] || 'OCPP16';
+  }
+
+  /**
+   * แปลงชนิดหัวชาร์จจากข้อความ OCPP ให้เป็น ConnectorType enum
+   */
+  private normalizeConnectorType(type?: string): ConnectorType {
+    if (!type) {
+      return 'TYPE_2';
+    }
+
+    const normalized = type.trim().toLowerCase();
+
+    if (/(type\s*[1i]|j1772|sae\s*combo?\s*1)/.test(normalized)) {
+      return 'TYPE_1';
+    }
+
+    if (/(type\s*2|mennekes|socket|iec\s*62196\s*t2|type-2)/.test(normalized)) {
+      return 'TYPE_2';
+    }
+
+    if (/(type\s*c|typec)/.test(normalized)) {
+      return 'GB_T';
+    }
+
+    if (/(ccs\s*combo?\s*1|combo\s*1|ccs1)/.test(normalized)) {
+      return 'CCS_COMBO_1';
+    }
+
+    if (/(ccs\s*combo?\s*2|combo\s*2|ccs2|ccs\s*type\s*2)/.test(normalized)) {
+      return 'CCS_COMBO_2';
+    }
+
+    if (/(gb\/?t|gb_t|guobiao)/.test(normalized)) {
+      return 'GB_T';
+    }
+
+    if (/chade?mo/.test(normalized)) {
+      return 'CHADEMO';
+    }
+
+    if (/tesla|type\s*e/.test(normalized)) {
+      return 'TESLA';
+    }
+
+    return 'TYPE_2';
   }
 
   /**
@@ -162,10 +233,6 @@ export class ChargePointService {
         where: { chargePointIdentity }
       });
 
-      if (!existingChargePoint) {
-        throw new Error(`ChargePoint with identity '${chargePointIdentity}' not found in database. Please add this charge point to the system first.`);
-      }
-
       const data: any = {
         lastSeen: new Date()
       };
@@ -178,6 +245,28 @@ export class ChargePointService {
       if (updateData.heartbeatIntervalSec) data.heartbeatIntervalSec = updateData.heartbeatIntervalSec;
       if (updateData.ocppProtocolRaw) data.ocppProtocolRaw = updateData.ocppProtocolRaw;
 
+      if (!existingChargePoint) {
+        // Create a new charge point if it doesn't exist
+        console.log(`Creating new charge point with identity '${chargePointIdentity}' from BootNotification`);
+        
+        // Set default values for required fields
+        const newChargePointData = {
+          ...data,
+          chargePointIdentity,
+          name: `Auto-created: ${chargePointIdentity}`,
+          status: 'Available',
+          isPublic: true,
+          isWhitelisted: true,
+          connectorCount: 2, // Default connector count
+          powerRating: 22, // Default power rating in kW
+          ocppProtocol: updateData.ocppProtocolRaw || 'OCPP16',
+          ocppVersion: updateData.ocppProtocolRaw || 'OCPP16'
+        };
+        
+        return await this.createChargePoint(newChargePointData);
+      }
+
+      // Update existing charge point
       return await this.prisma.chargePoint.update({
         where: { chargePointIdentity },
         data,
@@ -207,7 +296,23 @@ export class ChargePointService {
       });
 
       if (!existingChargePoint) {
-        throw new Error(`ChargePoint with identity '${chargePointIdentity}' not found in database. Please add this charge point to the system first.`);
+        // Create a new charge point if it doesn't exist
+        console.log(`Creating new charge point with identity '${chargePointIdentity}' from heartbeat`);
+        
+        const newChargePointData = {
+          chargePointIdentity,
+          name: `Auto-created: ${chargePointIdentity}`,
+          status: 'Available',
+          isPublic: true,
+          isWhitelisted: true,
+          connectorCount: 2, // Default connector count
+          powerRating: 22, // Default power rating in kW
+          ocppProtocol: 'OCPP16',
+          ocppVersion: 'OCPP16',
+          lastSeen: new Date(lastSeen)
+        };
+        
+        return await this.createChargePoint(newChargePointData);
       }
 
       const updatedChargePoint = await this.prisma.chargePoint.update({
@@ -481,6 +586,30 @@ export class ChargePointService {
    */
   async updateChargePoint(chargePointIdentity: string, updateData: any) {
     try {
+      // First check if the charge point exists
+      const existingChargePoint = await this.prisma.chargePoint.findUnique({
+        where: { chargePointIdentity }
+      });
+
+      if (!existingChargePoint) {
+        // Create a new charge point if it doesn't exist
+        return await this.createChargePoint({
+          id: randomUUID(),
+          name: updateData.name || `Charge Point ${chargePointIdentity}`,
+          stationName: updateData.stationName || `Station ${chargePointIdentity}`,
+          location: updateData.location || 'Unknown Location',
+          serialNumber: updateData.serialNumber || `SN-${chargePointIdentity}`,
+          chargePointIdentity,
+          protocol: updateData.protocol || 'OCPP16',
+          brand: updateData.brand || 'Unknown',
+          powerRating: updateData.powerRating || 22,
+          latitude: updateData.latitude,
+          longitude: updateData.longitude,
+          description: updateData.description
+        });
+      }
+
+      // If it exists, update it
       const updatedChargePoint = await this.prisma.chargePoint.update({
         where: { chargePointIdentity },
         data: updateData,
@@ -508,6 +637,19 @@ export class ChargePointService {
    */
   async deleteChargePoint(chargePointIdentity: string) {
     try {
+      // First check if the charge point exists
+      const existingChargePoint = await this.prisma.chargePoint.findUnique({
+        where: { chargePointIdentity }
+      });
+
+      if (!existingChargePoint) {
+        return {
+          success: false,
+          message: `Charge point with identity '${chargePointIdentity}' not found. No action taken.`
+        };
+      }
+
+      // If it exists, update its status to UNAVAILABLE
       const deletedChargePoint = await this.prisma.chargePoint.update({
         where: { chargePointIdentity },
         data: {
@@ -515,7 +657,11 @@ export class ChargePointService {
         }
       });
 
-      return deletedChargePoint;
+      return {
+        success: true,
+        message: `Charge point '${chargePointIdentity}' has been disabled.`,
+        data: deletedChargePoint
+      };
     } catch (error: any) {
       console.error('Error deleting charge point:', error);
       throw new Error(`Failed to delete charge point: ${error.message}`);
@@ -527,6 +673,19 @@ export class ChargePointService {
    */
   async updatePricingSchedule(chargePointIdentity: string, pricingData: any) {
     try {
+      // First check if the charge point exists
+      const existingChargePoint = await this.prisma.chargePoint.findUnique({
+        where: { chargePointIdentity }
+      });
+
+      if (!existingChargePoint) {
+        return {
+          success: false,
+          message: `Charge point with identity '${chargePointIdentity}' not found. Cannot update pricing schedule.`
+        };
+      }
+
+      // If it exists, update its pricing schedule
       const updatedChargePoint = await this.prisma.chargePoint.update({
         where: { chargePointIdentity },
         data: pricingData,
@@ -536,7 +695,11 @@ export class ChargePointService {
         }
       });
 
-      return updatedChargePoint;
+      return {
+        success: true,
+        message: `Pricing schedule updated for charge point '${chargePointIdentity}'.`,
+        data: updatedChargePoint
+      };
     } catch (error: any) {
       console.error('Error updating pricing schedule:', error);
       throw new Error(`Failed to update pricing schedule: ${error.message}`);
@@ -582,7 +745,12 @@ export class ChargePointService {
       });
 
       if (!chargePoint) {
-        throw new Error(`Charge point with identity ${chargePointIdentity} not found`);
+        // Return a consistent response for non-existent charge points
+        console.log(`Charge point with identity ${chargePointIdentity} not found, returning no connectors`);
+        return {
+          hasConnectors: false,
+          connectorCount: 0
+        };
       }
 
       const hasConnectors = chargePoint.connectors.length > 0;
@@ -602,20 +770,85 @@ export class ChargePointService {
   /**
    * สร้าง connectors สำหรับเครื่องชาร์จตามจำนวนที่ระบุ
    */
-  async createConnectorsForChargePoint(chargePointIdentity: string, numberOfConnectors: number): Promise<any[]> {
+  async createConnectorsForChargePoint(
+    chargePointIdentity: string,
+    numberOfConnectors: number,
+    connectorDetails: Array<{ connectorId: number; type?: string; maxCurrent?: number }> = []
+  ): Promise<any[]> {
     try {
-      const chargePoint = await this.prisma.chargePoint.findUnique({
+      let chargePoint = await this.prisma.chargePoint.findUnique({
         where: { chargePointIdentity }
       });
 
       if (!chargePoint) {
-        throw new Error(`Charge point with identity ${chargePointIdentity} not found`);
+        // Create a new charge point if it doesn't exist
+        console.log(`Charge point with identity ${chargePointIdentity} not found, creating a new one`);
+        chargePoint = await this.createChargePoint({
+          id: randomUUID(),
+          name: `Charge Point ${chargePointIdentity}`,
+          stationName: `Station ${chargePointIdentity}`,
+          location: 'Unknown Location',
+          serialNumber: `SN-${chargePointIdentity}`,
+          chargePointIdentity,
+          protocol: 'OCPP16',
+          brand: 'Unknown',
+          powerRating: 22
+        });
+      }
+
+      const normalizedDetails = (connectorDetails || [])
+        .filter(detail => Number.isInteger(detail.connectorId) && detail.connectorId > 0)
+        .map(detail => ({
+          connectorId: detail.connectorId,
+          type: detail.type,
+          maxCurrent: typeof detail.maxCurrent === 'number' ? detail.maxCurrent : undefined
+        }));
+
+      const detailMap = new Map<number, { type?: string; maxCurrent?: number }>();
+      normalizedDetails.forEach(detail => {
+        detailMap.set(detail.connectorId, detail);
+      });
+
+      const maxDetailConnectorId = normalizedDetails.reduce(
+        (max, detail) => Math.max(max, detail.connectorId),
+        0
+      );
+      const totalConnectors = Math.max(numberOfConnectors, maxDetailConnectorId);
+
+      if (totalConnectors === 0) {
+        console.log(`No connectors specified for charge point ${chargePointIdentity}, skipping connector creation`);
+        return [];
       }
 
       const connectors = [];
       
       // สร้าง connectors ตามจำนวนที่ระบุ (เริ่มจาก connectorId = 1)
-      for (let i = 1; i <= numberOfConnectors; i++) {
+      for (let i = 1; i <= totalConnectors; i++) {
+        const detail = detailMap.get(i);
+
+        const createData: any = {
+          chargePointId: chargePoint.id,
+          connectorId: i,
+          type: this.normalizeConnectorType(detail?.type),
+          status: 'AVAILABLE'
+        };
+
+        if (typeof detail?.maxCurrent === 'number') {
+          createData.maxCurrent = detail.maxCurrent;
+        }
+
+        const updateData: any = {
+          status: 'AVAILABLE'
+        };
+
+        if (detail?.type) {
+          updateData.type = this.normalizeConnectorType(detail.type);
+        }
+
+        if (typeof detail?.maxCurrent === 'number') {
+          updateData.maxCurrent = detail.maxCurrent;
+        }
+
         const connector = await this.prisma.connector.upsert({
           where: {
             chargePointId_connectorId: {
@@ -623,22 +856,21 @@ export class ChargePointService {
               connectorId: i
             }
           },
-          update: {
-            // อัปเดตเฉพาะ status หากมีอยู่แล้ว
-            status: 'AVAILABLE'
-          },
-          create: {
-            chargePointId: chargePoint.id,
-            connectorId: i,
-            type: 'TYPE_2', // Default connector type
-            status: 'AVAILABLE'
-          }
+          update: updateData,
+          create: createData
         });
         
         connectors.push(connector);
       }
 
-      console.log(`Created/updated ${numberOfConnectors} connectors for charge point ${chargePointIdentity}`);
+      if (chargePoint.connectorCount !== totalConnectors) {
+        await this.prisma.chargePoint.update({
+          where: { id: chargePoint.id },
+          data: { connectorCount: totalConnectors }
+        });
+      }
+
+      console.log(`Created/updated ${totalConnectors} connectors for charge point ${chargePointIdentity}`);
       return connectors;
     } catch (error: any) {
       console.error('Error creating connectors:', error);

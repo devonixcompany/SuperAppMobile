@@ -1,11 +1,10 @@
 import { URL } from 'url';
-import { v4 as uuidv4 } from 'uuid';
 import { WebSocket } from 'ws';
-import { getChargePointFromCache } from '../index';
+import { getAllCacheData, getChargePointFromCache } from '../index';
+import { ensureConnectorData, ConnectorDetail } from '../services/connectorService';
+import { getConnectorConfiguration } from '../utils/getConfiguration';
 import { handleWebSocketMessage } from './messageRouter';
-import { sessionManager } from './sessionManager';
-import { getNumberOfConnectors } from '../utils/getConfiguration';
-import { ensureConnectorData } from '../services/connectorService';
+import { gatewaySessionManager } from './gatewaySessionManager';
 
 // การติดตามการเชื่อมต่อ (legacy - เก็บไว้เพื่อความเข้ากันได้แบบย้อนหลัง)
 // Connection tracking (legacy - kept for backward compatibility)
@@ -17,6 +16,7 @@ export interface ConnectionInfo {
   connectedAt: Date;           // เวลาที่เชื่อมต่อ
   lastSeen: Date;              // เวลาที่เห็นล่าสุด
   ws: WebSocket;               // WebSocket connection
+  connectors?: ConnectorDetail[]; // ข้อมูลหัวชาร์จล่าสุดที่ได้รับ
 }
 
 // แผนที่เก็บการเชื่อมต่อที่ใช้งานอยู่
@@ -300,39 +300,45 @@ async function registerChargePoint(chargePointId: string, ocppVersion: string): 
  * @param ocppVersion - เวอร์ชั่น OCPP
  */
 export async function handleConnection(ws: WebSocket, request: any, chargePointId: string, ocppVersion: string): Promise<void> {
-  const connectionId = uuidv4();
-  
   console.log(`🔌 New connection - Charge Point ID: ${chargePointId}, OCPP Version: ${ocppVersion}`);
 
-  // Step 1: ดึงข้อมูล charge point จากแคชโดยใช้ chargePointId
+  // Step 1: ตรวจสอบว่า chargePointId มีอยู่ในแคชหรือไม่
+  console.log(`🔍 Checking if Charge Point ID ${chargePointId} exists in cache...`);
   let cachedChargePoint = getChargePointFromCache(chargePointId);
   
   if (!cachedChargePoint) {
-    console.log(`❌ No Charge Point with ID ${chargePointId} found in cache`);
-    console.log(`🔄 Creating temporary cache entry for testing: ${chargePointId}`);
+    console.log(`❌ Charge Point ID ${chargePointId} not found in cache - Connection rejected`);
+    console.log(`📋 Available Charge Points in cache:`, Array.from(getAllCacheData().keys()));
     
-    // สร้างข้อมูล cache ชั่วคราวสำหรับการทดสอบ (ไม่ต้องพึ่งพา backend)
-    cachedChargePoint = {
-      chargePointIdentity: chargePointId,
-      serialNumber: chargePointId,
-      name: `Charge Point ${chargePointId}`,
-      protocol: ocppVersion.includes('1.6') ? 'OCPP16' : 'OCPP20',
-      isWhitelisted: true // อนุญาตให้เชื่อมต่อได้เลย
-    };
-    
-    console.log(`✅ Charge Point ${chargePointId} cached temporarily for testing`);
+    // ปิดการเชื่อมต่อทันทีหากไม่พบใน cache
+    ws.close(1008, `Charge Point ID ${chargePointId} not authorized - not found in cache`);
+    return;
   }
 
   console.log(`✅ Found Charge Point in cache: ${chargePointId}`);
-  console.log(`📊 Cached data:`, cachedChargePoint);
+  console.log(`📊 Cached data:`, {
+    chargePointIdentity: cachedChargePoint.chargePointIdentity,
+    serialNumber: cachedChargePoint.serialNumber,
+    name: cachedChargePoint.name,
+    protocol: cachedChargePoint.protocol,
+    isWhitelisted: cachedChargePoint.isWhitelisted
+  });
 
-  // Step 2: ข้าม validation กับ backend สำหรับการทดสอบ
-  console.log(`⚠️ Skipping backend validation for testing purposes`);
+  // Step 2: ตรวจสอบสถานะ whitelist
+  if (!cachedChargePoint.isWhitelisted) {
+    console.log(`❌ Charge Point ID ${chargePointId} is not whitelisted - Connection rejected`);
+    ws.close(1008, `Charge Point ID ${chargePointId} not authorized - not whitelisted`);
+    return;
+  }
+
+  console.log(`✅ Charge Point ${chargePointId} is authorized and whitelisted`);
+
+
 
   // Step 3: เก็บข้อมูลการเชื่อมต่อ (legacy)
   const connectionInfo: ConnectionInfo = {
     chargePointId,
-    chargePointIdentity: chargePointId,
+    chargePointIdentity: cachedChargePoint.chargePointIdentity || chargePointId,
     serialNumber: cachedChargePoint.serialNumber || chargePointId, // ใช้ cached serial หรือ fallback เป็น chargePointId
     ocppVersion,
     connectedAt: new Date(),
@@ -340,15 +346,31 @@ export async function handleConnection(ws: WebSocket, request: any, chargePointI
     ws
   };
 
-  // สร้าง session โดยใช้ session manager ใหม่
-  const session = sessionManager.createSession(
+  console.log(`🔗 Creating connection info for ${chargePointId}:`, {
+    chargePointId: connectionInfo.chargePointId,
+    chargePointIdentity: connectionInfo.chargePointIdentity,
+    serialNumber: connectionInfo.serialNumber,
+    ocppVersion: connectionInfo.ocppVersion,
+    connectedAt: connectionInfo.connectedAt.toISOString()
+  });
+
+  // สร้าง session โดยใช้ gateway session manager ใหม่
+  const chargePointEntry = gatewaySessionManager.addChargePoint(
     chargePointId,
     cachedChargePoint.serialNumber || chargePointId,
     ws,
-    ocppVersion
+    ocppVersion,
+    cachedChargePoint.chargePointIdentity
   );
 
+  if (!chargePointEntry) {
+    console.log(`⚠️ Failed to add charge point ${chargePointId} to gateway session`);
+    ws.close(1008, 'Failed to create session');
+    return;
+  }
+
   activeConnections.set(chargePointId, connectionInfo);
+  console.log("activeConnections:", activeConnections)
   console.log(`🎉 Charge Point ${chargePointId} connected successfully with OCPP ${ocppVersion}`);
 
   // Step 4: ข้าม backend update สำหรับการทดสอบ
@@ -364,11 +386,11 @@ export async function handleConnection(ws: WebSocket, request: any, chargePointI
       const message = data.toString();
       console.log(`📨 Message from ${chargePointId}:`, message);
 
-      // อัปเดต last seen ทั้งใน legacy และ session manager
+      // อัปเดต last seen ทั้งใน legacy และ gateway session manager
       connectionInfo.lastSeen = new Date();
-      sessionManager.updateLastSeen(session.sessionId);
-      sessionManager.incrementReceivedMessages(session.sessionId);
-
+      gatewaySessionManager.updateLastSeen(chargePointId);
+      gatewaySessionManager.incrementReceivedMessages(chargePointId);
+ 
       // ประมวลผลข้อความผ่าน router
       await handleWebSocketMessage(
         message,
@@ -376,8 +398,8 @@ export async function handleConnection(ws: WebSocket, request: any, chargePointI
         ocppVersion,
         async (response: string) => {
           if (ws.readyState === WebSocket.OPEN) {
-            // ใช้ session manager เพื่อส่งการตอบกลับ
-            sessionManager.sendMessage(session.sessionId, response);
+            // ใช้ gateway session manager เพื่อส่งการตอบกลับ
+            gatewaySessionManager.sendMessage(chargePointId, response);
             
             // หลังจากส่ง BootNotification response แล้ว ให้ดึงข้อมูล connectors
             try {
@@ -385,17 +407,48 @@ export async function handleConnection(ws: WebSocket, request: any, chargePointI
               if (parsedMessage[0] === 2 && parsedMessage[2] === 'BootNotification') {
                 console.log(`✅ BootNotification processed for ${chargePointId}, now checking connectors`);
                 
-                // ส่ง GetConfiguration เพื่อดึงจำนวน connectors
-                const numberOfConnectors = await getNumberOfConnectors(ws);
-                console.log(`📊 Charge point ${chargePointId} has ${numberOfConnectors} connectors`);
+                // ส่ง GetConfiguration เพื่อดึงข้อมูล connectors พร้อมรายละเอียด
+                const { numberOfConnectors, connectors } = await getConnectorConfiguration(ws);
+
+                if (numberOfConnectors > 0) {
+                  console.log(`📊 Charge point ${chargePointId} has ${numberOfConnectors} connectors with configuration:`, connectors);
+                } else {
+                  console.warn(`⚠️ Charge point ${chargePointId} did not report NumberOfConnectors, continuing with detected connectors (${connectors.length})`);
+                }
+
+                // อัปเดตข้อมูล connectors ใน gateway session
+                gatewaySessionManager.updateConnectorDetails(
+                  chargePointId,
+                  connectors.map(connector => ({
+                    connectorId: connector.connectorId,
+                    type: connector.type,
+                    maxCurrent: connector.maxCurrent
+                  }))
+                );
+
+                const connectorDetailsForPersistence: ConnectorDetail[] = connectors.map(connector => ({
+                  connectorId: connector.connectorId,
+                  type: connector.type,
+                  maxCurrent: connector.maxCurrent
+                }));
+
+                const connectorCountForPersistence = numberOfConnectors || connectors.length;
+
+                connectionInfo.connectors = connectorDetailsForPersistence;
                 
-                // ตรวจสอบและสร้าง connector data ในฐานข้อมูลหากจำเป็น
-                const result = await ensureConnectorData(chargePointId, numberOfConnectors);
+                // ตรวจสอบและสร้าง/อัปเดต connector data ในฐานข้อมูล
+                const result = await ensureConnectorData(
+                  chargePointId,
+                  connectorCountForPersistence,
+                  connectorDetailsForPersistence
+                );
                 
                 if (result.created) {
-                  console.log(`✅ Created ${numberOfConnectors} connectors for charge point ${chargePointId}`);
+                  console.log(`✅ Created ${connectorCountForPersistence} connectors for charge point ${chargePointId}`);
+                } else if (result.updated) {
+                  console.log(`✅ Synced connector details for charge point ${chargePointId}`);
                 } else {
-                  console.log(`✅ Charge point ${chargePointId} already has connector data`);
+                  console.log(`✅ Charge point ${chargePointId} already has up-to-date connector data`);
                 }
               }
             } catch (error) {
@@ -414,7 +467,7 @@ export async function handleConnection(ws: WebSocket, request: any, chargePointI
   ws.on('close', async (code: number, reason: Buffer) => {
     console.log(`🔌 Charge Point ${chargePointId} disconnected: ${code} - ${reason.toString()}`);
     activeConnections.delete(chargePointId);
-    sessionManager.closeSession(session.sessionId);
+    gatewaySessionManager.removeChargePoint(chargePointId);
     await updateConnectionStatus(chargePointId, false);
   });
 
@@ -422,20 +475,20 @@ export async function handleConnection(ws: WebSocket, request: any, chargePointI
   ws.on('error', async (error: Error) => {
     console.error(`💥 WebSocket error for ${chargePointId}:`, error);
     activeConnections.delete(chargePointId);
-    sessionManager.closeSession(session.sessionId);
+    gatewaySessionManager.removeChargePoint(chargePointId);
     await updateConnectionStatus(chargePointId, false);
   });
 
   // Step 6: ส่ง heartbeat เป็นระยะ
   const heartbeatInterval = setInterval(() => {
     if (ws.readyState === WebSocket.OPEN) {
-      // อัปเดต last seen ทั้งใน legacy และ session manager
+      // อัปเดต last seen ทั้งใน legacy และ gateway session manager
       connectionInfo.lastSeen = new Date();
-      sessionManager.updateLastSeen(session.sessionId);
+      gatewaySessionManager.updateLastSeen(chargePointId);
     } else {
       clearInterval(heartbeatInterval);
       activeConnections.delete(chargePointId);
-      sessionManager.closeSession(session.sessionId);
+      gatewaySessionManager.removeChargePoint(chargePointId);
     }
   }, 30000); // ทุก 30 วินาที
 

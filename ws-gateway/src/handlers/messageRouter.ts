@@ -174,8 +174,9 @@ export async function handleWebSocketMessage(
   sendResponse: (message: string) => void  // ฟังก์ชันสำหรับส่งการตอบกลับ
 ): Promise<void> {
   // แปลงข้อความเป็น OCPP message
+
   const message = parseOCPPMessage(data);
-  
+ 
   if (!message) {
     console.error('Failed to parse message from charge point:', chargePointId);
     return;

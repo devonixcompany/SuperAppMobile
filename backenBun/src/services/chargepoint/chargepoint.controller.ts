@@ -1539,9 +1539,10 @@ export const chargePointController = (
      */
     .post('/create-connectors', async ({ body, set }) => {
       try {
-        const { chargePointIdentity, numberOfConnectors } = body as { 
+        const { chargePointIdentity, numberOfConnectors, connectorDetails } = body as { 
           chargePointIdentity: string; 
-          numberOfConnectors: number; 
+          numberOfConnectors: number;
+          connectorDetails?: Array<{ connectorId: number; type?: string; maxCurrent?: number }>;
         };
         
         if (!chargePointIdentity || !numberOfConnectors) {
@@ -1554,15 +1555,26 @@ export const chargePointController = (
           return { error: 'Number of connectors must be between 1 and 10' };
         }
 
+        const normalizedConnectorDetails = Array.isArray(connectorDetails)
+          ? connectorDetails
+              .filter(detail => typeof detail.connectorId === 'number' && detail.connectorId > 0)
+              .map(detail => ({
+                connectorId: Math.trunc(detail.connectorId),
+                type: typeof detail.type === 'string' && detail.type.trim() ? detail.type.trim() : undefined,
+                maxCurrent: typeof detail.maxCurrent === 'number' ? detail.maxCurrent : undefined
+              }))
+          : undefined;
+
         const connectors = await chargePointService.createConnectorsForChargePoint(
           chargePointIdentity, 
-          numberOfConnectors
+          numberOfConnectors,
+          normalizedConnectorDetails
         );
         
         return {
           success: true,
           data: {
-            message: `Created ${numberOfConnectors} connectors successfully`,
+            message: `Created/updated ${connectors.length} connectors successfully`,
             connectors
           }
         };
@@ -1578,10 +1590,15 @@ export const chargePointController = (
       detail: {
         tags: ['Charge Points'],
         summary: '🔌 Create Connectors',
-        description: 'สร้าง connectors สำหรับเครื่องชาร์จตามจำนวนที่ระบุ'
+        description: 'สร้างหรืออัปเดต connectors สำหรับเครื่องชาร์จ พร้อมรองรับข้อมูลชนิดหัวชาร์จและกระแสสูงสุด'
       },
       body: t.Object({
         chargePointIdentity: t.String(),
-        numberOfConnectors: t.Number()
+        numberOfConnectors: t.Number(),
+        connectorDetails: t.Optional(t.Array(t.Object({
+          connectorId: t.Number(),
+          type: t.Optional(t.String()),
+          maxCurrent: t.Optional(t.Number())
+        })))
       })
     });

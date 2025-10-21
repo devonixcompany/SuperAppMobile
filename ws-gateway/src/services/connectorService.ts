@@ -8,6 +8,12 @@ export interface ConnectorCheckResult {
   connectors?: any[];
 }
 
+export interface ConnectorDetail {
+  connectorId: number;
+  type?: string;
+  maxCurrent?: number;
+}
+
 export interface CreateConnectorsResult {
   success: boolean;
   data: {
@@ -46,15 +52,22 @@ export async function checkConnectorData(chargePointIdentity: string): Promise<C
  */
 export async function createConnectors(
   chargePointIdentity: string, 
-  numberOfConnectors: number
+  numberOfConnectors: number,
+  connectorDetails?: ConnectorDetail[]
 ): Promise<CreateConnectorsResult> {
   try {
+    const payload: Record<string, any> = {
+      chargePointIdentity,
+      numberOfConnectors
+    };
+
+    if (connectorDetails && connectorDetails.length > 0) {
+      payload.connectorDetails = connectorDetails;
+    }
+
     const response = await axios.post(
       `${BACKEND_URL}/api/chargepoints/create-connectors`,
-      {
-        chargePointIdentity,
-        numberOfConnectors
-      }
+      payload
     );
     
     if (response.data.success) {
@@ -78,27 +91,51 @@ export async function createConnectors(
  */
 export async function ensureConnectorData(
   chargePointIdentity: string,
-  numberOfConnectors: number
-): Promise<{ created: boolean; connectors: any[] }> {
+  numberOfConnectors: number,
+  connectorDetails?: ConnectorDetail[]
+): Promise<{ created: boolean; updated: boolean; connectors: any[] }> {
   try {
+    if (!numberOfConnectors || numberOfConnectors < 1) {
+      console.warn(`⚠️ Skipping connector sync for ${chargePointIdentity} - invalid connector count (${numberOfConnectors})`);
+      return { created: false, updated: false, connectors: [] };
+    }
+
+    const sanitizedDetails = connectorDetails
+      ?.filter(detail => Number.isInteger(detail.connectorId) && detail.connectorId > 0)
+      .map(detail => ({
+        connectorId: detail.connectorId,
+        type: detail.type?.trim(),
+        maxCurrent: typeof detail.maxCurrent === 'number' ? detail.maxCurrent : undefined
+      }))
+      .sort((a, b) => a.connectorId - b.connectorId);
+
     // ตรวจสอบว่ามี connector data อยู่แล้วหรือไม่
     const checkResult = await checkConnectorData(chargePointIdentity);
+
+    const shouldSyncDetails = Boolean(sanitizedDetails && sanitizedDetails.length > 0);
     
-    if (checkResult.hasConnectors) {
-      console.log(`✅ Charge point ${chargePointIdentity} already has ${checkResult.connectorCount} connectors`);
+    if (!checkResult.hasConnectors || shouldSyncDetails) {
+      const actionText = checkResult.hasConnectors ? 'Syncing' : 'Creating';
+      console.log(`🔌 ${actionText} ${numberOfConnectors} connectors for charge point ${chargePointIdentity}`);
+
+      const createResult = await createConnectors(
+        chargePointIdentity,
+        numberOfConnectors,
+        sanitizedDetails
+      );
+      
       return {
-        created: false,
-        connectors: checkResult.connectors || []
+        created: !checkResult.hasConnectors,
+        updated: checkResult.hasConnectors,
+        connectors: createResult.data.connectors
       };
     }
-    
-    // สร้าง connectors ใหม่
-    console.log(`🔌 Creating ${numberOfConnectors} connectors for charge point ${chargePointIdentity}`);
-    const createResult = await createConnectors(chargePointIdentity, numberOfConnectors);
-    
+
+    console.log(`✅ Charge point ${chargePointIdentity} already has ${checkResult.connectorCount} connectors`);
     return {
-      created: true,
-      connectors: createResult.data.connectors
+      created: false,
+      updated: false,
+      connectors: checkResult.connectors || []
     };
   } catch (error: any) {
     console.error('Error ensuring connector data:', error);
