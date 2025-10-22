@@ -1,24 +1,23 @@
 {
-  "name": "superapp-backend",
+  "name": "csms-backend",
   "version": "1.0.0",
-  "description": "Backend for SuperApp",
-  "module": "src/app.ts",
+  "description": "CSMS Backend - Charging Station Management System",
   "type": "module",
   "scripts": {
-    "dev": "bun run --watch src/app.ts",
-    "start": "bun run src/app.ts"
-  },
-  "dependencies": {
-    "@elysiajs/cors": "^0.8.0",
-    "@elysiajs/jwt": "^0.8.0",
-    "@prisma/client": "^5.9.1",
-    "@types/bcrypt": "^6.0.0",
-    "bcrypt": "^6.0.0",
-    "elysia": "^0.8.17"
+    "dev": "docker-compose -f docker-compose.csms.yml up -d",
+    "dev:legacy": "docker-compose up -d",
+    "start": "docker-compose -f docker-compose.csms.yml up -d",
+    "stop": "docker-compose -f docker-compose.csms.yml down",
+    "logs": "docker-compose -f docker-compose.csms.yml logs -f",
+    "build": "docker-compose -f docker-compose.csms.yml build",
+    "clean": "docker-compose -f docker-compose.csms.yml down -v --remove-orphans",
+    "install:services": "cd services/station-service && bun install && cd ../driver-service && bun install && cd ../billing-service && bun install && cd ../monitoring-service && bun install && cd ../charge-point && bun install && cd ../ocpp-gateway && bun install && cd ../../gateway/api-gateway && bun install",
+    "install:legacy": "cd services/user-service && bun install && cd ../auth-service && bun install && cd ../product-service && bun install && cd ../order-service && bun install && cd ../charge-point && bun install && cd ../ocpp-gateway && bun install && cd ../../gateway/api-gateway && bun install",
+    "test:simulator": "bun run tools/ocpp-simulator.ts CP001 1.6",
+    "health:check": "curl -s http://localhost:3000/services | jq '.data.services'"
   },
   "devDependencies": {
     "@types/node": "^20.11.16",
-    "bun-types": "latest",
-    "prisma": "^5.9.1"
+    "bun-types": "latest"
   }
 }

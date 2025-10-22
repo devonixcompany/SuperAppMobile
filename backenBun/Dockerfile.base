@@ -1,0 +1,56 @@
+# =========================================
+# SuperApp Microservices Base Dockerfile
+# =========================================
+
+# Base stage with common dependencies
+FROM oven/bun:1 AS base
+WORKDIR /app
+
+# Install system dependencies that all services need
+RUN apt-get update && apt-get install -y \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy root package files
+COPY package.json bun.lockb* ./
+
+# Install root dependencies
+RUN bun install --frozen-lockfile
+
+# =========================================
+# Prisma Generation Stage
+# =========================================
+FROM base AS prisma-generator
+
+# Copy shared prisma schema
+COPY ./shared/prisma ./shared/prisma
+
+# Copy environment file if exists
+COPY ./shared/prisma/.env.example ./shared/prisma/.env
+
+# Generate Prisma client for shared schema
+WORKDIR /app/shared/prisma
+RUN bunx prisma generate
+
+# Copy generated client to all services
+RUN mkdir -p /app/node_modules/@prisma
+RUN cp -r /app/shared/prisma/node_modules/@prisma/client /app/node_modules/@prisma/
+
+# =========================================
+# Shared Dependencies Stage
+# =========================================
+FROM base AS shared-deps
+
+# Copy shared utilities and types
+COPY ./shared ./shared
+
+# Copy generated Prisma client
+COPY --from=prisma-generator /app/node_modules/@prisma/client /app/node_modules/@prisma/client
+
+# =========================================
+# Service Template Stage
+# =========================================
+FROM shared-deps AS service-template
+
+# This stage will be used as the base for individual services
+# Each service will copy its own source code and set its own configuration

@@ -1,0 +1,19 @@
+{
+  "name": "monitoring-service",
+  "version": "1.0.0",
+  "description": "Monitoring Service for CSMS",
+  "module": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^0.8.0",
+    "elysia": "^0.8.17"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "bun-types": "latest"
+  }
+}

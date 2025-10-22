@@ -1,0 +1,219 @@
+# =========================================
+# SuperApp Microservices Docker Compose
+# =========================================
+version: '3.8'
+
+# Build configuration for all services
+x-build-args: &build-args
+  DOCKER_BUILDKIT: 1
+
+x-common-variables: &common-variables
+  NODE_ENV: development
+  DATABASE_URL: postgresql://postgres:password@postgres:5432/superapp_db
+
+services:
+  # Database for development
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: superapp_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =========================================
+  # Microservices
+  # =========================================
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+      args: *build-args
+    ports:
+      - "3002:3002"
+    environment:
+      <<: *common-variables
+      SERVICE_NAME: auth-service
+      PORT: 3002
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/auth-service:/app/services/auth-service
+      - ./shared:/app/shared
+    restart: unless-stopped
+
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+      args: *build-args
+    ports:
+      - "3003:3003"
+    environment:
+      <<: *common-variables
+      SERVICE_NAME: user-service
+      PORT: 3003
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/user-service:/app/services/user-service
+      - ./shared:/app/shared
+    restart: unless-stopped
+
+  station-service:
+    build:
+      context: .
+      dockerfile: services/station-service/Dockerfile
+      args: *build-args
+    ports:
+      - "3001:3001"
+    environment:
+      <<: *common-variables
+      SERVICE_NAME: station-service
+      PORT: 3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/station-service:/app/services/station-service
+      - ./shared:/app/shared
+    restart: unless-stopped
+
+  charge-point:
+    build:
+      context: .
+      dockerfile: services/charge-point/Dockerfile
+      args: *build-args
+    ports:
+      - "3004:3004"
+    environment:
+      <<: *common-variables
+      SERVICE_NAME: charge-point
+      PORT: 3004
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/charge-point:/app/services/charge-point
+      - ./shared:/app/shared
+    restart: unless-stopped
+
+  billing-service:
+    build:
+      context: .
+      dockerfile: services/billing-service/Dockerfile
+      args: *build-args
+    ports:
+      - "3005:3005"
+    environment:
+      <<: *common-variables
+      SERVICE_NAME: billing-service
+      PORT: 3005
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/billing-service:/app/services/billing-service
+      - ./shared:/app/shared
+    restart: unless-stopped
+
+  driver-service:
+    build:
+      context: .
+      dockerfile: services/driver-service/Dockerfile
+      args: *build-args
+    ports:
+      - "3006:3006"
+    environment:
+      <<: *common-variables
+      SERVICE_NAME: driver-service
+      PORT: 3006
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/driver-service:/app/services/driver-service
+      - ./shared:/app/shared
+    restart: unless-stopped
+
+  monitoring-service:
+    build:
+      context: .
+      dockerfile: services/monitoring-service/Dockerfile
+      args: *build-args
+    ports:
+      - "3007:3007"
+    environment:
+      <<: *common-variables
+      SERVICE_NAME: monitoring-service
+      PORT: 3007
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/monitoring-service:/app/services/monitoring-service
+      - ./shared:/app/shared
+    restart: unless-stopped
+
+  ocpp-gateway:
+    build:
+      context: .
+      dockerfile: services/ocpp-gateway/Dockerfile
+      args: *build-args
+    ports:
+      - "8080:8080"
+      - "8000:8000"  # WebSocket port
+    environment:
+      <<: *common-variables
+      SERVICE_NAME: ocpp-gateway
+      PORT: 8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/ocpp-gateway:/app/services/ocpp-gateway
+      - ./shared:/app/shared
+    restart: unless-stopped
+
+  # =========================================
+  # API Gateway
+  # =========================================
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: gateway/api-gateway/Dockerfile
+      args: *build-args
+    ports:
+      - "3000:3000"
+    environment:
+      <<: *common-variables
+      SERVICE_NAME: api-gateway
+      PORT: 3000
+    depends_on:
+      - auth-service
+      - user-service
+      - station-service
+      - charge-point
+    volumes:
+      - ./gateway/api-gateway:/app/gateway/api-gateway
+      - ./shared:/app/shared
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: superapp-network

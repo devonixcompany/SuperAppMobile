@@ -1,0 +1,101 @@
+services:
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: ./gateway/api-gateway/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - STATION_SERVICE_URL=http://station-service:3001
+      - BILLING_SERVICE_URL=http://billing-service:3003
+      - OCPP_GATEWAY_URL=http://ocpp-gateway:4000
+    depends_on:
+      - station-service
+      - billing-service
+      - ocpp-gateway
+    networks:
+      - superapp-network
+
+  # Station Management Service
+  station-service:
+    build:
+      context: .
+      dockerfile: ./services/station-service/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/csms_stations
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # Billing Service
+  billing-service:
+    build:
+      context: .
+      dockerfile: ./services/billing-service/Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/csms_billing
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # OCPP Gateway Service
+  ocpp-gateway:
+    build:
+      context: .
+      dockerfile: ./services/ocpp-gateway/Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=development
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - superapp-network
+
+  # Database
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=superapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-csms-databases.sql:/docker-entrypoint-initdb.d/init-csms-databases.sql
+    networks:
+      - superapp-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - superapp-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  superapp-network:
+    driver: bridge

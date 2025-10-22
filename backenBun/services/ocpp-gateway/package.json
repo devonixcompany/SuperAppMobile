@@ -1,0 +1,21 @@
+{
+  "name": "ocpp-gateway",
+  "version": "1.0.0",
+  "description": "OCPP Gateway Service for SuperApp CSMS",
+  "module": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^0.8.0",
+    "elysia": "^0.8.17",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "@types/ws": "^8.5.10",
+    "bun-types": "latest"
+  }
+}

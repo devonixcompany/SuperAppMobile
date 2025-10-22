@@ -1,0 +1,211 @@
+version: '3.8'
+
+services:
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./gateway/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - STATION_SERVICE_URL=http://station-service:3001
+      - DRIVER_SERVICE_URL=http://driver-service:3002
+      - BILLING_SERVICE_URL=http://billing-service:3003
+      - MONITORING_SERVICE_URL=http://monitoring-service:3004
+      - CHARGE_POINT_SERVICE_URL=http://charge-point:4001
+      - OCPP_GATEWAY_URL=http://ocpp-gateway:4000
+    depends_on:
+      - station-service
+      - driver-service
+      - billing-service
+      - monitoring-service
+      - charge-point
+      - ocpp-gateway
+    networks:
+      - superapp-network
+
+  # User Service
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/superapp_users
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=development
+      - JWT_SECRET=your-super-secret-jwt-key
+      - JWT_EXPIRES_IN=7d
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/superapp_auth
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # Station Service
+  station-service:
+    build:
+      context: ./services/station-service
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/superapp_stations
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # Driver Service
+  driver-service:
+    build:
+      context: ./services/driver-service
+      dockerfile: Dockerfile
+    ports:
+      - "3004:3004"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/superapp_drivers
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # Billing Service
+  billing-service:
+    build:
+      context: ./services/billing-service
+      dockerfile: Dockerfile
+    ports:
+      - "3005:3005"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/superapp_billing
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # Monitoring Service
+  monitoring-service:
+    build:
+      context: ./services/monitoring-service
+      dockerfile: Dockerfile
+    ports:
+      - "3006:3006"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/superapp_monitoring
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # Charge Point Service
+  charge-point:
+    build:
+      context: ./services/charge-point
+      dockerfile: Dockerfile
+    ports:
+      - "4001:4001"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/superapp_charge_points
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # OCPP Gateway Service
+  ocpp-gateway:
+    build:
+      context: ./services/ocpp-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+      - "4001:4001" # WebSocket port
+    environment:
+      - NODE_ENV=development
+      - CHARGE_POINT_SERVICE_URL=http://charge-point:4001
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+      - charge-point
+    networks:
+      - superapp-network
+
+  # Database
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=superapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+    networks:
+      - superapp-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - superapp-network
+
+  # Service Registry (Consul)
+  consul:
+    image: hashicorp/consul:latest
+    ports:
+      - "8500:8500"
+    command: agent -server -ui -node=server-1 -bootstrap-expect=1 -client=0.0.0.0
+    volumes:
+      - consul_data:/consul/data
+    networks:
+      - superapp-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  consul_data:
+
+networks:
+  superapp-network:
+    driver: bridge
