@@ -128,6 +128,24 @@ cd ../../gateway/api-gateway && bun install
 
 ## 🧪 CSMS Testing
 
+### Comprehensive Test Suite
+
+Run complete architecture and compliance tests:
+
+```bash
+# Test 12 Factor compliance + Architecture + OCPP implementation
+./tests/test-csms-ocpp-architecture.sh
+
+# Start services for integration testing
+docker-compose -f docker-compose.csms.yml up -d
+
+# Wait for services to be ready
+sleep 30
+
+# Run end-to-end integration tests
+./tests/test-e2e-integration.sh
+```
+
 ### OCPP Simulator Test
 
 ```bash
@@ -152,6 +170,13 @@ curl http://localhost:3004/health  # Monitoring Service
 curl http://localhost:4000/health  # OCPP Gateway
 curl http://localhost:4001/health  # Charge Point Service
 ```
+
+### 12 Factor App Compliance
+
+Our CSMS architecture fully complies with [12 Factor App](https://12factor.net/) principles. See detailed compliance documentation:
+
+- [12 Factor App Compliance Guide](docs/12-factor-app-compliance.md)
+- [Testing Guide](docs/testing-guide.md)
 
 ## 🗄️ CSMS Database Schema
 
