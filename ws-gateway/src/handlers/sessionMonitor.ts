@@ -75,7 +75,7 @@ export class SessionMonitor {
     // Step 1: ดึงสถิติและข้อมูล charge points ทั้งหมด
     const stats = gatewaySessionManager.getStats();
     const activeChargePoints = gatewaySessionManager.getAllChargePoints();
-    
+console.log("cccccpcpcpcpcpcpcpcpc",activeChargePoints)
     // Step 2: แสดงสถิติการเชื่อมต่อ
     console.log('=== Gateway Session Health Check ===');
     console.log(`Total Charge Points: ${stats.totalChargePoints}`);
@@ -99,7 +99,8 @@ export class SessionMonitor {
               .map(connector => {
                 const type = connector.type || 'ไม่ทราบชนิด';
                 const maxCurrent = typeof connector.maxCurrent === 'number' ? `${connector.maxCurrent}A` : 'ไม่ระบุ A';
-                return `#${connector.connectorId} (${type}, ${maxCurrent})`;
+                const status = connector.status || 'ไม่ทราบสถานะ';
+                return `#${connector.connectorId} (${type}, ${maxCurrent}, ${status})`;
               })
               .join(', ')
           : 'ไม่มีข้อมูลหัวชาร์จ';
@@ -108,7 +109,6 @@ export class SessionMonitor {
         console.log(`    - สถานะรับรอง: ${chargePoint.isAuthenticated ? 'ผ่าน' : 'ยังไม่ผ่าน'}`);
         console.log(`    - เวลาที่เชื่อมต่อแล้ว: ${connectionDuration}s`);
         console.log(`    - ล่าสุดเห็นเมื่อ: ${timeSinceLastSeen}s ที่ผ่านมา`);
-        console.log(`    - ล่าสุดได้รับ Heartbeat: ${timeSinceHeartbeat}s ที่ผ่านมา`);
         console.log(`    - ข้อมูลหัวชาร์จ: ${connectorInfo}`);
       });
     } else {

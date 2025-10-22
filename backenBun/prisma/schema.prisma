@@ -97,6 +97,7 @@ model Connector {
   chargePointId String
   connectorId   Int
   type          ConnectorType     @default(TYPE_2)
+  typeDescription String?        // ข้อความชนิดหัวชาร์จที่รับมาจาก OCPP (raw string)
   status        ConnectorStatus   @default(AVAILABLE)
   maxPower      Float?
   maxCurrent    Float?
@@ -179,22 +180,22 @@ model Reservation {
   @@map("reservations")
 }
 
-model ChargingProfile {
-  id               String    @id @default(cuid())
-  chargePointId    String?
-  connectorId      String?
-  name             String
-  description      String?
-  chargingRateUnit RateUnit  @default(A)
-  chargingSchedule Json
-  stackLevel       Int       @default(1)
-  validFrom        DateTime?
-  validTo          DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+// model ChargingProfile {
+//   id               String    @id @default(cuid())
+//   chargePointId    String?
+//   connectorId      String?
+//   name             String
+//   description      String?
+//   chargingRateUnit RateUnit  @default(A)
+//   chargingSchedule Json
+//   stackLevel       Int       @default(1)
+//   validFrom        DateTime?
+//   validTo          DateTime?
+//   createdAt        DateTime  @default(now())
+//   updatedAt        DateTime  @updatedAt
 
-  @@map("charging_profiles")
-}
+//   @@map("charging_profiles")
+// }
 
 model OCPPMessage {
   id            String           @id @default(cuid())
@@ -376,4 +377,35 @@ enum DayOfWeek {
   FRIDAY
   SATURDAY
   SUNDAY
+}
+
+model Admin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  password     String
+  role         AdminRole @default(STAFF)
+  firstName    String?
+  lastName     String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  refreshTokens AdminRefreshToken[]
+}
+
+model AdminRefreshToken {
+  id           String   @id @default(cuid())
+  token        String   @unique
+  adminId      String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  isRevoked    Boolean  @default(false)
+  revokedAt    DateTime?
+  admin        Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  
+  @@map("admin_refresh_tokens")
+}
+
+enum AdminRole {
+  SUPERADMIN
+  STAFF
 }

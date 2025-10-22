@@ -5,10 +5,14 @@ import { handleConnection } from './handlers/connection';
 import { gatewaySessionManager } from './handlers/gatewaySessionManager';
 import { sessionMonitor } from './handlers/sessionMonitor';
 import { subprotocolToVersion } from './handlers/versionNegotiation';
+import { UserConnectionManager } from './services/UserConnectionManager';
 
 // แคชสำหรับเก็บข้อมูล charge point
 // Cache for storing charge point data
 const chargePointCache = new Map<string, any>();
+
+// สร้าง UserConnectionManager instance
+const userConnectionManager = new UserConnectionManager();
 
 /**
  * ฟังก์ชั่นดึงข้อมูล charge point จากแคชโดยใช้ chargePointId เป็นคีย์หลัก
@@ -54,6 +58,95 @@ async function initializeCache() {
       chargePointCache.set(cp.chargePointIdentity, cp);
       console.log(`Cached charge point: ${cp.chargePointIdentity} (Serial: ${cp.serialNumber})`);
     });
+
+// จัดการ HTTP upgrade สำหรับ WebSocket connections
+server.on('upgrade', (request, socket, head) => {
+  const url = new URL(request.url || '', `http://${request.headers.host}`);
+  console.log("URL connect:", url.pathname);
+  
+  if (url.pathname.startsWith('/user-cp/')) {
+    // Handle user WebSocket upgrade
+    console.log("Routing to User WebSocket server");
+    userWss.handleUpgrade(request, socket, head, (ws) => {
+      userWss.emit('connection', ws, request);
+    });
+  } else if (url.pathname.startsWith('/ocpp/')) {
+    // Handle OCPP WebSocket upgrade
+    console.log("Routing to OCPP WebSocket server");
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    // Default to OCPP for backward compatibility (direct /chargePointId)
+    console.log("Routing to OCPP WebSocket server (backward compatibility)");
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  }
+});
+
+/**
+ * จัดการการเชื่อมต่อ User WebSocket สำหรับดูสถานะการชาร์จ
+ * Handle User WebSocket connections for monitoring charging status
+ */
+userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
+  console.log('New User WebSocket connection attempt');
+  
+  try {
+    // แยก charge point ID และ connector ID จาก URL path
+    const url = new URL(request.url || '', `http://${request.headers.host}`);
+    const pathParts = url.pathname.split('/').filter(part => part !== '');
+    
+    // ตรวจสอบรูปแบบ URL: /user-cp/{chargePointId}/{connectorId}
+    if (pathParts.length !== 3 || pathParts[0] !== 'user-cp') {
+      console.error('Invalid user URL format. Expected /user-cp/{chargePointId}/{connectorId}');
+      ws.close(1008, 'Invalid URL format');
+      return;
+    }
+    
+    const chargePointId = pathParts[1];
+    const connectorId = pathParts[2];
+    
+    console.log(`User connection for charge point: ${chargePointId}, connector: ${connectorId}`);
+    
+    // ตรวจสอบว่า charge point มีอยู่ในระบบหรือไม่
+    // ตรวจสอบทั้งใน gatewaySessionManager และ cache
+    const chargePoint = gatewaySessionManager.getChargePoint(chargePointId);
+    const cachedChargePoint = getChargePointFromCache(chargePointId);
+    
+    if (!chargePoint && !cachedChargePoint) {
+      console.log(`Charge point ${chargePointId} not found in session or cache`);
+      ws.close(1008, 'Charge point not found or offline');
+      return;
+    }
+    
+    // เพิ่ม connection ลงใน UserConnectionManager
+    userConnectionManager.addConnection(ws, chargePointId, connectorId);
+    
+    // ส่งข้อมูลสถานะเริ่มต้น
+    const initialStatus = {
+      type: 'status',
+      timestamp: new Date().toISOString(),
+      data: {
+        chargePointId: chargePointId,
+        connectorId: parseInt(connectorId),
+        status: chargePoint ? 'AVAILABLE' : 'OFFLINE', // ถ้ามี charge point ที่เชื่อมต่ออยู่ให้แสดง AVAILABLE ไม่งั้นแสดง OFFLINE
+        isOnline: !!chargePoint, // true ถ้า charge point เชื่อมต่ออยู่
+        message: chargePoint ? 'เชื่อมต่อสำเร็จ - Charge Point พร้อมใช้งาน' : 'เชื่อมต่อสำเร็จ - Charge Point ออฟไลน์',
+        chargePointInfo: cachedChargePoint ? {
+          serialNumber: cachedChargePoint.serialNumber,
+          identity: cachedChargePoint.chargePointIdentity
+        } : undefined
+      }
+    };
+    
+    ws.send(JSON.stringify(initialStatus));
+    
+  } catch (error) {
+    console.error('Error handling User WebSocket connection:', error);
+    ws.close(1011, 'Internal server error');
+  }
+});
     
     // Step 3: แสดงผลสรุปการโหลดข้อมูล
     console.log(`✅ Cache initialized with ${chargePoints.length} charge points`);
@@ -244,10 +337,10 @@ const server = createServer((req, res) => {
  * Step 2: ตั้งค่า verifyClient callback สำหรับตรวจสอบการเชื่อมต่อ
  * Step 3: จัดการ subprotocol negotiation สำหรับ OCPP
  */
+// WebSocket Server สำหรับ OCPP connections
 const wss = new WebSocketServer({ 
-  server,
-  verifyClient: (info: any) => {
-   
+  noServer: true,
+  verifyClient: (info: any): boolean => {
     // การตรวจสอบพื้นฐาน - สามารถขยายได้
     // Basic verification - can be extended
     return true;
@@ -272,40 +365,82 @@ const wss = new WebSocketServer({
   }
 });
 
+// WebSocket Server สำหรับ User connections (ดูสถานะการชาร์จ)
+const userWss = new WebSocketServer({ 
+  noServer: true,
+  verifyClient: (info: any): boolean => {
+    // ตรวจสอบว่าเป็น user connection
+    const url = new URL(info.req.url || '', `http://${info.req.headers.host}`);
+    return url.pathname.startsWith('/user-cp/');
+  }
+});
+
 /**
- * จัดการการเชื่อมต่อ WebSocket ใหม่
- * Handle new WebSocket connections
- * Step 1: แยก charge point ID จาก URL path
+ * จัดการการเชื่อมต่อ WebSocket ใหม่สำหรับ OCPP
+ * Handle new OCPP WebSocket connections
+ * Step 1: แยก charge point ID และ connector ID จาก URL path
  * Step 2: ตรวจสอบความถูกต้องของ charge point ID
  * Step 3: แยก OCPP version จาก subprotocol
- * Step 4: เรียกใช้ handleConnection เพื่อจัดการการเชื่อมต่อ
+ * Step 4: จัดการการเชื่อมต่อ
  */
 wss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
-  console.log('New WebSocket connection attempt');
+  console.log('New OCPP WebSocket connection attempt');
   
   try {
     // Step 1: แยก charge point ID จาก URL path
     const url = new URL(request.url || '', `http://${request.headers.host}`);
-    const pathParts = url.pathname.split('/');
-    const chargePointId = pathParts[pathParts.length - 1];
-    console.log("chargePointId connect:", chargePointId)
+    const pathParts = url.pathname.split('/').filter(part => part !== '');
+    console.log("OCPP URL path parts:", pathParts);
+    
+    let chargePointId: string;
+    
+    // ตรวจสอบรูปแบบ URL สำหรับ OCPP
+    if (url.pathname.startsWith('/ocpp/')) {
+      // รูปแบบใหม่: /ocpp/chargePointId
+      if (pathParts.length >= 2) {
+        chargePointId = pathParts[1]; // pathParts[0] = 'ocpp', pathParts[1] = chargePointId
+      } else {
+        console.error('Invalid OCPP URL format. Expected /ocpp/{chargePointId}');
+        ws.close(1008, 'Invalid OCPP URL format. Expected /ocpp/{chargePointId}');
+        return;
+      }
+    } else {
+      // รูปแบบเก่า (backward compatibility): /chargePointId
+      if (pathParts.length === 1) {
+        chargePointId = pathParts[0];
+      } else if (pathParts.length === 2) {
+        // ถ้าเป็น /chargePointId/connectorId ให้แนะนำใช้ user-cp endpoint
+        console.log('Frontend connection detected, should use /user-cp/ endpoint instead');
+        ws.close(1008, 'Use /user-cp/{chargePointId}/{connectorId} for frontend connections');
+        return;
+      } else {
+        console.error('Invalid URL format. Expected /chargePointId for OCPP connections');
+        ws.close(1008, 'Invalid URL format');
+        return;
+      }
+    }
+    
+    console.log("OCPP chargePointId:", chargePointId);
+    
     // Step 2: ตรวจสอบว่ามี charge point ID หรือไม่
     if (!chargePointId || chargePointId === 'ocpp') {
       console.error('No charge point ID provided in URL');
       ws.close(1008, 'Charge point ID required');
       return;
     }
-        console.log("websocket protocol:",  ws.protocol)
+    
+    console.log("websocket protocol:",  ws.protocol)
     // Step 3: แยก OCPP version จาก subprotocol หรือใช้ค่าเริ่มต้น 1.6
     const subprotocol = ws.protocol || 'ocpp1.6';
     const ocppVersion = subprotocolToVersion(subprotocol) || '1.6';
     
-    console.log(`Attempting connection for charge point: ${chargePointId} with OCPP ${ocppVersion}`);
-    // Step 4: จัดการการเชื่อมต่อ
+    console.log(`Attempting OCPP connection for charge point: ${chargePointId} with OCPP ${ocppVersion}`);
+    
+    // Step 4: OCPP connection - จัดการการเชื่อมต่อปกติ
     await handleConnection(ws, request, chargePointId, ocppVersion);
     
   } catch (error) {
-    console.error('Error handling WebSocket connection:', error);
+    console.error('Error handling OCPP WebSocket connection:', error);
     ws.close(1011, 'Internal server error');
   }
 });
@@ -408,7 +543,9 @@ const PORT = process.env.PORT || 8081;
 server.listen(PORT, async () => {
   // Step 1 & 2: เริ่มต้น server และแสดงข้อมูล
   console.log(`OCPP WebSocket server running on port ${PORT}`);
-  console.log(`WebSocket endpoint: ws://localhost:${PORT}/ocpp/{chargePointId}`);
+  console.log(`OCPP WebSocket endpoint: ws://localhost:${PORT}/ocpp/{chargePointId}`);
+  console.log(`User WebSocket endpoint: ws://localhost:${PORT}/user-cp/{chargePointId}/{connectorId}`);
+  console.log(`Legacy OCPP endpoint: ws://localhost:${PORT}/{chargePointId} (backward compatibility)`);
   console.log('Session monitoring started');
     // ✅ Step 3.1: เคลียร์ cache ก่อนเริ่มต้นใหม่
   // chargePointCache.clear();

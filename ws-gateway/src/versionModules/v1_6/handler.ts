@@ -43,7 +43,7 @@ export interface OCPP16BootNotificationRequest {
 /**
  * Handle StatusNotification messages for OCPP 1.6
  * - Receives connector status information from Charge Point
- * - Updates connector status in backend database
+ * - Updates connector status in gateway session manager
  * - Sends response acknowledging receipt
  */
 export async function handleStatusNotification(
@@ -58,6 +58,23 @@ export async function handleStatusNotification(
     if (payload.connectorId === undefined || !payload.status) {
       console.error(`❌ Incomplete StatusNotification data from ${chargePointId}`);
       return {};
+    }
+
+    // Import gatewaySessionManager here to avoid circular dependency
+    const { gatewaySessionManager } = await import('../../handlers/gatewaySessionManager');
+    
+    // Update connector status in gateway session manager
+    const updateResult = gatewaySessionManager.updateConnectorStatus(
+      chargePointId,
+      payload.connectorId,
+      payload.status,
+      payload.errorCode
+    );
+
+    if (updateResult) {
+      console.log(`✅ Updated connector ${payload.connectorId} status to ${payload.status} for ${chargePointId}`);
+    } else {
+      console.warn(`⚠️ Failed to update connector status for ${chargePointId}`);
     }
 
     // Update connector status in backend (if API endpoint exists)

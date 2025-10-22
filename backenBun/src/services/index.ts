@@ -1,11 +1,13 @@
+import { adminController } from '../admin/controller/admin.controller';
+import { AdminService } from '../admin/service/admin.service';
 import { JWTService } from '../lib/jwt';
+import { authController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
+import { chargePointController } from './chargepoint/chargepoint.controller';
+import { ChargePointService } from './chargepoint/chargepoint.service';
+import { userController } from './user/user.controller';
 import { UserService } from './user/user.service';
 import { ValidationService } from './validation/validation.service';
-import { ChargePointService } from './chargepoint/chargepoint.service';
-import { authController } from './auth/auth.controller';
-import { userController } from './user/user.controller';
-import { chargePointController } from './chargepoint/chargepoint.controller';
 
 // Service instances
 export class ServiceContainer {
@@ -16,6 +18,7 @@ export class ServiceContainer {
   public readonly validationService: ValidationService;
   public readonly authService: AuthService;
   public readonly chargePointService: ChargePointService;
+  public readonly adminService: AdminService;
 
   private constructor() {
     // Initialize services in dependency order
@@ -24,6 +27,7 @@ export class ServiceContainer {
     this.userService = new UserService();
     this.validationService = new ValidationService();
     this.chargePointService = new ChargePointService();
+    this.adminService = new AdminService(this.jwtService);
     this.authService = new AuthService(
       this.jwtService,
       this.userService,
@@ -50,6 +54,10 @@ export class ServiceContainer {
   public getChargePointController() {
     return chargePointController(this.chargePointService, this.validationService);
   }
+
+  public getAdminController() {
+    return adminController(this.adminService);
+  }
 }
 
 // Export singleton instance
@@ -61,5 +69,6 @@ export const {
   userService,
   validationService,
   authService,
-  chargePointService
+  chargePointService,
+  adminService
 } = serviceContainer;

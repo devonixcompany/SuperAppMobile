@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ตัวอย่างการเชื่อมต่อ WebSocket - เครื่องชาร์จ</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .connection-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .connection-form input, .connection-form button {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .connection-form button {
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+        .connection-form button:hover {
+            background: #0056b3;
+        }
+        .connection-form button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .charging-data {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .data-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        .data-card h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+        .data-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .data-card .unit {
+            font-size: 14px;
+            color: #6c757d;
+        }
+        .logs {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+        .log-entry.error {
+            color: #dc3545;
+        }
+        .log-entry.success {
+            color: #28a745;
+        }
+        .log-entry.info {
+            color: #17a2b8;
+        }
+        .clear-logs {
+            margin-top: 10px;
+            padding: 5px 10px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔌 ตัวอย่างการเชื่อมต่อ WebSocket - เครื่องชาร์จ</h1>
+    
+    <div class="container">
+        <h2>การเชื่อมต่อ</h2>
+        <div class="connection-form">
+            <input type="text" id="chargePointId" placeholder="รหัสเครื่องชาร์จ (เช่น CP001)" value="CP001">
+            <input type="number" id="connectorId" placeholder="หัวชาร์จ (เช่น 1)" value="1" min="1">
+            <input type="text" id="serverUrl" placeholder="Server URL" value="ws://localhost:8083">
+            <button id="connectBtn" onclick="connect()">เชื่อมต่อ</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>ตัดการเชื่อมต่อ</button>
+        </div>
+        
+        <div id="connectionStatus" class="status disconnected">
+            ไม่ได้เชื่อมต่อ
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>ข้อมูลการชาร์จ</h2>
+        <div class="charging-data">
+            <div class="data-card">
+                <h4>สถานะ</h4>
+                <div class="value" id="status">-</div>
+            </div>
+            <div class="data-card">
+                <h4>เปอร์เซ็นต์การชาร์จ</h4>
+                <div class="value" id="chargingPercentage">-</div>
+                <div class="unit">%</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+            </div>
+            <div class="data-card">
+                <h4>กำลังไฟปัจจุบัน</h4>
+                <div class="value" id="currentPower">-</div>
+                <div class="unit">kW</div>
+            </div>
+            <div class="data-card">
+                <h4>มิเตอร์ปัจจุบัน</h4>
+                <div class="value" id="currentMeter">-</div>
+                <div class="unit">kWh</div>
+            </div>
+            <div class="data-card">
+                <h4>แรงดันไฟฟ้า</h4>
+                <div class="value" id="voltage">-</div>
+                <div class="unit">V</div>
+            </div>
+            <div class="data-card">
+                <h4>กระแสไฟฟ้า</h4>
+                <div class="value" id="current">-</div>
+                <div class="unit">A</div>
+            </div>
+            <div class="data-card">
+                <h4>พลังงานที่จ่าย</h4>
+                <div class="value" id="energyDelivered">-</div>
+                <div class="unit">kWh</div>
+            </div>
+            <div class="data-card">
+                <h4>ค่าใช้จ่าย</h4>
+                <div class="value" id="cost">-</div>
+                <div class="unit">บาท</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Log การทำงาน</h2>
+        <div id="logs" class="logs"></div>
+        <button class="clear-logs" onclick="clearLogs()">ล้าง Log</button>
+    </div>
+
+    <script>
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString('th-TH');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logs.appendChild(logEntry);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function updateConnectionStatus(status, message) {
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.className = `status ${status}`;
+            statusElement.textContent = message;
+        }
+
+        function updateUI(enabled) {
+            document.getElementById('connectBtn').disabled = enabled;
+            document.getElementById('disconnectBtn').disabled = !enabled;
+            document.getElementById('chargePointId').disabled = enabled;
+            document.getElementById('connectorId').disabled = enabled;
+            document.getElementById('serverUrl').disabled = enabled;
+        }
+
+        function connect() {
+            const chargePointId = document.getElementById('chargePointId').value.trim();
+            const connectorId = document.getElementById('connectorId').value.trim();
+            const serverUrl = document.getElementById('serverUrl').value.trim();
+
+            if (!chargePointId || !connectorId || !serverUrl) {
+                alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+                return;
+            }
+
+            const wsUrl = `${serverUrl}/${chargePointId}/${connectorId}`;
+            log(`กำลังเชื่อมต่อไปยัง: ${wsUrl}`, 'info');
+            
+            updateConnectionStatus('connecting', 'กำลังเชื่อมต่อ...');
+            
+            try {
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = function() {
+                    log('เชื่อมต่อสำเร็จ!', 'success');
+                    updateConnectionStatus('connected', `เชื่อมต่อแล้ว: ${chargePointId}/${connectorId}`);
+                    updateUI(true);
+                    reconnectAttempts = 0;
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const message = JSON.parse(event.data);
+                        handleMessage(message);
+                    } catch (error) {
+                        log(`ข้อผิดพลาดในการแปลงข้อมูล: ${error.message}`, 'error');
+                    }
+                };
+
+                ws.onerror = function(error) {
+                    log(`ข้อผิดพลาด WebSocket: ${error}`, 'error');
+                };
+
+                ws.onclose = function(event) {
+                    log(`การเชื่อมต่อปิด (Code: ${event.code})`, 'error');
+                    updateConnectionStatus('disconnected', 'การเชื่อมต่อปิด');
+                    updateUI(false);
+                    clearData();
+                    
+                    // Auto reconnect
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++;
+                        log(`กำลังพยายามเชื่อมต่อใหม่ครั้งที่ ${reconnectAttempts}...`, 'info');
+                        setTimeout(() => connect(), 3000);
+                    }
+                };
+
+            } catch (error) {
+                log(`ไม่สามารถเชื่อมต่อได้: ${error.message}`, 'error');
+                updateConnectionStatus('disconnected', 'เชื่อมต่อไม่สำเร็จ');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+                log('ตัดการเชื่อมต่อแล้ว', 'info');
+            }
+        }
+
+        function handleMessage(message) {
+            log(`ได้รับข้อมูล: ${message.type}`, 'info');
+            
+            switch (message.type) {
+                case 'charging_data':
+                    updateChargingData(message.data);
+                    break;
+                case 'status':
+                    updateStatus(message.data);
+                    break;
+                case 'heartbeat':
+                    // log('Heartbeat received', 'info');
+                    break;
+                case 'error':
+                    log(`ข้อผิดพลาด: ${message.data.message}`, 'error');
+                    break;
+                default:
+                    log(`ข้อมูลประเภทไม่รู้จัก: ${message.type}`, 'error');
+            }
+        }
+
+        function updateChargingData(data) {
+            document.getElementById('status').textContent = data.status || '-';
+            document.getElementById('chargingPercentage').textContent = 
+                data.chargingPercentage ? data.chargingPercentage.toFixed(1) : '-';
+            document.getElementById('currentPower').textContent = 
+                data.currentPower ? data.currentPower.toFixed(2) : '-';
+            document.getElementById('currentMeter').textContent = 
+                data.currentMeter ? data.currentMeter.toFixed(3) : '-';
+            document.getElementById('voltage').textContent = 
+                data.voltage ? data.voltage.toFixed(1) : '-';
+            document.getElementById('current').textContent = 
+                data.current ? data.current.toFixed(1) : '-';
+            document.getElementById('energyDelivered').textContent = 
+                data.energyDelivered ? data.energyDelivered.toFixed(2) : '-';
+            document.getElementById('cost').textContent = 
+                data.cost ? data.cost.toFixed(2) : '-';
+            
+            // Update progress bar
+            const percentage = data.chargingPercentage || 0;
+            document.getElementById('progressFill').style.width = `${percentage}%`;
+        }
+
+        function updateStatus(data) {
+            log(`สถานะอัปเดต: ${data.status} (Online: ${data.isOnline})`, 'info');
+            if (data.message) {
+                log(`ข้อความ: ${data.message}`, 'info');
+            }
+        }
+
+        function clearData() {
+            const fields = ['status', 'chargingPercentage', 'currentPower', 'currentMeter', 
+                          'voltage', 'current', 'energyDelivered', 'cost'];
+            fields.forEach(field => {
+                document.getElementById(field).textContent = '-';
+            });
+            document.getElementById('progressFill').style.width = '0%';
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        // Auto connect on page load for demo
+        window.onload = function() {
+            log('หน้าเว็บโหลดเสร็จแล้ว', 'info');
+            log('กรุณากรอกข้อมูลและกดปุ่มเชื่อมต่อ', 'info');
+        };
+
+        // Handle page unload
+        window.onbeforeunload = function() {
+            if (ws) {
+                ws.close();
+            }
+        };
+    </script>
+</body>
+</html>

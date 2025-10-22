@@ -821,10 +821,14 @@ export class ChargePointService {
       // สร้างหัวชาร์จตามจำนวนที่ต้องการ (เริ่มจาก connectorId = 1)
       for (let i = 1; i <= totalConnectors; i++) {
         const detail = detailMap.get(i);
+        const rawType = typeof detail?.type === 'string' && detail.type.trim()
+          ? detail.type.trim()
+          : undefined;
         const createData: any = {
           chargePointId: chargePoint.id,
           connectorId: i,
-          type: this.normalizeConnectorType(detail?.type),
+          type: this.normalizeConnectorType(rawType),
+          typeDescription: rawType,
           status: 'AVAILABLE'
         };
 
@@ -836,8 +840,9 @@ export class ChargePointService {
           status: 'AVAILABLE'
         };
 
-        if (detail?.type) {
-          updateData.type = this.normalizeConnectorType(detail.type);
+        if (rawType) {
+          updateData.type = this.normalizeConnectorType(rawType);
+          updateData.typeDescription = rawType;
         }
 
         if (typeof detail?.maxCurrent === 'number') {

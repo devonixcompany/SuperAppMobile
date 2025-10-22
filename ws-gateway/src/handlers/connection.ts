@@ -17,6 +17,7 @@ export interface ConnectionInfo {
   lastSeen: Date;              // เวลาที่เห็นล่าสุด
   ws: WebSocket;               // WebSocket connection
   connectors?: ConnectorDetail[]; // ข้อมูลหัวชาร์จล่าสุดที่ได้รับ
+  connectorCount?: number;        // จำนวนหัวชาร์จล่าสุดที่ได้รับ
 }
 
 // แผนที่เก็บการเชื่อมต่อที่ใช้งานอยู่
@@ -410,45 +411,57 @@ export async function handleConnection(ws: WebSocket, request: any, chargePointI
                 // ส่ง GetConfiguration เพื่อดึงข้อมูล connectors พร้อมรายละเอียด
                 const { numberOfConnectors, connectors } = await getConnectorConfiguration(ws);
 
+                const normalizedConnectorDetails: ConnectorDetail[] = connectors.map(connector => {
+                  const trimmedType = typeof connector.type === 'string' ? connector.type.trim() : undefined;
+                  const rawMaxCurrent = (connector as any).maxCurrent;
+                  let parsedMaxCurrent: number | undefined;
+
+                  if (typeof rawMaxCurrent === 'number') {
+                    parsedMaxCurrent = Number.isFinite(rawMaxCurrent) ? rawMaxCurrent : undefined;
+                  } else if (typeof rawMaxCurrent === 'string' && rawMaxCurrent.trim() !== '') {
+                    const numericValue = Number.parseFloat(rawMaxCurrent.replace(/[^\d.+-]/g, ''));
+                    parsedMaxCurrent = Number.isFinite(numericValue) ? numericValue : undefined;
+                  }
+
+                  return {
+                    connectorId: connector.connectorId,
+                    type: trimmedType || undefined,
+                    maxCurrent: parsedMaxCurrent
+                  };
+                });
+
                 if (numberOfConnectors > 0) {
-                  console.log(`📊 Charge point ${chargePointId} has ${numberOfConnectors} connectors with configuration:`, connectors);
+                  console.log(`📊 Charge point ${chargePointId} has ${numberOfConnectors} connectors with configuration:`, normalizedConnectorDetails);
                 } else {
-                  console.warn(`⚠️ Charge point ${chargePointId} did not report NumberOfConnectors, continuing with detected connectors (${connectors.length})`);
+                  console.warn(`⚠️ Charge point ${chargePointId} did not report NumberOfConnectors, continuing with detected connectors (${normalizedConnectorDetails.length})`);
                 }
+
+                const connectorCountForPersistence = numberOfConnectors || normalizedConnectorDetails.length;
+                const chargePointIdentityForPersistence = connectionInfo.chargePointIdentity || chargePointId;
 
                 // อัปเดตข้อมูล connectors ใน gateway session
                 gatewaySessionManager.updateConnectorDetails(
                   chargePointId,
-                  connectors.map(connector => ({
-                    connectorId: connector.connectorId,
-                    type: connector.type,
-                    maxCurrent: connector.maxCurrent
-                  }))
+                  normalizedConnectorDetails,
+                  connectorCountForPersistence
                 );
 
-                const connectorDetailsForPersistence: ConnectorDetail[] = connectors.map(connector => ({
-                  connectorId: connector.connectorId,
-                  type: connector.type,
-                  maxCurrent: connector.maxCurrent
-                }));
-
-                const connectorCountForPersistence = numberOfConnectors || connectors.length;
-
-                connectionInfo.connectors = connectorDetailsForPersistence;
+                connectionInfo.connectors = normalizedConnectorDetails;
+                connectionInfo.connectorCount = connectorCountForPersistence;
                 
                 // ตรวจสอบและสร้าง/อัปเดต connector data ในฐานข้อมูล
                 const result = await ensureConnectorData(
-                  chargePointId,
+                  chargePointIdentityForPersistence,
                   connectorCountForPersistence,
-                  connectorDetailsForPersistence
+                  normalizedConnectorDetails
                 );
                 
                 if (result.created) {
-                  console.log(`✅ Created ${connectorCountForPersistence} connectors for charge point ${chargePointId}`);
+                  console.log(`✅ Created ${connectorCountForPersistence} connectors for charge point ${chargePointIdentityForPersistence}`);
                 } else if (result.updated) {
-                  console.log(`✅ Synced connector details for charge point ${chargePointId}`);
+                  console.log(`✅ Synced connector details for charge point ${chargePointIdentityForPersistence}`);
                 } else {
-                  console.log(`✅ Charge point ${chargePointId} already has up-to-date connector data`);
+                  console.log(`✅ Charge point ${chargePointIdentityForPersistence} already has up-to-date connector data`);
                 }
               }
             } catch (error) {

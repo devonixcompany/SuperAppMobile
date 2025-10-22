@@ -2,6 +2,7 @@
 // จัดการ session เดียวที่เก็บ charge points ทั้งหมดเป็น array
 // Single session management for all charge points
 
+import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 
 // ข้อมูลหัวชาร์จใน Gateway Session
@@ -10,6 +11,7 @@ export interface GatewayConnectorInfo {
   connectorId: number;   // หมายเลขหัวชาร์จ
   type?: string;         // ชนิดหัวชาร์จตามข้อมูลจาก OCPP
   maxCurrent?: number;   // กระแสสูงสุดของหัวชาร์จ
+  status?: string;  // สถานะเริ่มต้นของหัวชาร์จ
 }
 
 // ข้อมูล Charge Point ใน Gateway Session
@@ -28,6 +30,9 @@ export interface ChargePointEntry {
   pendingMessages: PendingMessage[];  // ข้อความที่รอการประมวลผล
   chargePointIdentity?: string; // ข้อมูลเพิ่มเติมจาก cache
   connectors: GatewayConnectorInfo[]; // ข้อมูลหัวชาร์จที่ได้จาก GetConfiguration
+  connectorCount: number;      // จำนวนหัวชาร์จล่าสุดที่ทราบ
+  connectorMetadataSyncedAt?: Date; // เวลา sync ข้อมูลหัวชาร์จล่าสุด
+
 }
 
 // ข้อความที่รอการประมวลผล
@@ -73,11 +78,12 @@ export interface GatewaySessionStats {
  * Step 2: จัดการ charge points ทั้งหมดใน array เดียว
  * Step 3: ให้บริการ CRUD operations สำหรับ charge points
  */
-export class GatewaySessionManager {
+export class GatewaySessionManager extends EventEmitter {
   private session: GatewaySession | null = null;
   private readonly gatewayId: string;
 
   constructor(gatewayId: string = 'gateway-001') {
+    super();
     this.gatewayId = gatewayId;
     this.initializeSession();
   }
@@ -154,7 +160,9 @@ export class GatewaySessionManager {
       messagesReceived: 0,
       pendingMessages: [],
       chargePointIdentity,
-      connectors: []
+      connectors: [],
+      connectorCount: 0,
+      connectorMetadataSyncedAt: undefined
     };
 
     // Step 3: เพิ่มเข้า array และอัปเดต session activity
@@ -162,6 +170,16 @@ export class GatewaySessionManager {
     this.session!.lastActivity = now;
 
     console.log(`✅ Added Charge Point ${chargePointId} to Gateway Session (Total: ${this.session!.chargePoints.length})`);
+    
+    // Emit event สำหรับการเพิ่ม charge point
+    this.emit('chargePointAdded', {
+      chargePointId,
+      serialNumber,
+      ocppVersion,
+      connectedAt: now,
+      totalChargePoints: this.session!.chargePoints.length
+    });
+    
     return chargePointEntry;
   }
 
@@ -199,6 +217,15 @@ export class GatewaySessionManager {
     this.session.lastActivity = new Date();
 
     console.log(`🗑️ Removed Charge Point ${chargePointId} from Gateway Session (Remaining: ${this.session.chargePoints.length})`);
+    
+    // Emit event สำหรับการลบ charge point
+    this.emit('chargePointRemoved', {
+      chargePointId,
+      serialNumber: chargePoint.serialNumber,
+      removedAt: new Date(),
+      totalChargePoints: this.session.chargePoints.length
+    });
+    
     return true;
   }
 
@@ -258,6 +285,15 @@ export class GatewaySessionManager {
       chargePoint.isAuthenticated = true;
       this.session!.lastActivity = new Date();
       console.log(`🔐 Charge Point ${chargePointId} authenticated`);
+      
+      // Emit event สำหรับการ authenticate
+      this.emit('chargePointUpdated', {
+        chargePointId,
+        type: 'authentication',
+        isAuthenticated: chargePoint.isAuthenticated,
+        lastActivity: this.session!.lastActivity
+      });
+      
       return true;
     }
     return false;
@@ -318,6 +354,14 @@ export class GatewaySessionManager {
     if (chargePoint) {
       chargePoint.lastSeen = new Date();
       this.session!.lastActivity = new Date();
+      
+      // Emit event สำหรับการอัปเดต lastSeen
+      this.emit('chargePointUpdated', {
+        chargePointId,
+        type: 'lastSeen',
+        lastSeen: chargePoint.lastSeen,
+        lastActivity: this.session!.lastActivity
+      });
     }
   }
 
@@ -331,6 +375,14 @@ export class GatewaySessionManager {
     if (chargePoint) {
       chargePoint.lastHeartbeat = new Date();
       this.session!.lastActivity = new Date();
+      
+      // Emit event สำหรับการอัปเดต heartbeat
+      this.emit('chargePointUpdated', {
+        chargePointId,
+        type: 'heartbeat',
+        lastHeartbeat: chargePoint.lastHeartbeat,
+        lastActivity: this.session!.lastActivity
+      });
     }
   }
 
@@ -340,13 +392,67 @@ export class GatewaySessionManager {
    * @param chargePointId - รหัส charge point
    * @param connectors - ข้อมูลหัวชาร์จที่ได้รับจาก OCPP configuration
    */
-  updateConnectorDetails(chargePointId: string, connectors: GatewayConnectorInfo[]): void {
+  updateConnectorDetails(
+    chargePointId: string,
+    connectors: GatewayConnectorInfo[],
+    connectorCount?: number
+  ): void {
     const chargePoint = this.getChargePoint(chargePointId);
     if (!chargePoint) return;
 
-    chargePoint.connectors = connectors.map(connector => ({ ...connector }));
-    this.session!.lastActivity = new Date();
-    console.log(`🔄 Updated connector details for ${chargePointId}: ${connectors.length} connectors`);
+    const now = new Date();
+    const existingById = new Map<number, GatewayConnectorInfo>();
+
+    for (const existingConnector of chargePoint.connectors) {
+      existingById.set(existingConnector.connectorId, { ...existingConnector });
+    }
+
+    for (const incomingConnector of connectors) {
+      const trimmedType = typeof incomingConnector.type === 'string'
+        ? incomingConnector.type.trim()
+        : undefined;
+      const normalizedMaxCurrent =
+        typeof incomingConnector.maxCurrent === 'number' && Number.isFinite(incomingConnector.maxCurrent)
+          ? incomingConnector.maxCurrent
+          : undefined;
+
+      const base = existingById.get(incomingConnector.connectorId) || { connectorId: incomingConnector.connectorId };
+      existingById.set(incomingConnector.connectorId, {
+        connectorId: incomingConnector.connectorId,
+        type: trimmedType || base.type,
+        maxCurrent: normalizedMaxCurrent ?? base.maxCurrent
+      });
+    }
+
+    const knownIds = Array.from(existingById.keys());
+    const highestKnownId = knownIds.length > 0 ? Math.max(...knownIds) : 0;
+    const requestedCount = typeof connectorCount === 'number' && connectorCount > 0
+      ? connectorCount
+      : 0;
+    const derivedCount = Math.max(
+      requestedCount,
+      highestKnownId,
+      chargePoint.connectorCount
+    );
+
+    const mergedConnectors: GatewayConnectorInfo[] = [];
+    for (let connectorId = 1; connectorId <= derivedCount; connectorId++) {
+      const connector = existingById.get(connectorId);
+      if (connector) {
+        mergedConnectors.push({ ...connector });
+      } else {
+        mergedConnectors.push({ connectorId });
+      }
+    }
+
+    chargePoint.connectors = mergedConnectors;
+    chargePoint.connectorCount = derivedCount;
+    chargePoint.connectorMetadataSyncedAt = now;
+    this.session!.lastActivity = now;
+
+    console.log(
+      `🔄 Updated connector details for ${chargePointId}: ${chargePoint.connectorCount} connectors synced at ${now.toISOString()}`
+    );
   }
 
   /**
@@ -476,6 +582,7 @@ export class GatewaySessionManager {
         messagesReceived: cp.messagesReceived,
         wsState: cp.ws.readyState,
         pendingMessageCount: cp.pendingMessages.length,
+        connectorCount: cp.connectorCount,
         connectors: cp.connectors
       }))
     };
@@ -495,6 +602,66 @@ export class GatewaySessionManager {
    * Get Gateway Session
    * @returns GatewaySession หรือ null หากไม่มี session
    */
+  /**
+   * อัปเดตสถานะของ connector เมื่อได้รับ StatusNotification
+   * Update connector status when receiving StatusNotification
+   * @param chargePointId - รหัส charge point
+   * @param connectorId - หมายเลข connector
+   * @param status - สถานะใหม่ของ connector
+   * @param errorCode - รหัสข้อผิดพลาด (ถ้ามี)
+   */
+  updateConnectorStatus(
+    chargePointId: string,
+    connectorId: number,
+    status: string,
+    errorCode?: string
+  ): boolean {
+    if (!this.session) {
+      console.error('No active session');
+      return false;
+    }
+
+    const chargePoint = this.getChargePoint(chargePointId);
+    if (!chargePoint) {
+      console.error(`Charge point ${chargePointId} not found`);
+      return false;
+    }
+
+    // ค้นหา connector ที่ต้องการอัปเดต
+    const connectorIndex = chargePoint.connectors.findIndex(c => c.connectorId === connectorId);
+    
+    if (connectorIndex === -1) {
+      // ถ้าไม่พบ connector ให้สร้างใหม่
+      console.log(`Creating new connector ${connectorId} for charge point ${chargePointId}`);
+      chargePoint.connectors.push({
+        connectorId,
+        status
+      });
+    } else {
+      // อัปเดตสถานะของ connector ที่มีอยู่
+      const oldStatus = chargePoint.connectors[connectorIndex].status;
+      chargePoint.connectors[connectorIndex].status = status;
+      console.log(`Updated connector ${connectorId} status from ${oldStatus} to ${status} for charge point ${chargePointId}`);
+    }
+
+    // อัปเดต lastActivity
+    this.session.lastActivity = new Date();
+    chargePoint.lastSeen = new Date();
+
+    // ส่ง event สำหรับ real-time updates
+    this.emit('chargePointUpdated', {
+      chargePointId,
+      type: 'connectorStatus',
+      connectorId,
+      status,
+      errorCode,
+      lastActivity: this.session.lastActivity
+    });
+
+    console.log(`✅ Connector ${connectorId} status updated to ${status} for charge point ${chargePointId}`);
+    return true;
+  }
+
   getSession(): GatewaySession | null {
     return this.session;
   }

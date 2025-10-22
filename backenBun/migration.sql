@@ -49,6 +49,9 @@ CREATE TYPE "PricingPeriod" AS ENUM ('STANDARD', 'PEAK', 'OFF_PEAK', 'SUPER_OFF_
 -- CreateEnum
 CREATE TYPE "DayOfWeek" AS ENUM ('MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY');
 
+-- CreateEnum
+CREATE TYPE "AdminRole" AS ENUM ('SUPERADMIN', 'STAFF');
+
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
@@ -123,6 +126,7 @@ CREATE TABLE "connectors" (
     "chargePointId" TEXT NOT NULL,
     "connectorId" INTEGER NOT NULL,
     "type" "ConnectorType" NOT NULL DEFAULT 'TYPE_2',
+    "typeDescription" TEXT,
     "status" "ConnectorStatus" NOT NULL DEFAULT 'AVAILABLE',
     "maxPower" DOUBLE PRECISION,
     "maxCurrent" DOUBLE PRECISION,
@@ -197,24 +201,6 @@ CREATE TABLE "reservations" (
 );
 
 -- CreateTable
-CREATE TABLE "charging_profiles" (
-    "id" TEXT NOT NULL,
-    "chargePointId" TEXT,
-    "connectorId" TEXT,
-    "name" TEXT NOT NULL,
-    "description" TEXT,
-    "chargingRateUnit" "RateUnit" NOT NULL DEFAULT 'A',
-    "chargingSchedule" JSONB NOT NULL,
-    "stackLevel" INTEGER NOT NULL DEFAULT 1,
-    "validFrom" TIMESTAMP(3),
-    "validTo" TIMESTAMP(3),
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "charging_profiles_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "ocpp_messages" (
     "id" TEXT NOT NULL,
     "messageId" TEXT NOT NULL,
@@ -276,6 +262,21 @@ CREATE TABLE "pricing_schedules" (
     CONSTRAINT "pricing_schedules_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "Admin" (
+    "id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "password" TEXT NOT NULL,
+    "role" "AdminRole" NOT NULL DEFAULT 'STAFF',
+    "firstName" TEXT,
+    "lastName" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Admin_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_firebaseUid_key" ON "User"("firebaseUid");
 
@@ -302,6 +303,9 @@ CREATE UNIQUE INDEX "transactions_transactionId_key" ON "transactions"("transact
 
 -- CreateIndex
 CREATE UNIQUE INDEX "charging_sessions_sessionId_key" ON "charging_sessions"("sessionId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Admin_email_key" ON "Admin"("email");
 
 -- AddForeignKey
 ALTER TABLE "user_vehicles" ADD CONSTRAINT "user_vehicles_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -341,3 +345,4 @@ ALTER TABLE "pricing_tiers" ADD CONSTRAINT "pricing_tiers_chargePointId_fkey" FO
 
 -- AddForeignKey
 ALTER TABLE "pricing_schedules" ADD CONSTRAINT "pricing_schedules_pricingTierId_fkey" FOREIGN KEY ("pricingTierId") REFERENCES "pricing_tiers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
