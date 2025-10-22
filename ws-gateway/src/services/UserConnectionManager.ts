@@ -9,7 +9,7 @@ interface UserConnection {
 }
 
 interface StatusUpdate {
-  type: 'status' | 'heartbeat' | 'charging' | 'connector';
+  type: 'status' | 'heartbeat' | 'charging' | 'connector' | 'connectorStatus';
   timestamp: string;
   data: any;
 }
@@ -80,10 +80,21 @@ export class UserConnectionManager {
           additionalData.isAuthenticated = data.isAuthenticated;
           break;
         case 'connectorStatus':
-          status = data.status;
-          additionalData.connectorId = data.connectorId;
-          additionalData.errorCode = data.errorCode;
-          break;
+          // Send connectorStatus as a separate message type
+          const connectorUpdate: StatusUpdate = {
+            type: 'connectorStatus',
+            timestamp: new Date().toISOString(),
+            data: {
+              chargePointId: data.chargePointId,
+              connectorId: data.connectorId,
+              status: data.status,
+              errorCode: data.errorCode,
+              isOnline: true,
+              message: `Connector ${data.connectorId} status updated to ${data.status}`
+            }
+          };
+          this.broadcastToConnector(data.chargePointId, data.connectorId.toString(), connectorUpdate);
+          return; // Return early to avoid sending duplicate status message
         default:
           status = 'UPDATED';
       }

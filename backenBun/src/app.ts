@@ -54,7 +54,7 @@ All endpoints return consistent error responses:
       },
       servers: [
         {
-          url: 'http://localhost:8080',
+          url: 'http://localhost:3000',
           description: 'Development server'
         },
         {
@@ -68,10 +68,6 @@ All endpoints return consistent error responses:
           description: '🔐 User authentication and authorization endpoints including registration, login, and token refresh'
         },
         {
-          name: 'Admin Authentication',
-          description: '🔐 Admin authentication and authorization endpoints including registration, login, and token refresh'
-        },
-        {
           name: 'User Management',
           description: '👤 User profile management endpoints for viewing, updating, and managing user accounts'
         },
@@ -80,9 +76,6 @@ All endpoints return consistent error responses:
           description: '🏥 System health check and monitoring endpoints'
         }
       ],
-
-      
-      
       components: {
         securitySchemes: {
           bearerAuth: {
@@ -285,7 +278,6 @@ All endpoints return consistent error responses:
   .use(serviceContainer.getAuthController())
   .use(serviceContainer.getUserController())
   .use(serviceContainer.getChargePointController())
-  .use(serviceContainer.getAdminController())
   .derive(async ({ request, set }: { request: Request; set: any }) => {
     const authHeader = request.headers.get('authorization');
     
@@ -409,9 +401,6 @@ app.listen(port, () => {
   console.log(`   POST /api/auth/register - User registration`);
   console.log(`   POST /api/auth/login - User login`);
   console.log(`   POST /api/auth/refresh - Refresh token`);
-  console.log(`   POST /api/admin/register - Admin registration`);
-  console.log(`   POST /api/admin/login - Admin login`);
-  console.log(`   POST /api/admin/refresh - Refresh admin token`);
   console.log(`   GET /api/profile - Get user profile (protected)`);
   console.log(`   GET /health - Health check`);
 });

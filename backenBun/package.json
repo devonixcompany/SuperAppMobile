@@ -9,13 +9,16 @@
     "start": "bun run src/app.ts"
   },
   "dependencies": {
+    "@elysiajs/cookie": "^0.8.0",
     "@elysiajs/cors": "^0.8.0",
     "@elysiajs/jwt": "^0.8.0",
     "@elysiajs/swagger": "^0.8.0",
     "@prisma/client": "^5.9.1",
     "@types/bcrypt": "^6.0.0",
+    "@types/winston": "^2.4.4",
     "bcrypt": "^6.0.0",
-    "elysia": "^0.8.17"
+    "elysia": "^0.8.17",
+    "winston": "^3.18.3"
   },
   "devDependencies": {
     "@types/node": "^20.11.16",

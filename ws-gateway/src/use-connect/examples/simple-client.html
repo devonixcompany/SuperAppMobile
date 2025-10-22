@@ -143,9 +143,9 @@
     <div class="container">
         <h2>การเชื่อมต่อ</h2>
         <div class="connection-form">
-            <input type="text" id="chargePointId" placeholder="รหัสเครื่องชาร์จ (เช่น CP001)" value="CP001">
+            <input type="text" id="chargePointId" placeholder="รหัสเครื่องชาร์จ (เช่น EVBANGNA-CP001)" value="EVBANGNA-CP001">
             <input type="number" id="connectorId" placeholder="หัวชาร์จ (เช่น 1)" value="1" min="1">
-            <input type="text" id="serverUrl" placeholder="Server URL" value="ws://localhost:8083">
+            <input type="text" id="serverUrl" placeholder="Server URL" value="ws://localhost:8081/user-cp">
             <button id="connectBtn" onclick="connect()">เชื่อมต่อ</button>
             <button id="disconnectBtn" onclick="disconnect()" disabled>ตัดการเชื่อมต่อ</button>
         </div>
@@ -159,8 +159,16 @@
         <h2>ข้อมูลการชาร์จ</h2>
         <div class="charging-data">
             <div class="data-card">
-                <h4>สถานะ</h4>
-                <div class="value" id="status">-</div>
+                <h4>สถานะหัวชาร์จ</h4>
+                <div class="value" id="connectorStatus">-</div>
+            </div>
+            <div class="data-card">
+                <h4>สถานะออนไลน์</h4>
+                <div class="value" id="onlineStatus">-</div>
+            </div>
+            <div class="data-card">
+                <h4>รหัสข้อผิดพลาด</h4>
+                <div class="value" id="errorCode">-</div>
             </div>
             <div class="data-card">
                 <h4>เปอร์เซ็นต์การชาร์จ</h4>
@@ -314,6 +322,9 @@
                 case 'status':
                     updateStatus(message.data);
                     break;
+                case 'connectorStatus':
+                    updateConnectorStatus(message.data);
+                    break;
                 case 'heartbeat':
                     // log('Heartbeat received', 'info');
                     break;
@@ -326,7 +337,6 @@
         }
 
         function updateChargingData(data) {
-            document.getElementById('status').textContent = data.status || '-';
             document.getElementById('chargingPercentage').textContent = 
                 data.chargingPercentage ? data.chargingPercentage.toFixed(1) : '-';
             document.getElementById('currentPower').textContent = 
@@ -347,6 +357,46 @@
             document.getElementById('progressFill').style.width = `${percentage}%`;
         }
 
+        function updateConnectorStatus(data) {
+            log(`อัปเดตสถานะหัวชาร์จ: ${data.status} (Connector: ${data.connectorId})`, 'success');
+            
+            // Update connector status
+            document.getElementById('connectorStatus').textContent = data.status || '-';
+            document.getElementById('onlineStatus').textContent = data.isOnline ? 'ออนไลน์' : 'ออฟไลน์';
+            document.getElementById('errorCode').textContent = data.errorCode || 'ไม่มี';
+            
+            // Update status color based on connector status
+            const statusElement = document.getElementById('connectorStatus');
+            statusElement.style.color = getStatusColor(data.status);
+            
+            if (data.message) {
+                log(`ข้อความ: ${data.message}`, 'info');
+            }
+        }
+
+        function getStatusColor(status) {
+            switch (status) {
+                case 'Available':
+                    return '#28a745'; // Green
+                case 'Preparing':
+                    return '#ffc107'; // Yellow
+                case 'Charging':
+                    return '#007bff'; // Blue
+                case 'SuspendedEVSE':
+                case 'SuspendedEV':
+                    return '#fd7e14'; // Orange
+                case 'Finishing':
+                    return '#6f42c1'; // Purple
+                case 'Reserved':
+                    return '#20c997'; // Teal
+                case 'Unavailable':
+                case 'Faulted':
+                    return '#dc3545'; // Red
+                default:
+                    return '#6c757d'; // Gray
+            }
+        }
+
         function updateStatus(data) {
             log(`สถานะอัปเดต: ${data.status} (Online: ${data.isOnline})`, 'info');
             if (data.message) {
@@ -355,12 +405,15 @@
         }
 
         function clearData() {
-            const fields = ['status', 'chargingPercentage', 'currentPower', 'currentMeter', 
+            const fields = ['connectorStatus', 'onlineStatus', 'errorCode', 'chargingPercentage', 'currentPower', 'currentMeter', 
                           'voltage', 'current', 'energyDelivered', 'cost'];
             fields.forEach(field => {
                 document.getElementById(field).textContent = '-';
             });
             document.getElementById('progressFill').style.width = '0%';
+            
+            // Reset status color
+            document.getElementById('connectorStatus').style.color = '#6c757d';
         }
 
         function clearLogs() {

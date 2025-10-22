@@ -136,7 +136,14 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
         chargePointInfo: cachedChargePoint ? {
           serialNumber: cachedChargePoint.serialNumber,
           identity: cachedChargePoint.chargePointIdentity
-        } : undefined
+        } : undefined,
+        // ส่งข้อมูลหัวชาร์จทั้งหมดของ Charge Point นี้
+        connectors: chargePoint ? chargePoint.connectors.map(connector => ({
+          connectorId: connector.connectorId,
+          type: connector.type || 'ไม่ทราบชนิด',
+          maxCurrent: connector.maxCurrent || null,
+          status: connector.status || 'UNKNOWN'
+        })) : []
       }
     };
     

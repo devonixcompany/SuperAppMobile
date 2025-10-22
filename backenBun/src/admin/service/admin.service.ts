@@ -1,4 +1,5 @@
 import { JWTService } from "../../lib/jwt";
+import { logAuthEvent, logger } from "../../lib/logger";
 import { hashPassword, verifyPassword } from "../../lib/password";
 import { prisma } from "../../lib/prisma";
 
@@ -29,11 +30,7 @@ export class AdminService {
   constructor(private jwtService: JWTService) {}
 
   async register(data: AdminRegistrationData) {
-    console.log("📝 [ADMIN] Registration attempt:", {
-      email: data.email,
-      role: data.role,
-      timestamp: new Date().toISOString(),
-    });
+    logAuthEvent('Admin Registration Attempt', data.email, true, undefined, undefined);
 
     try {
       const { email, password, confirmPassword, firstName, lastName, role } = data;
@@ -64,10 +61,10 @@ export class AdminService {
 
       // Hash password
       const hashedPassword = await hashPassword(password);
-      console.log("🔒 [ADMIN] Password hashed successfully");
+      logger.debug("Admin password hashed successfully", { email: data.email });
 
       // Create new admin
-      console.log("💾 [ADMIN] Creating new admin in database...");
+      logger.info("Creating new admin in database", { email: data.email, role: data.role });
       const newAdmin = await prisma.admin.create({
         data: {
           email,
@@ -112,37 +109,32 @@ export class AdminService {
         },
       };
     } catch (error) {
-      console.error("❌ [ADMIN] Registration failed:", {
-        email: data.email,
-        error: error instanceof Error ? error.message : "Unknown error",
-        timestamp: new Date().toISOString(),
-      });
+      logAuthEvent('Admin Registration Failed', data.email, false, undefined, undefined,
+        error instanceof Error ? error.message : "Unknown error");
       throw error;
     }
   }
 
   async login(data: AdminLoginData) {
-    console.log("🔐 [ADMIN] Login attempt:", {
-      email: data.email,
-      timestamp: new Date().toISOString(),
-    });
+    logAuthEvent('Admin Login Attempt', data.email, true, undefined, undefined);
 
     try {
       const { email, password } = data;
 
       // Find admin by email
-      console.log("🔍 [ADMIN] Looking up admin by email...");
+      logger.debug("Looking up admin by email", { email: data.email });
       const admin = await prisma.admin.findUnique({
         where: { email }
       });
 
       if (!admin) {
-        console.log("⚠️ [ADMIN] Admin not found:", email);
+        logAuthEvent('Admin Login Failed - Not Found', email, false, undefined, undefined, "Admin not found");
         throw new Error("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
       }
 
-      console.log("✅ [ADMIN] Admin found:", {
+      logger.debug("Admin found for login", {
         adminId: admin.id,
+        email: admin.email,
         role: admin.role,
         isActive: admin.isActive,
       });
@@ -192,11 +184,8 @@ export class AdminService {
         },
       };
     } catch (error) {
-      console.error("❌ [ADMIN] Login failed:", {
-        email: data.email,
-        error: error instanceof Error ? error.message : "Unknown error",
-        timestamp: new Date().toISOString(),
-      });
+      logAuthEvent('Admin Login Failed', data.email, false, undefined, undefined,
+        error instanceof Error ? error.message : "Unknown error");
       throw error;
     }
   }
@@ -207,7 +196,7 @@ export class AdminService {
 
     try {
       if (!refreshToken) {
-        console.log("⚠️ [ADMIN] Refresh token missing");
+        logger.warn("Admin refresh token missing");
         throw new Error("Refresh token is required");
       }
 
@@ -217,7 +206,7 @@ export class AdminService {
       console.log("✅ [ADMIN] Token verification result:", payload ? "Success" : "Failed");
       
       if (!payload) {
-        console.log("⚠️ [ADMIN] Invalid refresh token");
+        logger.warn("Invalid admin refresh token");
         throw new Error("Invalid refresh token");
       }
 
