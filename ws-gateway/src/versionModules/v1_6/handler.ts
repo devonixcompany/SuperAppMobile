@@ -377,6 +377,9 @@ export async function handleHeartbeat(
       return response;
     }
 
+    // สร้างค่า timestamp ที่จะส่งให้ backend
+    const heartbeatTimestamp = new Date().toISOString();
+
     // Set a timeout for backend call to avoid hanging
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
@@ -387,7 +390,7 @@ export async function handleHeartbeat(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        timestamp: new Date().toISOString()
+        lastSeen: heartbeatTimestamp
       }),
       signal: controller.signal
     });

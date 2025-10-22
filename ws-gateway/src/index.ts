@@ -411,7 +411,7 @@ server.listen(PORT, async () => {
   console.log(`WebSocket endpoint: ws://localhost:${PORT}/ocpp/{chargePointId}`);
   console.log('Session monitoring started');
     // ✅ Step 3.1: เคลียร์ cache ก่อนเริ่มต้นใหม่
-  chargePointCache.clear();
+  // chargePointCache.clear();
   console.log('🧹 Cleared old cache before initialization');
   // Step 3: เริ่มต้นแคชด้วยข้อมูล charge point
   await initializeCache();
