@@ -128,6 +128,59 @@ cd ../../gateway/api-gateway && bun install
 
 ## 🧪 CSMS Testing
 
+### Comprehensive Test Suite
+
+Run complete architecture and compliance tests:
+
+```bash
+# Test 12 Factor compliance + Architecture + OCPP implementation
+./tests/test-csms-ocpp-architecture.sh
+
+# Start services for integration testing
+docker-compose -f docker-compose.csms.yml up -d
+
+# Wait for services to be ready
+sleep 30
+
+# Run end-to-end integration tests
+./tests/test-e2e-integration.sh
+
+# Run REAL OCPP integration test (simulates actual charging station)
+./tests/test-ocpp-real-integration.sh
+```
+
+### 🔌 Real OCPP Integration Test
+
+**NEW:** Complete end-to-end test with actual OCPP simulator:
+
+```bash
+# Start services first
+npm run dev
+
+# Run real OCPP integration test
+npm run test:ocpp
+```
+
+This test simulates a **real charging station** and verifies:
+- ✅ OCPP WebSocket connection to gateway
+- ✅ BootNotification (station registration)
+- ✅ Authorize (RFID card validation)  
+- ✅ StartTransaction (charging begins)
+- ✅ Heartbeat (connection keep-alive)
+- ✅ StopTransaction (charging ends)
+- ✅ Billing calculation
+- ✅ Integration with all CSMS services
+
+**Test workflow:**
+1. Registers test station in CSMS
+2. Registers test driver and RFID card
+3. Starts OCPP simulator (simulates charge point)
+4. Sends OCPP protocol messages via WebSocket
+5. Verifies messages received by OCPP Gateway
+6. Checks charging session created in Billing Service
+7. Validates monitoring data
+8. Verifies billing calculation
+
 ### OCPP Simulator Test
 
 ```bash
@@ -152,6 +205,13 @@ curl http://localhost:3004/health  # Monitoring Service
 curl http://localhost:4000/health  # OCPP Gateway
 curl http://localhost:4001/health  # Charge Point Service
 ```
+
+### 12 Factor App Compliance
+
+Our CSMS architecture fully complies with [12 Factor App](https://12factor.net/) principles. See detailed compliance documentation:
+
+- [12 Factor App Compliance Guide](docs/12-factor-app-compliance.md)
+- [Testing Guide](docs/testing-guide.md)
 
 ## 🗄️ CSMS Database Schema
 

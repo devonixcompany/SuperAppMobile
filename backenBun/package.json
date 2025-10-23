@@ -13,6 +13,10 @@
     "clean": "docker-compose -f docker-compose.csms.yml down -v --remove-orphans",
     "install:services": "cd services/station-service && bun install && cd ../driver-service && bun install && cd ../billing-service && bun install && cd ../monitoring-service && bun install && cd ../charge-point && bun install && cd ../ocpp-gateway && bun install && cd ../../gateway/api-gateway && bun install",
     "install:legacy": "cd services/user-service && bun install && cd ../auth-service && bun install && cd ../product-service && bun install && cd ../order-service && bun install && cd ../charge-point && bun install && cd ../ocpp-gateway && bun install && cd ../../gateway/api-gateway && bun install",
+    "test:architecture": "./tests/test-csms-ocpp-architecture.sh",
+    "test:integration": "./tests/test-e2e-integration.sh",
+    "test:ocpp": "./tests/test-ocpp-real-integration.sh",
+    "test:all": "npm run test:architecture && npm run start && sleep 30 && npm run test:integration",
     "test:simulator": "bun run tools/ocpp-simulator.ts CP001 1.6",
     "health:check": "curl -s http://localhost:3000/services | jq '.data.services'"
   },
