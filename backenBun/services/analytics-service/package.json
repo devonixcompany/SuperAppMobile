@@ -1,0 +1,32 @@
+{
+  "name": "analytics-service",
+  "version": "1.0.0",
+  "description": "Analytics Service for Mobile App and CSMS",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir=dist",
+    "start": "bun run dist/index.js",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "elysia": "^1.1.0",
+    "@elysiajs/cors": "^1.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node-cron": "^3.0.11",
+    "bun-types": "latest"
+  },
+  "keywords": [
+    "analytics",
+    "reporting",
+    "metrics",
+    "dashboard",
+    "mobile"
+  ],
+  "author": "Devonix Company",
+  "license": "MIT"
+}

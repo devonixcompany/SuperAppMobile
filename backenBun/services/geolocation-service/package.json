@@ -1,0 +1,36 @@
+{
+  "name": "geolocation-service",
+  "version": "1.0.0",
+  "description": "Geolocation Service for CSMS - Location-based features",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir=dist",
+    "start": "bun run dist/index.js",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "elysia": "^1.1.0",
+    "@elysiajs/cors": "^1.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "turf": "@turf/turf": "^6.5.0",
+    "@turf/geojson": "^7.1.0"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node-cron": "^3.0.11",
+    "@types/turf": "^6.5.0",
+    "@types/turf": "^6.5.0",
+    "bun-types": "latest"
+  },
+  "keywords": [
+    "geolocation",
+    "location",
+    "maps",
+    "geospatial",
+    "csms"
+  ],
+  "author": "Devonix Company",
+  "license": "MIT"
+}

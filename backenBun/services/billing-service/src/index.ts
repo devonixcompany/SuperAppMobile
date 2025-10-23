@@ -1,8 +1,32 @@
 import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
-import { Logger } from '../../../shared/utils/logger.js';
 
-const logger = new Logger('BillingService');
+// Simple logger for now
+class SimpleLogger {
+  constructor(private serviceName: string) {}
+
+  info(message: string, meta?: any) {
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      service: this.serviceName,
+      message,
+      ...(meta && { meta })
+    }));
+  }
+
+  error(message: string, error?: any) {
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'ERROR',
+      service: this.serviceName,
+      message,
+      ...(error && { error })
+    }));
+  }
+}
+
+const logger = new SimpleLogger('BillingService');
 
 const app = new Elysia()
   .use(cors())

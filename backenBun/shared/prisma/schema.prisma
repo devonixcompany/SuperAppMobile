@@ -199,3 +199,449 @@ enum TransactionStatus {
   COMPLETED
   FAILED
 }
+
+// ==================== DRIVER SERVICE MODELS ====================
+
+model Driver {
+  id                String           @id @default(cuid())
+  userId            String           @unique @map("user_id")
+  name              String
+  email             String
+  phone             String?
+  licenseNumber     String?          @map("license_number")
+  membershipLevel   DriverMembership @default(BASIC) @map("membership_level")
+  creditBalance     Decimal          @default(0) @map("credit_balance")
+  status            DriverStatus     @default(ACTIVE)
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  rfidCards         RfidCard[]
+  chargingSessions  ChargingSession[]
+  bookings          Booking[]
+  payments          Payment[]
+
+  @@map("drivers")
+}
+
+model RfidCard {
+  id            String        @id @default(cuid())
+  driverId      String        @map("driver_id")
+  cardId        String        @unique
+  cardType      RfidCardType  @default(PASSIVE)
+  status        RfidStatus    @default(ACTIVE)
+  issuedAt      DateTime      @default(now()) @map("issued_at")
+  expiresAt     DateTime      @map("expires_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  driver         Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@map("rfid_cards")
+}
+
+enum DriverMembership {
+  BASIC
+  PREMIUM
+  ENTERPRISE
+}
+
+enum DriverStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  BLACKLISTED
+}
+
+enum RfidCardType {
+  PASSIVE
+  ACTIVE
+  HYBRID
+}
+
+enum RfidStatus {
+  ACTIVE
+  INACTIVE
+  LOST
+  STOLEN
+  DAMAGED
+  EXPIRED
+}
+
+// ==================== BILLING SERVICE MODELS ====================
+
+model ChargingSession {
+  id              String                @id @default(cuid())
+  sessionId       String                @unique
+  driverId        String                @map("driver_id")
+  stationId       String                @map("station_id")
+  chargePointId   String                @map("charge_point_id")
+  connectorId     Int                   @map("connector_id")
+  transactionId   Int?                  @map("transaction_id")
+  startTime       DateTime              @map("start_time")
+  endTime         DateTime?             @map("end_time")
+  startMeterValue Int                   @map("start_meter_value")
+  endMeterValue   Int?                  @map("end_meter_value")
+  energyConsumed  Float?                @map("energy_consumed") // kWh
+  duration        Int?                  // minutes
+  cost            Decimal               @default(0)
+  currency        String                @default("THB")
+  status          ChargingSessionStatus @default(ACTIVE)
+  paymentStatus   PaymentStatus         @default(PENDING)
+  metadata        Json?
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+
+  // Relations
+  driver          Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  payments        Payment[]
+  invoice         Invoice?
+
+  @@map("charging_sessions")
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  invoiceNumber   String        @unique @map("invoice_number")
+  sessionId       String?       @unique @map("session_id")
+  driverId        String        @map("driver_id")
+  items           InvoiceItem[]
+  subtotal        Decimal       @map("sub_total")
+  taxAmount       Decimal       @map("tax_amount")
+  totalAmount     Decimal       @map("total_amount")
+  currency        String        @default("THB")
+  status          InvoiceStatus @default(DRAFT)
+  issuedAt        DateTime      @default(now()) @map("issued_at")
+  dueAt           DateTime      @map("due_at")
+  paidAt          DateTime?     @map("paid_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  chargingSession ChargingSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  payments        Payment[]
+
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String      @id @default(cuid())
+  invoiceId   String      @map("invoice_id")
+  description String
+  quantity    Decimal
+  unitPrice   Decimal     @map("unit_price")
+  amount      Decimal
+  itemType    ItemType    @default(SERVICE)
+
+  // Relations
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_items")
+}
+
+model PricingTariff {
+  id            String        @id @default(cuid())
+  name          String
+  description   String?
+  pricePerKwh   Decimal       @map("price_per_kwh")
+  currency      String        @default("THB")
+  membershipRequired PricingTier? @map("membership_required")
+  timeOfDayRestriction Json?   @map("time_of_day_restriction")
+  isActive      Boolean       @default(true) @map("is_active")
+  validFrom     DateTime      @default(now()) @map("valid_from")
+  validUntil    DateTime?     @map("valid_until")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@map("pricing_tariffs")
+}
+
+enum ChargingSessionStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  FAILED
+  SUSPENDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+}
+
+enum ItemType {
+  SERVICE
+  ENERGY
+  PARKING
+  PENALTY
+  DISCOUNT
+}
+
+enum PricingTier {
+  BASIC
+  PREMIUM
+  ENTERPRISE
+  ALL
+}
+
+// ==================== PAYMENT SERVICE MODELS ====================
+
+model Payment {
+  id                String            @id @default(cuid())
+  paymentId         String            @unique @map("payment_id")
+  driverId          String            @map("driver_id")
+  sessionId         String?           @map("session_id")
+  invoiceId         String?           @map("invoice_id")
+  amount            Decimal
+  currency          String            @default("THB")
+  paymentMethod     PaymentMethod     @map("payment_method")
+  provider          PaymentProvider
+  providerRef       String?           @map("provider_ref")
+  status            PaymentStatus
+  failureCode       String?           @map("failure_code")
+  failureMessage    String?           @map("failure_message")
+  metadata          Json?
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  completedAt       DateTime?         @map("completed_at")
+
+  // Relations
+  driver            Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  chargingSession   ChargingSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  invoice           Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@map("payments")
+}
+
+model PaymentMethod {
+  id                String              @id @default(cuid())
+  driverId          String              @map("driver_id")
+  methodType        PaymentMethodType
+  provider          PaymentProvider
+  providerToken     String?             @map("provider_token")
+  last4             String?             // Last 4 digits for cards
+  brand             String?             // Visa, Mastercard, etc.
+  expiryMonth       Int?
+  expiryYear        Int?
+  isDefault         Boolean             @default(false) @map("is_default")
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  @@map("payment_methods")
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  INTERNET_BANKING
+  QR_CODE
+  MOBILE_BANKING
+  CRYPTOCURRENCY
+  WALLET_BALANCE
+}
+
+enum PaymentProvider {
+  OMISE
+  STRIPE
+  PAYPAL
+  BANK_TRANSFER
+  PROMPTPAY
+  TRUEMONEY
+  RABBITLINEPAY
+  ALIPAY
+  WECHAT_PAY
+}
+
+enum PaymentMethodType {
+  CARD
+  BANK_ACCOUNT
+  WALLET
+  QR_CODE
+  CRYPTOCURRENCY
+}
+
+// ==================== BOOKING SERVICE MODELS ====================
+
+model Booking {
+  id                String          @id @default(cuid())
+  bookingId         String          @unique @map("booking_id")
+  driverId          String          @map("driver_id")
+  stationId         String          @map("station_id")
+  connectorId       Int             @map("connector_id")
+  startTime         DateTime        @map("start_time")
+  endTime           DateTime        @map("end_time")
+  duration          Int             // minutes
+  status            BookingStatus   @default(RESERVED)
+  depositAmount     Decimal?        @map("deposit_amount")
+  currency          String          @default("THB")
+  metadata          Json?
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  cancelledAt       DateTime?       @map("cancelled_at")
+  confirmedAt       DateTime?       @map("confirmed_at")
+  completedAt       DateTime?       @map("completed_at")
+
+  // Relations
+  driver            Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  RESERVED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  EXPIRED
+  NO_SHOW
+}
+
+// ==================== NOTIFICATION SERVICE MODELS ====================
+
+model NotificationTemplate {
+  id                String              @id @default(cuid())
+  name              String              @unique
+  title             String
+  body              String
+  icon              String?             @default("default")
+  priority          NotificationPriority @default(NORMAL)
+  channels          NotificationChannel[]
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  @@map("notification_templates")
+}
+
+model DeviceToken {
+  id                String            @id @default(cuid())
+  driverId          String            @map("driver_id")
+  token             String            @unique
+  platform          DevicePlatform
+  deviceInfo        Json?             @map("device_info")
+  isActive          Boolean           @default(true) @map("is_active")
+  lastUsedAt        DateTime?         @map("last_used_at")
+  registeredAt      DateTime          @default(now()) @map("registered_at")
+  expiresAt         DateTime?         @map("expires_at")
+
+  @@map("device_tokens")
+}
+
+model NotificationLog {
+  id                String                @id @default(cuid())
+  driverId          String                @map("driver_id")
+  templateId        String?               @map("template_id")
+  title             String
+  body              String
+  data              Json?
+  channels          NotificationChannel[]
+  status            NotificationStatus     @default(PENDING)
+  sentAt            DateTime?             @map("sent_at")
+  readAt            DateTime?             @map("read_at")
+  metadata          Json?
+  createdAt         DateTime              @default(now()) @map("created_at")
+
+  @@map("notification_logs")
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+  WEB
+}
+
+enum NotificationChannel {
+  PUSH_NOTIFICATION
+  SMS
+  EMAIL
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+// ==================== ANALYTICS SERVICE MODELS ====================
+
+model AnalyticsEvent {
+  id                String            @id @default(cuid())
+  eventId           String            @unique @map("event_id")
+  eventType         AnalyticsEventType
+  userId            String?           @map("user_id")
+  sessionId         String?           @map("session_id")
+  stationId         String?           @map("station_id")
+  driverId          String?           @map("driver_id")
+  eventName         String
+  eventData         Json?             @map("event_data")
+  timestamp         DateTime          @default(now())
+  source            String            @default("api") // api, mobile, webhook
+  processedAt       DateTime?         @map("processed_at")
+
+  @@map("analytics_events")
+}
+
+model AggregatedMetric {
+  id                String            @id @default(cuid())
+  metricName        String            @map("metric_name")
+  metricType        MetricType
+  timeWindow        TimeWindow
+  timeValue         DateTime          @map("time_value")
+  value             Decimal
+  dimensions        Json?             // Additional dimensions like station_id, user_type, etc.
+  createdAt         DateTime          @default(now()) @map("created_at")
+
+  @@map("aggregated_metrics")
+}
+
+enum AnalyticsEventType {
+  USER_ACTION
+  CHARGING_EVENT
+  PAYMENT_EVENT
+  STATION_EVENT
+  SYSTEM_EVENT
+  BUSINESS_EVENT
+}
+
+enum MetricType {
+  COUNTER
+  GAUGE
+  HISTOGRAM
+  TIMER
+}
+
+enum TimeWindow {
+  MINUTE
+  HOUR
+  DAY
+  WEEK
+  MONTH
+  QUARTER
+  YEAR
+}

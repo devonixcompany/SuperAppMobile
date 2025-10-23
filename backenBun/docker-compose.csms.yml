@@ -9,12 +9,26 @@ services:
     environment:
       - NODE_ENV=development
       - STATION_SERVICE_URL=http://station-service:3001
+      - DRIVER_SERVICE_URL=http://driver-service:3002
       - BILLING_SERVICE_URL=http://billing-service:3003
+      - MONITORING_SERVICE_URL=http://monitoring-service:3004
+      - PAYMENT_SERVICE_URL=http://payment-service:3005
+      - NOTIFICATION_SERVICE_URL=http://notification-service:3006
+      - ANALYTICS_SERVICE_URL=http://analytics-service:3007
+      - BOOKING_SERVICE_URL=http://booking-service:3008
       - OCPP_GATEWAY_URL=http://ocpp-gateway:4000
+      - CHARGE_POINT_SERVICE_URL=http://charge-point:4001
     depends_on:
       - station-service
+      - driver-service
       - billing-service
+      - monitoring-service
+      - payment-service
+      - notification-service
+      - analytics-service
+      - booking-service
       - ocpp-gateway
+      - charge-point
     networks:
       - superapp-network
 
@@ -52,6 +66,114 @@ services:
     networks:
       - superapp-network
 
+  # Driver Management Service
+  driver-service:
+    build:
+      context: .
+      dockerfile: ./services/driver-service/Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/csms_drivers
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # Monitoring Service
+  monitoring-service:
+    build:
+      context: .
+      dockerfile: ./services/monitoring-service/Dockerfile
+    ports:
+      - "3004:3004"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/csms_monitoring
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # Payment Service (Omise Integration)
+  payment-service:
+    build:
+      context: .
+      dockerfile: ./services/payment-service/Dockerfile
+    ports:
+      - "3005:3005"
+    environment:
+      - NODE_ENV=development
+      - OMISE_PUBLIC_KEY=${OMISE_PUBLIC_KEY:-pkey_test_5xq8s2o2p2x0j8g8x2x}
+      - OMISE_SECRET_KEY=${OMISE_SECRET_KEY:-skey_test_5xq8s2o2p2x0j8g8x2x}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/csms_payments
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # Notification Service
+  notification-service:
+    build:
+      context: .
+      dockerfile: ./services/notification-service/Dockerfile
+    ports:
+      - "3006:3006"
+    environment:
+      - NODE_ENV=development
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-superapp-csms}
+      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL:-firebase-adminsdk@test.iam.gserviceaccount.com}
+      - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY:-"-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...\n-----END PRIVATE KEY-----\n"}
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/csms_notifications
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # Analytics Service
+  analytics-service:
+    build:
+      context: .
+      dockerfile: ./services/analytics-service/Dockerfile
+    ports:
+      - "3007:3007"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/csms_analytics
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
+  # Booking Service
+  booking-service:
+    build:
+      context: .
+      dockerfile: ./services/booking-service/Dockerfile
+    ports:
+      - "3008:3008"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/csms_bookings
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - superapp-network
+
   # OCPP Gateway Service
   ocpp-gateway:
     build:
@@ -63,6 +185,23 @@ services:
       - NODE_ENV=development
       - REDIS_URL=redis://redis:6379
     depends_on:
+      - redis
+    networks:
+      - superapp-network
+
+  # Charge Point Service
+  charge-point:
+    build:
+      context: .
+      dockerfile: ./services/charge-point/Dockerfile
+    ports:
+      - "4001:4001"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/csms_charge_points
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
       - redis
     networks:
       - superapp-network

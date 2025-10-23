@@ -1,0 +1,31 @@
+{
+  "name": "booking-service",
+  "version": "1.0.0",
+  "description": "Charging Station Booking Service",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir=dist",
+    "start": "bun run dist/index.js",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "elysia": "^1.1.0",
+    "@elysiajs/cors": "^1.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node-cron": "^3.0.11",
+    "bun-types": "latest"
+  },
+  "keywords": [
+    "booking",
+    "reservation",
+    "charging",
+    "csms"
+  ],
+  "author": "Devonix Company",
+  "license": "MIT"
+}
