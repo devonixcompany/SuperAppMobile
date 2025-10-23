@@ -7,6 +7,140 @@ import { sessionMonitor } from './handlers/sessionMonitor';
 import { subprotocolToVersion } from './handlers/versionNegotiation';
 import { UserConnectionManager } from './services/UserConnectionManager';
 
+// ฟังก์ชันจัดการ RemoteStartTransaction
+async function handleRemoteStartTransaction(chargePoint: any, data: any, userWs: WebSocket) {
+  try {
+    console.log(`🔌 Starting transaction for charge point ${chargePoint.chargePointId}:`, data);
+    
+    // ตรวจสอบสถานะ WebSocket ของ charge point
+    if (!chargePoint.ws || chargePoint.ws.readyState !== WebSocket.OPEN) {
+      console.error(`❌ Charge Point ${chargePoint.chargePointId} WebSocket is not open. State: ${chargePoint.ws?.readyState}`);
+      
+      userWs.send(JSON.stringify({
+        type: 'RemoteStartTransactionResponse',
+        timestamp: new Date().toISOString(),
+        data: {
+          status: 'failed',
+          message: `เครื่องชาร์จ ${chargePoint.chargePointId} ไม่ได้เชื่อมต่อกับระบบ`,
+          code: 'CHARGE_POINT_OFFLINE',
+          connectorId: data.connectorId || 1,
+          idTag: data.idTag || 'FF88888801'
+        }
+      }));
+      return;
+    }
+    
+    // สร้างคำสั่ง RemoteStartTransaction ตามมาตรฐาน OCPP 1.6 (CALL message type 2)
+    const messageId = `remote-start-${Date.now()}`;
+    const connectorId = data.connectorId || 1;
+    const remoteStartPayload: Record<string, any> = {
+      idTag: data.idTag || 'FF88888801'
+    };
+    if (connectorId) {
+      remoteStartPayload.connectorId = connectorId;
+    }
+    if (data.chargingProfile) {
+      remoteStartPayload.chargingProfile = data.chargingProfile;
+    }
+    const remoteStartRequest = [
+      2, // CALL message type
+      messageId,
+      'RemoteStartTransaction',
+      remoteStartPayload
+    ];
+    
+    console.log(`📤 Sending to charge point ${chargePoint.chargePointId}:`, remoteStartRequest);
+    
+    // ส่งข้อความไปยัง charge point
+    chargePoint.ws.send(JSON.stringify(remoteStartRequest));
+    
+    console.log(`✅ Message sent successfully to charge point ${chargePoint.chargePointId}`);
+    
+    // ส่งการตอบกลับไปยัง user เพื่อยืนยันว่าคำสั่งถูกส่งไปแล้ว
+    userWs.send(JSON.stringify({
+      type: 'RemoteStartTransactionResponse',
+      timestamp: new Date().toISOString(),
+      data: {
+        status: 'sent',
+        message: 'คำสั่งเริ่มชาร์จถูกส่งไปยัง Charge Point แล้ว',
+        messageId,
+        connectorId: remoteStartPayload.connectorId,
+        idTag: remoteStartPayload.idTag
+      }
+    }));
+    
+  } catch (error) {
+    console.error('Error handling RemoteStartTransaction:', error);
+    userWs.send(JSON.stringify({
+      type: 'error',
+      timestamp: new Date().toISOString(),
+      data: {
+        message: 'Failed to start transaction',
+        code: 'REMOTE_START_ERROR',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }));
+  }
+}
+
+// ฟังก์ชันจัดการ RemoteStopTransaction
+async function handleRemoteStopTransaction(chargePoint: any, data: any, userWs: WebSocket) {
+  try {
+    console.log(`🛑 Stopping transaction for charge point ${chargePoint.chargePointId}:`, data);
+    
+    if (!data?.transactionId) {
+      userWs.send(JSON.stringify({
+        type: 'RemoteStopTransactionResponse',
+        timestamp: new Date().toISOString(),
+        data: {
+          status: 'failed',
+          message: 'ต้องระบุ transactionId สำหรับ RemoteStopTransaction',
+          code: 'INVALID_REMOTE_STOP_REQUEST'
+        }
+      }));
+      return;
+    }
+    
+    // ส่งคำสั่ง RemoteStopTransaction ไปยัง charge point (CALL message type 2)
+    const messageId = `remote-stop-${Date.now()}`;
+    const remoteStopRequest = [
+      2,
+      messageId,
+      'RemoteStopTransaction',
+      {
+        transactionId: data.transactionId
+      }
+    ];
+    
+    // ส่งข้อความไปยัง charge point
+    chargePoint.ws.send(JSON.stringify(remoteStopRequest));
+    
+    // ส่งการตอบกลับไปยัง user
+    userWs.send(JSON.stringify({
+      type: 'RemoteStopTransactionResponse',
+      timestamp: new Date().toISOString(),
+      data: {
+        status: 'sent',
+        message: 'คำสั่งหยุดชาร์จถูกส่งไปยัง Charge Point แล้ว',
+        messageId,
+        transactionId: data.transactionId
+      }
+    }));
+    
+  } catch (error) {
+    console.error('Error handling RemoteStopTransaction:', error);
+    userWs.send(JSON.stringify({
+      type: 'error',
+      timestamp: new Date().toISOString(),
+      data: {
+        message: 'Failed to stop transaction',
+        code: 'REMOTE_STOP_ERROR',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }));
+  }
+}
+
 // แคชสำหรับเก็บข้อมูล charge point
 // Cache for storing charge point data
 const chargePointCache = new Map<string, any>();
@@ -122,6 +256,59 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
     
     // เพิ่ม connection ลงใน UserConnectionManager
     userConnectionManager.addConnection(ws, chargePointId, connectorId);
+    console.log("chargePointchargePointchargePointchargePointchargePointchargePointchargePointchargePoint",chargePoint)
+    
+    // จัดการข้อความที่เข้ามาจาก user WebSocket
+    ws.on('message', async (data: Buffer) => {
+      try {
+        const message = JSON.parse(data.toString());
+        console.log(`📨 Received message from user ${chargePointId}/${connectorId}:`, message);
+        
+        // ตรวจสอบว่า charge point ยังเชื่อมต่ออยู่หรือไม่
+        const currentChargePoint = gatewaySessionManager.getChargePoint(chargePointId);
+        if (!currentChargePoint) {
+          ws.send(JSON.stringify({
+            type: 'error',
+            timestamp: new Date().toISOString(),
+            data: {
+              message: 'Charge point is not connected',
+              code: 'CHARGE_POINT_OFFLINE'
+            }
+          }));
+          return;
+        }
+        
+        // จัดการข้อความตามประเภท
+        switch (message.type) {
+          case 'RemoteStartTransaction':
+            await handleRemoteStartTransaction(currentChargePoint, message.data, ws);
+            break;
+          case 'RemoteStopTransaction':
+            await handleRemoteStopTransaction(currentChargePoint, message.data, ws);
+            break;
+          default:
+            console.log(`Unknown message type: ${message.type}`);
+            ws.send(JSON.stringify({
+              type: 'error',
+              timestamp: new Date().toISOString(),
+              data: {
+                message: `Unknown message type: ${message.type}`,
+                code: 'UNKNOWN_MESSAGE_TYPE'
+              }
+            }));
+        }
+      } catch (error) {
+        console.error('Error handling user message:', error);
+        ws.send(JSON.stringify({
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          data: {
+            message: 'Failed to process message',
+            code: 'MESSAGE_PROCESSING_ERROR'
+          }
+        }));
+      }
+    });
     
     // ส่งข้อมูลสถานะเริ่มต้น
     const initialStatus = {
@@ -130,7 +317,7 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
       data: {
         chargePointId: chargePointId,
         connectorId: parseInt(connectorId),
-        status: chargePoint ? 'AVAILABLE' : 'OFFLINE', // ถ้ามี charge point ที่เชื่อมต่ออยู่ให้แสดง AVAILABLE ไม่งั้นแสดง OFFLINE
+        status: chargePoint ? 'Available' : 'OFFLINE', // ถ้ามี charge point ที่เชื่อมต่ออยู่ให้แสดง AVAILABLE ไม่งั้นแสดง OFFLINE
         isOnline: !!chargePoint, // true ถ้า charge point เชื่อมต่ออยู่
         message: chargePoint ? 'เชื่อมต่อสำเร็จ - Charge Point พร้อมใช้งาน' : 'เชื่อมต่อสำเร็จ - Charge Point ออฟไลน์',
         chargePointInfo: cachedChargePoint ? {
@@ -139,7 +326,7 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
         } : undefined
       }
     };
-    
+    console.log("initialStatusinitialStatusinitialStatusinitialStatusinitialStatusinitialStatusinitialStatusinitialStatusinitialStatus",initialStatus)
     ws.send(JSON.stringify(initialStatus));
     
   } catch (error) {
@@ -548,7 +735,7 @@ server.listen(PORT, async () => {
   console.log(`Legacy OCPP endpoint: ws://localhost:${PORT}/{chargePointId} (backward compatibility)`);
   console.log('Session monitoring started');
     // ✅ Step 3.1: เคลียร์ cache ก่อนเริ่มต้นใหม่
-  // chargePointCache.clear();
+   chargePointCache.clear();
   console.log('🧹 Cleared old cache before initialization');
   // Step 3: เริ่มต้นแคชด้วยข้อมูล charge point
   await initializeCache();

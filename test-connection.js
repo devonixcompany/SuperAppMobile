@@ -1,6 +1,6 @@
 const WebSocket = require('ws');
 
-const chargePointId = 'CP005';
+const chargePointId = 'EVBANGNA-CP001';
 const wsUrl = `ws://localhost:8081/ocpp/${chargePointId}`;
 
 console.log('Connecting to:', wsUrl);
@@ -30,6 +30,51 @@ ws.on('open', () => {
 ws.on('message', (data) => {
   const message = JSON.parse(data.toString());
   console.log('📥 Received message:', JSON.stringify(message));
+  
+  // ตรวจสอบว่าเป็น OCPP array format (StartTransaction) หรือไม่
+  if (message[0] === 2 && message[2] === 'StartTransaction') {
+    const messageId = message[1];
+    const params = message[3];
+    console.log('🔌 Received StartTransaction request:', params);
+    
+    // จำลองการเริ่มธุรกรรมการชาร์จ
+    const transactionId = Math.floor(Math.random() * 1000000);
+    
+    // ส่ง StartTransactionResponse ในรูปแบบ CALLRESULT ที่ถูกต้อง
+    const startTransactionResponse = [
+      3, // CALLRESULT
+      messageId, // ใช้ messageId เดียวกับที่ได้รับ
+      {
+        "transactionId": transactionId,
+        "idTagInfo": {
+          "status": "Accepted"
+        }
+      }
+    ];
+    
+    console.log('📤 Sending StartTransactionResponse:', JSON.stringify(startTransactionResponse));
+    ws.send(JSON.stringify(startTransactionResponse));
+    
+    // จำลองการส่ง StatusNotification ว่าเริ่มชาร์จแล้ว
+    setTimeout(() => {
+      const statusNotification = [
+        2,
+        `status-${Date.now()}`,
+        "StatusNotification",
+        {
+          connectorId: params.connectorId,
+          status: "Charging",
+          errorCode: "NoError",
+          timestamp: new Date().toISOString()
+        }
+      ];
+      
+      console.log('📤 Sending StatusNotification (Charging):', JSON.stringify(statusNotification));
+      ws.send(JSON.stringify(statusNotification));
+    }, 1000);
+    
+    return;
+  }
   
   // ตรวจสอบว่าเป็น GetConfiguration request หรือไม่
   if (message[0] === 2 && message[2] === 'GetConfiguration') {

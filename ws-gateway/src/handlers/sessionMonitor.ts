@@ -75,9 +75,8 @@ export class SessionMonitor {
     // Step 1: ดึงสถิติและข้อมูล charge points ทั้งหมด
     const stats = gatewaySessionManager.getStats();
     const activeChargePoints = gatewaySessionManager.getAllChargePoints();
-console.log("cccccpcpcpcpcpcpcpcpc",activeChargePoints)
     // Step 2: แสดงสถิติการเชื่อมต่อ
-    console.log('=== Gateway Session Health Check ===',activeChargePoints);
+    console.log('=== Gateway Session Health Check ===');
     console.log(`Total Charge Points: ${stats.totalChargePoints}`);
     console.log(`Active Charge Points: ${stats.activeChargePoints}`);
     console.log(`Authenticated Charge Points: ${stats.authenticatedChargePoints}`);

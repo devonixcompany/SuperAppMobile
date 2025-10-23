@@ -250,7 +250,7 @@ export class ChargePointService {
           ...data,
           chargePointIdentity,
           name: `Auto-created: ${chargePointIdentity}`,
-          status: 'Available',
+          status: 'AVAILABLE',
           isPublic: true,
           isWhitelisted: true,
           connectorCount: 2, // จำนวนหัวชาร์จเริ่มต้น
@@ -298,7 +298,7 @@ export class ChargePointService {
         const newChargePointData = {
           chargePointIdentity,
           name: `Auto-created: ${chargePointIdentity}`,
-          status: 'Available',
+          status: 'AVAILABLE',
           isPublic: true,
           isWhitelisted: true,
           connectorCount: 2, // จำนวนหัวชาร์จเริ่มต้น
@@ -792,34 +792,58 @@ export class ChargePointService {
         });
       }
 
-      const normalizedDetails = (connectorDetails || [])
-        .filter(detail => Number.isInteger(detail.connectorId) && detail.connectorId > 0)
-        .map(detail => ({
-          connectorId: detail.connectorId,
-          type: detail.type,
-          maxCurrent: typeof detail.maxCurrent === 'number' ? detail.maxCurrent : undefined
-        }));
-
       const detailMap = new Map<number, { type?: string; maxCurrent?: number }>();
-      normalizedDetails.forEach(detail => {
-        detailMap.set(detail.connectorId, detail);
-      });
 
-      const maxDetailConnectorId = normalizedDetails.reduce(
-        (max, detail) => Math.max(max, detail.connectorId),
+      for (const detail of connectorDetails || []) {
+        const parsedId = Number.parseInt(String(detail.connectorId ?? ''), 10);
+        if (!Number.isInteger(parsedId) || parsedId <= 0) {
+          continue;
+        }
+
+        const rawType = (detail as any).type;
+        const sanitizedType =
+          typeof rawType === 'string' && rawType.trim()
+            ? rawType.trim()
+            : undefined;
+
+        const rawMaxCurrent = (detail as any).maxCurrent;
+        let sanitizedMaxCurrent: number | undefined;
+        if (typeof rawMaxCurrent === 'number' && Number.isFinite(rawMaxCurrent)) {
+          sanitizedMaxCurrent = rawMaxCurrent;
+        } else if (typeof rawMaxCurrent === 'string' && rawMaxCurrent.trim() !== '') {
+          const parsedCurrent = Number.parseFloat(rawMaxCurrent);
+          sanitizedMaxCurrent = Number.isFinite(parsedCurrent) ? parsedCurrent : undefined;
+        }
+
+        detailMap.set(parsedId, {
+          type: sanitizedType,
+          maxCurrent: sanitizedMaxCurrent
+        });
+      }
+
+      const maxDetailConnectorId = Array.from(detailMap.keys()).reduce(
+        (max, connectorId) => Math.max(max, connectorId),
         0
       );
-      const totalConnectors = Math.max(numberOfConnectors, maxDetailConnectorId);
 
-      if (totalConnectors === 0) {
+      const parsedConnectorCount = Number.isFinite(numberOfConnectors)
+        ? numberOfConnectors
+        : Number.parseInt(String(numberOfConnectors ?? ''), 10);
+      const safeConnectorCount = Number.isFinite(parsedConnectorCount)
+        ? Math.max(0, Math.trunc(parsedConnectorCount))
+        : 0;
+      const totalConnectors = Math.max(safeConnectorCount, maxDetailConnectorId);
+
+      if (!Number.isFinite(totalConnectors) || totalConnectors <= 0) {
         console.log(`No connectors specified for charge point ${chargePointIdentity}, skipping connector creation`);
         return [];
       }
 
+      const totalConnectorSlots = Math.trunc(totalConnectors);
       const connectors = [];
       
       // สร้างหัวชาร์จตามจำนวนที่ต้องการ (เริ่มจาก connectorId = 1)
-      for (let i = 1; i <= totalConnectors; i++) {
+      for (let i = 1; i <= totalConnectorSlots; i++) {
         const detail = detailMap.get(i);
         const rawType = typeof detail?.type === 'string' && detail.type.trim()
           ? detail.type.trim()
@@ -863,14 +887,14 @@ export class ChargePointService {
         connectors.push(connector);
       }
 
-      if (chargePoint.connectorCount !== totalConnectors) {
+      if (chargePoint.connectorCount !== totalConnectorSlots) {
         await this.prisma.chargePoint.update({
           where: { id: chargePoint.id },
-          data: { connectorCount: totalConnectors }
+          data: { connectorCount: totalConnectorSlots }
         });
       }
 
-      console.log(`Created/updated ${totalConnectors} connectors for charge point ${chargePointIdentity}`);
+      console.log(`Created/updated ${totalConnectorSlots} connectors for charge point ${chargePointIdentity}`);
       return connectors;
     } catch (error: any) {
       console.error('Error creating connectors:', error);
