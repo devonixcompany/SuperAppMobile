@@ -153,11 +153,12 @@ test_charging_session() {
 
     # Step 6: Complete charging session
     print_info "Step 6: Completing charging session..."
+    END_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     COMPLETE_RESPONSE=$(curl -s -X PUT "http://localhost:3003/charging-sessions/$SESSION_ID/complete" \
         -H "Content-Type: application/json" \
         -d '{
             "endMeter": 5000,
-            "endTime": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
+            "endTime": "'"$END_TIME"'"
         }' 2>&1) || print_warning "Session completion endpoint may not be fully implemented"
     
     if echo "$COMPLETE_RESPONSE" | grep -q "completed\|invoice\|success"; then
