@@ -23,6 +23,9 @@ npm run test:architecture
 # Run integration tests (services must be running)
 npm run test:integration
 
+# Run REAL OCPP integration test (simulates charging station)
+npm run test:ocpp
+
 # Run all tests (starts services automatically)
 npm run test:all
 
@@ -117,6 +120,9 @@ sleep 30
 
 # 3. Run integration tests
 ./tests/test-e2e-integration.sh
+
+# 4. Run REAL OCPP integration test
+./tests/test-ocpp-real-integration.sh
 ```
 
 **What it tests:**
@@ -124,6 +130,15 @@ sleep 30
 - ✅ OCPP WebSocket communication
 - ✅ Microservices integration
 - ✅ 12 Factor principles in practice
+
+**NEW - Real OCPP Integration Test:**
+- ✅ Actual OCPP simulator running
+- ✅ WebSocket connection to OCPP Gateway
+- ✅ BootNotification, Authorize, StartTransaction
+- ✅ Heartbeat, StopTransaction messages
+- ✅ Charging session in Billing Service
+- ✅ Monitoring data collection
+- ✅ Billing calculation verification
 
 ### ✅ OCPP Protocol Testing
 

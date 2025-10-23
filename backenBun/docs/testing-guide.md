@@ -167,6 +167,65 @@ sleep 30
 
 ## ⚡ OCPP Protocol Testing
 
+### Real OCPP Integration Test (NEW)
+
+The `test-ocpp-real-integration.sh` script performs **actual OCPP protocol testing** with a running simulator:
+
+```bash
+# Start CSMS services
+docker compose -f docker-compose.csms.yml up -d
+
+# Wait for services
+sleep 30
+
+# Run real OCPP integration test
+./tests/test-ocpp-real-integration.sh
+
+# Or use npm
+npm run test:ocpp
+```
+
+**What this test does:**
+
+1. **Verifies OCPP Gateway** is running and ready
+2. **Registers test station** in Station Management Service
+3. **Registers test driver** and RFID card in Driver Service
+4. **Starts OCPP simulator** in background (simulates charge point)
+5. **Sends OCPP messages** via WebSocket:
+   - BootNotification
+   - Authorize (RFID)
+   - StartTransaction
+   - Heartbeat
+   - StopTransaction
+6. **Verifies messages received** by OCPP Gateway
+7. **Checks charging session** created in Billing Service
+8. **Validates monitoring data** in Monitoring Service
+9. **Verifies billing calculation** works correctly
+
+**Test output example:**
+```
+========================================
+Step 4: Start OCPP Simulator (Charging Station)
+========================================
+
+ℹ️  Starting OCPP simulator for charge point: TEST-OCPP-CP001
+ℹ️  OCPP Version: 1.6
+ℹ️  WebSocket URL: ws://localhost:4000/ocpp
+ℹ️  Simulator started with PID: 12345
+✅ OCPP Simulator is running
+
+========================================
+Step 5: Verify OCPP Protocol Messages
+========================================
+
+ℹ️  Checking OCPP messages from simulator...
+✅ ✓ BootNotification sent
+✅ ✓ Authorize (RFID) sent
+✅ ✓ StartTransaction sent
+✅ ✓ Heartbeat sent
+✅ ✓ StopTransaction sent
+```
+
 ### OCPP Simulator
 
 The built-in OCPP simulator tests the complete OCPP protocol implementation.

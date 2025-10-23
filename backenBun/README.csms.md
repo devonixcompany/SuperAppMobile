@@ -144,7 +144,42 @@ sleep 30
 
 # Run end-to-end integration tests
 ./tests/test-e2e-integration.sh
+
+# Run REAL OCPP integration test (simulates actual charging station)
+./tests/test-ocpp-real-integration.sh
 ```
+
+### 🔌 Real OCPP Integration Test
+
+**NEW:** Complete end-to-end test with actual OCPP simulator:
+
+```bash
+# Start services first
+npm run dev
+
+# Run real OCPP integration test
+npm run test:ocpp
+```
+
+This test simulates a **real charging station** and verifies:
+- ✅ OCPP WebSocket connection to gateway
+- ✅ BootNotification (station registration)
+- ✅ Authorize (RFID card validation)  
+- ✅ StartTransaction (charging begins)
+- ✅ Heartbeat (connection keep-alive)
+- ✅ StopTransaction (charging ends)
+- ✅ Billing calculation
+- ✅ Integration with all CSMS services
+
+**Test workflow:**
+1. Registers test station in CSMS
+2. Registers test driver and RFID card
+3. Starts OCPP simulator (simulates charge point)
+4. Sends OCPP protocol messages via WebSocket
+5. Verifies messages received by OCPP Gateway
+6. Checks charging session created in Billing Service
+7. Validates monitoring data
+8. Verifies billing calculation
 
 ### OCPP Simulator Test
 
