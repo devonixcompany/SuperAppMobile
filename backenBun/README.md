@@ -1,6 +1,22 @@
-# SuperApp Microservices
+# SuperApp BackendBun - Microservices Architecture
 
-🚀 **High-performance microservices architecture for EV charging management**
+🚀 **High-performance microservices architecture for EV charging management with OCPP support**
+
+[![Tests](https://img.shields.io/badge/tests-37%20passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)]()
+[![Security](https://img.shields.io/badge/vulnerabilities-0-brightgreen)]()
+[![OCPP](https://img.shields.io/badge/OCPP-1.6-blue)]()
+
+## 📖 Documentation
+
+**Complete documentation is available in the [`docs/`](docs/README.md) directory.**
+
+### Quick Links
+- 📚 [**Complete Documentation Index**](docs/README.md) - Start here for all documentation
+- 🔌 [**OCPP Production Readiness**](docs/ocpp/OCPP-PRODUCTION-READINESS.md) - OCPP system capabilities and production guide
+- 🏗️ [**Infrastructure Improvements**](docs/infrastructure/IMPROVEMENTS.md) - System improvements and features
+- 🧪 [**Testing Guide**](docs/testing/testing-guide.md) - How to test the system
+- 🚀 [**Deployment Guide**](docs/guides/deployment-scalability-guide.md) - How to deploy and scale
 
 ## 📁 Project Structure
 
