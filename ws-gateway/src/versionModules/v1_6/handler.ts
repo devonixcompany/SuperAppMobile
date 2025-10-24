@@ -146,7 +146,7 @@ async function updateConnectorStatus(chargePointId: string, payload: OCPP16Statu
   }
 }
 
-export function handleMeterValues(payload: OCPP16MeterValuesRequest): any {
+export async function handleMeterValues(chargePointId: string, payload: OCPP16MeterValuesRequest): Promise<any> {
   console.log('OCPP 1.6 - Handling MeterValues:', payload);
   
   // Check required fields
@@ -154,9 +154,24 @@ export function handleMeterValues(payload: OCPP16MeterValuesRequest): any {
     throw new Error('Missing required fields in MeterValues');
   }
 
-  // Process meter values
-  // TODO: Store meter values in database
-  
+  try {
+    const { gatewaySessionManager } = await import('../../handlers/gatewaySessionManager');
+    const updateResult = gatewaySessionManager.updateConnectorMeterValues(
+      chargePointId,
+      payload.connectorId,
+      payload.meterValue,
+      payload.transactionId
+    );
+
+    if (updateResult) {
+      console.log(`✅ Stored meter values for connector ${payload.connectorId} on ${chargePointId}`);
+    } else {
+      console.warn(`⚠️ No meter values stored for connector ${payload.connectorId} on ${chargePointId}`);
+    }
+  } catch (error) {
+    console.error(`💥 Error updating meter values for ${chargePointId}:`, error);
+  }
+
   return {}; // Empty response for MeterValues
 }
 
@@ -486,13 +501,16 @@ export function handleAuthorize(payload: { idTag: string }): any {
   };
 }
 
-export function handleStartTransaction(payload: {
+export async function handleStartTransaction(
+  chargePointId: string,
+  payload: {
   connectorId: number;
   idTag: string;
   meterStart: number;
   timestamp: string;
   reservationId?: number;
-}): any {
+}
+): Promise<any> {
   console.log('OCPP 1.6 - Handling StartTransaction:', payload);
   
   if (!payload.connectorId || !payload.idTag || payload.meterStart === undefined || !payload.timestamp) {
@@ -501,22 +519,43 @@ export function handleStartTransaction(payload: {
 
   // TODO: Create transaction in database
   
+  const transactionId = Math.floor(Math.random() * 1000000);
+
+  try {
+    const { gatewaySessionManager } = await import('../../handlers/gatewaySessionManager');
+    gatewaySessionManager.startConnectorTransaction(
+      chargePointId,
+      payload.connectorId,
+      transactionId,
+      {
+        idTag: payload.idTag,
+        meterStart: payload.meterStart,
+        startedAt: payload.timestamp
+      }
+    );
+  } catch (error) {
+    console.error(`Error updating session for StartTransaction on ${chargePointId}:`, error);
+  }
+
   return {
     idTagInfo: {
       status: 'Accepted'
     },
-    transactionId: Math.floor(Math.random() * 1000000) // Generate transaction ID
+    transactionId
   };
 }
 
-export function handleStopTransaction(payload: {
+export async function handleStopTransaction(
+  chargePointId: string,
+  payload: {
   transactionId: number;
   timestamp: string;
   meterStop: number;
   idTag?: string;
   reason?: string;
   transactionData?: any[];
-}): any {
+}
+): Promise<any> {
   console.log('OCPP 1.6 - Handling StopTransaction:', payload);
   
   if (!payload.transactionId || !payload.timestamp || payload.meterStop === undefined) {
@@ -524,6 +563,19 @@ export function handleStopTransaction(payload: {
   }
 
   // TODO: Update transaction in database
+  try {
+    const { gatewaySessionManager } = await import('../../handlers/gatewaySessionManager');
+    gatewaySessionManager.stopConnectorTransaction(
+      chargePointId,
+      payload.transactionId,
+      {
+        meterStop: payload.meterStop,
+        stoppedAt: payload.timestamp
+      }
+    );
+  } catch (error) {
+    console.error(`Error updating session for StopTransaction on ${chargePointId}:`, error);
+  }
   
   return {
     idTagInfo: {
@@ -545,13 +597,13 @@ export async function handleMessage(messageType: string, payload: any, chargePoi
     case 'StatusNotification':
       return handleStatusNotification(chargePointId || '', messageId || '', payload);
     case 'MeterValues':
-      return handleMeterValues(payload);
+      return handleMeterValues(chargePointId || '', payload);
     case 'Authorize':
       return handleAuthorize(payload);
     case 'StartTransaction':
-      return handleStartTransaction(payload);
+      return handleStartTransaction(chargePointId || '', payload);
     case 'StopTransaction':
-      return handleStopTransaction(payload);
+      return handleStopTransaction(chargePointId || '', payload);
     default:
       console.warn(`Unknown OCPP 1.6 message type: ${messageType}`);
       return {

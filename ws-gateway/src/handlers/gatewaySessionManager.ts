@@ -5,13 +5,44 @@
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 
+// ข้อมูลตัวอย่างค่ามิเตอร์จาก MeterValues
+interface MeterValueSample {
+  value: string;
+  context?: string;
+  format?: string;
+  measurand?: string;
+  phase?: string;
+  location?: string;
+  unit?: string;
+}
+
+interface ConnectorMeterValue {
+  timestamp: string;
+  sampledValue: MeterValueSample[];
+}
+
 // ข้อมูลหัวชาร์จใน Gateway Session
 // Connector information stored within the gateway session
+export interface ConnectorMetrics {
+  lastMeterTimestamp?: Date;    // เวลาอัปเดตค่ามิเตอร์ล่าสุด
+  energyDeliveredKWh?: number;  // พลังงานที่ส่งไปแล้ว (kWh)
+  stateOfChargePercent?: number; // เปอร์เซ็นต์แบตเตอรี่รถ (SoC)
+  powerKw?: number;             // กำลังไฟฟ้า (kW)
+  voltage?: number;             // แรงดันไฟฟ้า (V)
+  currentAmp?: number;          // กระแสไฟฟ้า (A)
+  activeTransactionId?: number; // รหัสธุรกรรมที่กำลังดำเนินอยู่
+  transactionStartedAt?: Date;  // เวลาเริ่มธุรกรรมล่าสุด
+  transactionIdTag?: string;    // ID Tag ที่ใช้ในธุรกรรมล่าสุด
+  meterStart?: number;          // ค่ามิเตอร์ตอนเริ่มธุรกรรม
+  lastTransactionCompletedAt?: Date; // เวลาปิดธุรกรรมล่าสุด
+}
+
 export interface GatewayConnectorInfo {
   connectorId: number;   // หมายเลขหัวชาร์จ
   type?: string;         // ชนิดหัวชาร์จตามข้อมูลจาก OCPP
   maxCurrent?: number;   // กระแสสูงสุดของหัวชาร์จ
-  status?: string;  // สถานะเริ่มต้นของหัวชาร์จ
+  status?: string;       // สถานะเริ่มต้นของหัวชาร์จ
+  metrics?: ConnectorMetrics; // ค่ามิเตอร์ล่าสุดของหัวชาร์จ
 }
 
 // ข้อมูล Charge Point ใน Gateway Session
@@ -420,7 +451,13 @@ export class GatewaySessionManager extends EventEmitter {
       existingById.set(incomingConnector.connectorId, {
         connectorId: incomingConnector.connectorId,
         type: trimmedType || base.type,
-        maxCurrent: normalizedMaxCurrent ?? base.maxCurrent
+        maxCurrent: normalizedMaxCurrent ?? base.maxCurrent,
+        status: incomingConnector.status ?? base.status,
+        metrics: incomingConnector.metrics
+          ? { ...incomingConnector.metrics }
+          : base.metrics
+            ? { ...base.metrics }
+            : undefined
       });
     }
 
@@ -660,6 +697,303 @@ export class GatewaySessionManager extends EventEmitter {
 
     console.log(`✅ Connector ${connectorId} status updated to ${status} for charge point ${chargePointId}`);
     return true;
+  }
+
+  updateConnectorMeterValues(
+    chargePointId: string,
+    connectorId: number,
+    meterValues: ConnectorMeterValue[],
+    transactionId?: number
+  ): boolean {
+    if (!this.session) {
+      console.error('No active session');
+      return false;
+    }
+
+    const chargePoint = this.getChargePoint(chargePointId);
+    if (!chargePoint) {
+      console.error(`Charge point ${chargePointId} not found`);
+      return false;
+    }
+
+    let connector = chargePoint.connectors.find(c => c.connectorId === connectorId);
+    if (!connector) {
+      console.log(`Creating new connector ${connectorId} for charge point ${chargePointId} while updating meter values`);
+      connector = {
+        connectorId,
+        metrics: {}
+      };
+      chargePoint.connectors.push(connector);
+    } else if (!connector.metrics) {
+      connector.metrics = {};
+    }
+
+    const metrics = connector.metrics!;
+    let updated = false;
+    let latestTimestamp = metrics.lastMeterTimestamp ? metrics.lastMeterTimestamp.getTime() : 0;
+
+    const updateEnergy = (value: number, unit?: string) => {
+      const normalizedUnit = unit?.toLowerCase();
+      if (normalizedUnit === 'kwh') {
+        metrics.energyDeliveredKWh = value;
+      } else if (normalizedUnit === 'wh' || !normalizedUnit) {
+        metrics.energyDeliveredKWh = value / 1000;
+      } else {
+        metrics.energyDeliveredKWh = value;
+      }
+      updated = true;
+    };
+
+    const updatePower = (value: number, unit?: string) => {
+      const normalizedUnit = unit?.toLowerCase();
+      if (normalizedUnit === 'w') {
+        metrics.powerKw = value / 1000;
+      } else if (normalizedUnit === 'kw' || normalizedUnit === 'kilowatt') {
+        metrics.powerKw = value;
+      } else {
+        metrics.powerKw = value;
+      }
+      updated = true;
+    };
+
+    const updateCurrent = (value: number) => {
+      metrics.currentAmp = value;
+      updated = true;
+    };
+
+    const updateVoltage = (value: number) => {
+      metrics.voltage = value;
+      updated = true;
+    };
+
+    const updateSoc = (value: number) => {
+      metrics.stateOfChargePercent = value;
+      updated = true;
+    };
+
+    for (const meterValue of meterValues) {
+      const timestampMs = Date.parse(meterValue.timestamp);
+      if (!Number.isNaN(timestampMs) && timestampMs > latestTimestamp) {
+        latestTimestamp = timestampMs;
+      }
+
+      for (const sample of meterValue.sampledValue || []) {
+        const numericValue = parseFloat(sample.value);
+        if (!Number.isFinite(numericValue)) {
+          continue;
+        }
+
+        const measurand = (sample.measurand || '').toLowerCase();
+        switch (measurand) {
+          case '':
+          case 'energy.active.import.register':
+            updateEnergy(numericValue, sample.unit);
+            break;
+          case 'soc':
+            updateSoc(numericValue);
+            break;
+          case 'power.active.import':
+            updatePower(numericValue, sample.unit);
+            break;
+          case 'current.import':
+          case 'current.export':
+          case 'current.offered':
+            updateCurrent(numericValue);
+            break;
+          case 'voltage':
+            updateVoltage(numericValue);
+            break;
+          default:
+            // ไม่รองรับ measurand นี้ในตอนนี้
+            break;
+        }
+      }
+    }
+
+    if (latestTimestamp > 0) {
+      metrics.lastMeterTimestamp = new Date(latestTimestamp);
+      updated = true;
+    }
+
+    if (typeof transactionId === 'number' && Number.isFinite(transactionId)) {
+      if (metrics.activeTransactionId !== transactionId) {
+        metrics.activeTransactionId = transactionId;
+      }
+      if (!metrics.transactionStartedAt) {
+        metrics.transactionStartedAt = new Date(latestTimestamp > 0 ? latestTimestamp : Date.now());
+      }
+    }
+
+    if (!updated) {
+      return false;
+    }
+
+    const now = new Date();
+    this.session.lastActivity = now;
+    chargePoint.lastSeen = now;
+
+    const metricsSnapshot = { ...metrics };
+
+    this.emit('chargePointUpdated', {
+      chargePointId,
+      type: 'connectorMetrics',
+      connectorId,
+      metrics: metricsSnapshot,
+      transactionId,
+      lastActivity: this.session.lastActivity
+    });
+
+    console.log(
+      `📊 Updated meter values for connector ${connectorId} on charge point ${chargePointId}:`,
+      {
+        transactionId,
+        metrics: metricsSnapshot
+      }
+    );
+
+    return true;
+  }
+
+  startConnectorTransaction(
+    chargePointId: string,
+    connectorId: number,
+    transactionId: number,
+    options?: {
+      idTag?: string;
+      meterStart?: number;
+      startedAt?: string | Date;
+    }
+  ): boolean {
+    if (!this.session) {
+      console.error('No active session');
+      return false;
+    }
+
+    const chargePoint = this.getChargePoint(chargePointId);
+    if (!chargePoint) {
+      console.error(`Charge point ${chargePointId} not found when starting transaction`);
+      return false;
+    }
+
+    let connector = chargePoint.connectors.find(c => c.connectorId === connectorId);
+    if (!connector) {
+      console.log(`Creating new connector ${connectorId} for charge point ${chargePointId} while starting transaction`);
+      connector = {
+        connectorId,
+        metrics: {}
+      };
+      chargePoint.connectors.push(connector);
+    } else if (!connector.metrics) {
+      connector.metrics = {};
+    }
+
+    const metrics = connector.metrics!;
+    metrics.activeTransactionId = transactionId;
+    metrics.transactionIdTag = options?.idTag;
+    if (typeof options?.meterStart === 'number' && Number.isFinite(options.meterStart)) {
+      metrics.meterStart = options.meterStart;
+    }
+
+    const startedAt = options?.startedAt ? new Date(options.startedAt) : new Date();
+    if (!Number.isNaN(startedAt.getTime())) {
+      metrics.transactionStartedAt = startedAt;
+      metrics.lastMeterTimestamp = startedAt;
+    } else if (!metrics.transactionStartedAt) {
+      metrics.transactionStartedAt = new Date();
+    }
+
+    metrics.lastTransactionCompletedAt = undefined;
+
+    const now = new Date();
+    this.session.lastActivity = now;
+    chargePoint.lastSeen = now;
+
+    const metricsSnapshot = { ...metrics };
+    this.emit('chargePointUpdated', {
+      chargePointId,
+      type: 'connectorMetrics',
+      connectorId,
+      metrics: metricsSnapshot,
+      transactionId,
+      lastActivity: this.session.lastActivity
+    });
+
+    console.log(`🟢 Transaction ${transactionId} started on ${chargePointId} connector ${connectorId}`);
+    return true;
+  }
+
+  stopConnectorTransaction(
+    chargePointId: string,
+    transactionId: number,
+    options?: {
+      meterStop?: number;
+      stoppedAt?: string | Date;
+    }
+  ): boolean {
+    if (!this.session) {
+      console.error('No active session');
+      return false;
+    }
+
+    const chargePoint = this.getChargePoint(chargePointId);
+    if (!chargePoint) {
+      console.error(`Charge point ${chargePointId} not found when stopping transaction`);
+      return false;
+    }
+
+    const connector = chargePoint.connectors.find(
+      c => c.metrics?.activeTransactionId === transactionId
+    );
+
+    if (!connector || !connector.metrics) {
+      console.warn(`No active connector found for transaction ${transactionId} on ${chargePointId}`);
+      return false;
+    }
+
+    const metrics = connector.metrics;
+    const stoppedAt = options?.stoppedAt ? new Date(options.stoppedAt) : new Date();
+    if (!Number.isNaN(stoppedAt.getTime())) {
+      metrics.lastTransactionCompletedAt = stoppedAt;
+      metrics.lastMeterTimestamp = stoppedAt;
+    } else {
+      metrics.lastTransactionCompletedAt = new Date();
+    }
+
+    if (typeof options?.meterStop === 'number' && Number.isFinite(options.meterStop)) {
+      metrics.energyDeliveredKWh = options.meterStop;
+    }
+
+    metrics.activeTransactionId = undefined;
+    metrics.transactionStartedAt = undefined;
+    metrics.transactionIdTag = undefined;
+    metrics.meterStart = undefined;
+
+    const now = new Date();
+    this.session.lastActivity = now;
+    chargePoint.lastSeen = now;
+
+    const metricsSnapshot = { ...metrics };
+    this.emit('chargePointUpdated', {
+      chargePointId,
+      type: 'connectorMetrics',
+      connectorId: connector.connectorId,
+      metrics: metricsSnapshot,
+      transactionId,
+      lastActivity: this.session.lastActivity
+    });
+
+    console.log(`🟥 Transaction ${transactionId} stopped on ${chargePointId} connector ${connector.connectorId}`);
+    return true;
+  }
+
+  getActiveTransactionId(chargePointId: string, connectorId: number): number | undefined {
+    const chargePoint = this.getChargePoint(chargePointId);
+    if (!chargePoint) {
+      return undefined;
+    }
+
+    const connector = chargePoint.connectors.find(c => c.connectorId === connectorId);
+    return connector?.metrics?.activeTransactionId;
   }
 
   getSession(): GatewaySession | null {

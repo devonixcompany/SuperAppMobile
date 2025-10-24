@@ -82,8 +82,8 @@ export class SessionMonitor {
     console.log(`Authenticated Charge Points: ${stats.authenticatedChargePoints}`);
     console.log(`Charge Points with Recent Heartbeat: ${stats.chargePointsWithHeartbeat}`);
     console.log(`Messages Sent: ${stats.totalMessagesSent}`);
-   console.log(`Messages Received: ${stats.totalMessagesReceived}`);
-   console.log(`Average Connection Time: ${Math.round(stats.averageConnectionTime / 1000)}s`);
+    console.log(`Messages Received: ${stats.totalMessagesReceived}`);
+    console.log(`Average Connection Time: ${Math.round(stats.averageConnectionTime / 1000)}s`);
 
     const now = new Date();
 
@@ -93,22 +93,60 @@ export class SessionMonitor {
         const timeSinceLastSeen = Math.round((now.getTime() - chargePoint.lastSeen.getTime()) / 1000);
         const timeSinceHeartbeat = Math.round((now.getTime() - chargePoint.lastHeartbeat.getTime()) / 1000);
         const connectionDuration = Math.round((now.getTime() - chargePoint.connectedAt.getTime()) / 1000);
-        const connectorInfo = (chargePoint.connectors && chargePoint.connectors.length > 0)
+        const connectorDetails = (chargePoint.connectors && chargePoint.connectors.length > 0)
           ? chargePoint.connectors
               .map(connector => {
-                const type = connector.type || 'ไม่ทราบชนิด';
-                const maxCurrent = typeof connector.maxCurrent === 'number' ? `${connector.maxCurrent}A` : 'ไม่ระบุ A';
-                const status = connector.status || 'ไม่ทราบสถานะ';
-                return `#${connector.connectorId} (${type}, ${maxCurrent}, ${status})`;
+                const parts: string[] = [
+                  `หัวชาร์จ #${connector.connectorId}`,
+                  `สถานะ: ${connector.status || 'ไม่ทราบ'}`
+                ];
+
+                if (connector.type) {
+                  parts.push(`ชนิด: ${connector.type}`);
+                }
+
+                if (typeof connector.maxCurrent === 'number') {
+                  parts.push(`กระแสสูงสุด: ${connector.maxCurrent}A`);
+                }
+
+                const metrics = connector.metrics;
+                if (metrics) {
+                  const metricParts: string[] = [];
+                  if (typeof metrics.energyDeliveredKWh === 'number') {
+                    metricParts.push(`พลังงาน: ${metrics.energyDeliveredKWh.toFixed(3)} kWh`);
+                  }
+                  if (typeof metrics.stateOfChargePercent === 'number') {
+                    metricParts.push(`เปอร์เซ็นต์แบต: ${metrics.stateOfChargePercent.toFixed(1)}%`);
+                  }
+                  if (typeof metrics.powerKw === 'number') {
+                    metricParts.push(`กำลังไฟ: ${metrics.powerKw.toFixed(3)} kW`);
+                  }
+                  if (typeof metrics.voltage === 'number') {
+                    metricParts.push(`แรงดัน: ${metrics.voltage.toFixed(1)} V`);
+                  }
+                  if (typeof metrics.currentAmp === 'number') {
+                    metricParts.push(`กระแส: ${metrics.currentAmp.toFixed(1)} A`);
+                  }
+                  if (metrics.lastMeterTimestamp instanceof Date) {
+                    metricParts.push(`อัปเดตล่าสุด: ${metrics.lastMeterTimestamp.toISOString()}`);
+                  }
+
+                  if (metricParts.length > 0) {
+                    parts.push(`ข้อมูลมิเตอร์: ${metricParts.join(', ')}`);
+                  }
+                }
+
+                return `    - ${parts.join(' | ')}`;
               })
-              .join(', ')
-          : 'ไม่มีข้อมูลหัวชาร์จ';
+              .join('\n')
+          : '    - ไม่มีข้อมูลหัวชาร์จ';
 
         console.log(`• ${chargePoint.chargePointId} (${chargePoint.serialNumber || 'ไม่มี Serial'})`);
         console.log(`    - สถานะรับรอง: ${chargePoint.isAuthenticated ? 'ผ่าน' : 'ยังไม่ผ่าน'}`);
         console.log(`    - เวลาที่เชื่อมต่อแล้ว: ${connectionDuration}s`);
         console.log(`    - ล่าสุดเห็นเมื่อ: ${timeSinceLastSeen}s ที่ผ่านมา`);
-        console.log(`    - ข้อมูลหัวชาร์จ: ${connectorInfo}`);
+        console.log(`    - ข้อความที่รับ/ส่ง: ${chargePoint.messagesReceived}/${chargePoint.messagesSent}`);
+        console.log(connectorDetails);
       });
     } else {
       console.log('--- ไม่มีเครื่องชาร์จที่เชื่อมต่ออยู่ ---');

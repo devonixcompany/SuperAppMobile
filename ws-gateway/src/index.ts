@@ -88,14 +88,48 @@ async function handleRemoteStopTransaction(chargePoint: any, data: any, userWs: 
   try {
     console.log(`🛑 Stopping transaction for charge point ${chargePoint.chargePointId}:`, data);
     
-    if (!data?.transactionId) {
+    const connectorId = typeof data?.connectorId === 'number'
+      ? data.connectorId
+      : Number.isFinite(Number(data?.connectorId))
+        ? Number(data.connectorId)
+        : undefined;
+
+    let transactionId = data?.transactionId;
+
+    if (transactionId === undefined || transactionId === null) {
+      if (connectorId !== undefined) {
+        transactionId = gatewaySessionManager.getActiveTransactionId(
+          chargePoint.chargePointId,
+          connectorId
+        );
+      }
+    }
+
+    if (transactionId === undefined || transactionId === null) {
       userWs.send(JSON.stringify({
         type: 'RemoteStopTransactionResponse',
         timestamp: new Date().toISOString(),
         data: {
           status: 'failed',
-          message: 'ต้องระบุ transactionId สำหรับ RemoteStopTransaction',
+          message: 'ไม่พบข้อมูลธุรกรรมที่กำลังทำงาน',
           code: 'INVALID_REMOTE_STOP_REQUEST'
+        }
+      }));
+      return;
+    }
+
+    const numericTransactionId = typeof transactionId === 'number'
+      ? transactionId
+      : Number(transactionId);
+
+    if (!Number.isFinite(numericTransactionId)) {
+      userWs.send(JSON.stringify({
+        type: 'RemoteStopTransactionResponse',
+        timestamp: new Date().toISOString(),
+        data: {
+          status: 'failed',
+          message: 'หมายเลขธุรกรรมไม่ถูกต้อง',
+          code: 'INVALID_TRANSACTION_ID'
         }
       }));
       return;
@@ -108,7 +142,7 @@ async function handleRemoteStopTransaction(chargePoint: any, data: any, userWs: 
       messageId,
       'RemoteStopTransaction',
       {
-        transactionId: data.transactionId
+        transactionId: numericTransactionId
       }
     ];
     
@@ -123,7 +157,7 @@ async function handleRemoteStopTransaction(chargePoint: any, data: any, userWs: 
         status: 'sent',
         message: 'คำสั่งหยุดชาร์จถูกส่งไปยัง Charge Point แล้ว',
         messageId,
-        transactionId: data.transactionId
+        transactionId: numericTransactionId
       }
     }));
     
@@ -379,20 +413,53 @@ const server = createServer((req, res) => {
       const sessionStats = gatewaySessionManager.getStats();
       const chargePoints = gatewaySessionManager.getAllChargePoints();
       
-      const chargePointsInfo = chargePoints.map(cp => ({
-        chargePointId: cp.chargePointId,
-        serialNumber: cp.serialNumber,
-        isAuthenticated: cp.isAuthenticated,
-        connectedAt: cp.connectedAt,
-        lastSeen: cp.lastSeen,
-        lastHeartbeat: cp.lastHeartbeat,
-        ocppVersion: cp.ocppVersion,
-        messagesSent: cp.messagesSent,
-        messagesReceived: cp.messagesReceived,
-        connectionDuration: new Date().getTime() - cp.connectedAt.getTime(),
-        wsState: cp.ws.readyState,
-        pendingMessageCount: cp.pendingMessages.length
-      }));
+      const chargePointsInfo = chargePoints.map(cp => {
+        const connectors = (cp.connectors || []).map(connector => ({
+          connectorId: connector.connectorId,
+          type: connector.type ?? null,
+          maxCurrent: typeof connector.maxCurrent === 'number' ? connector.maxCurrent : null,
+          status: connector.status ?? null,
+          metrics: connector.metrics
+            ? {
+                energyDeliveredKWh: typeof connector.metrics.energyDeliveredKWh === 'number'
+                  ? connector.metrics.energyDeliveredKWh
+                  : null,
+                stateOfChargePercent: typeof connector.metrics.stateOfChargePercent === 'number'
+                  ? connector.metrics.stateOfChargePercent
+                  : null,
+                powerKw: typeof connector.metrics.powerKw === 'number'
+                  ? connector.metrics.powerKw
+                  : null,
+                voltage: typeof connector.metrics.voltage === 'number'
+                  ? connector.metrics.voltage
+                  : null,
+                currentAmp: typeof connector.metrics.currentAmp === 'number'
+                  ? connector.metrics.currentAmp
+                  : null,
+                lastMeterTimestamp: connector.metrics.lastMeterTimestamp instanceof Date
+                  ? connector.metrics.lastMeterTimestamp.toISOString()
+                  : connector.metrics.lastMeterTimestamp ?? null
+              }
+            : null
+        }));
+
+        return {
+          chargePointId: cp.chargePointId,
+          serialNumber: cp.serialNumber,
+          isAuthenticated: cp.isAuthenticated,
+          connectedAt: cp.connectedAt,
+          lastSeen: cp.lastSeen,
+          lastHeartbeat: cp.lastHeartbeat,
+          ocppVersion: cp.ocppVersion,
+          messagesSent: cp.messagesSent,
+          messagesReceived: cp.messagesReceived,
+          connectionDuration: new Date().getTime() - cp.connectedAt.getTime(),
+          wsState: cp.ws.readyState,
+          pendingMessageCount: cp.pendingMessages.length,
+          connectorCount: cp.connectorCount,
+          connectors
+        };
+      });
       
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -475,6 +542,35 @@ const server = createServer((req, res) => {
       }
       
       res.writeHead(200, { 'Content-Type': 'application/json' });
+      const connectors = (chargePoint.connectors || []).map(connector => ({
+        connectorId: connector.connectorId,
+        type: connector.type ?? null,
+        maxCurrent: typeof connector.maxCurrent === 'number' ? connector.maxCurrent : null,
+        status: connector.status ?? null,
+        metrics: connector.metrics
+          ? {
+              energyDeliveredKWh: typeof connector.metrics.energyDeliveredKWh === 'number'
+                ? connector.metrics.energyDeliveredKWh
+                : null,
+              stateOfChargePercent: typeof connector.metrics.stateOfChargePercent === 'number'
+                ? connector.metrics.stateOfChargePercent
+                : null,
+              powerKw: typeof connector.metrics.powerKw === 'number'
+                ? connector.metrics.powerKw
+                : null,
+              voltage: typeof connector.metrics.voltage === 'number'
+                ? connector.metrics.voltage
+                : null,
+              currentAmp: typeof connector.metrics.currentAmp === 'number'
+                ? connector.metrics.currentAmp
+                : null,
+              lastMeterTimestamp: connector.metrics.lastMeterTimestamp instanceof Date
+                ? connector.metrics.lastMeterTimestamp.toISOString()
+                : connector.metrics.lastMeterTimestamp ?? null
+            }
+          : null
+      }));
+
       res.end(JSON.stringify({
         success: true,
         data: {
@@ -489,7 +585,9 @@ const server = createServer((req, res) => {
           messagesReceived: chargePoint.messagesReceived,
           connectionDuration: new Date().getTime() - chargePoint.connectedAt.getTime(),
           wsState: chargePoint.ws.readyState,
-          pendingMessageCount: chargePoint.pendingMessages.length
+          pendingMessageCount: chargePoint.pendingMessages.length,
+          connectorCount: chargePoint.connectorCount,
+          connectors
         }
       }));
     } catch (error) {

@@ -1601,4 +1601,53 @@ export const chargePointController = (
           maxCurrent: t.Optional(t.Number())
         })))
       })
-    });
+    })
+
+    /**
+     * Get WebSocket URL for specific charge point and connector
+     * GET /api/chargepoints/:chargePointIdentity/:connectorId/websocket-url
+     */
+    .get(
+      '/:chargePointIdentity/:connectorId/websocket-url',
+      async ({ params, set }) => {
+        try {
+          const { chargePointIdentity, connectorId } = params;
+          const connectorIdNum = parseInt(connectorId);
+
+          if (isNaN(connectorIdNum)) {
+            set.status = 400;
+            return {
+              success: false,
+              message: 'Connector ID must be a valid number'
+            };
+          }
+
+          const result = await chargePointService.getWebSocketUrl(chargePointIdentity, connectorIdNum);
+
+          return {
+            success: true,
+            data: result,
+            message: 'WebSocket URL retrieved successfully'
+          };
+        } catch (error: any) {
+          console.error('Error getting WebSocket URL:', error);
+          set.status = error.message.includes('not found') ? 404 : 500;
+          return {
+            success: false,
+            error: error.message,
+            message: 'Failed to get WebSocket URL'
+          };
+        }
+      },
+      {
+        params: t.Object({
+          chargePointIdentity: t.String(),
+          connectorId: t.String()
+        }),
+        detail: {
+          tags: ['Charge Points'],
+          summary: '🔗 Get WebSocket URL',
+          description: 'ดึง WebSocket URL สำหรับเชื่อมต่อกับเครื่องชาร์จและหัวชาร์จที่ระบุ'
+        }
+      }
+    );

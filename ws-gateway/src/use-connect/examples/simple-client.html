@@ -275,8 +275,41 @@
         <h2>การควบคุมการชาร์จ</h2>
         <div class="connection-form">
             <input type="text" id="idTag" placeholder="ID Tag (เช่น USER001)" value="USER001">
+            <input type="text" id="transactionIdInput" placeholder="Transaction ID (จะเติมอัตโนมัติเมื่อเริ่มชาร์จ)">
             <button id="startChargingBtn" onclick="startCharging()" disabled>🔌 เริ่มชาร์จ</button>
             <button id="stopChargingBtn" onclick="stopCharging()" disabled>⏹️ หยุดชาร์จ</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>สถานะธุรกรรม</h2>
+        <div class="session-meta">
+            <div class="session-status">
+                <span id="sessionBadge" class="session-badge idle">พร้อมใช้งาน</span>
+                <span id="sessionInfo">ยังไม่มีธุรกรรมที่กำลังชาร์จ</span>
+            </div>
+            <div class="session-details">
+                <div>
+                    <span class="detail-label">Transaction ID</span>
+                    <span class="detail-value" id="sessionTransactionId">-</span>
+                </div>
+                <div>
+                    <span class="detail-label">เวลาเริ่ม</span>
+                    <span class="detail-value" id="sessionStartTime">-</span>
+                </div>
+                <div>
+                    <span class="detail-label">พลังงานสะสม</span>
+                    <span class="detail-value" id="sessionEnergyDelivered">-</span>
+                </div>
+                <div>
+                                        <span class="detail-label">ค่าพลังที่จ่าย</span>
+                    <span class="detail-value" id="sessionEnergyDelivered">-</span>
+                </div>
+                <div>
+                    <span class="detail-label">อัปเดตมิเตอร์ล่าสุด</span>
+                    <span class="detail-value" id="sessionLastUpdate">-</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -303,15 +336,15 @@
                     <div class="progress-fill" id="progressFill" style="width: 0%"></div>
                 </div>
             </div>
+                 <div class="data-card">
+                <h4>มิเตอร์ปัจจุบัน</h4>
+                <div class="value" id="currentMeter">-</div>
+                <div class="unit">kWh</div>
+            </div>
             <div class="data-card">
                 <h4>กำลังไฟปัจจุบัน</h4>
                 <div class="value" id="currentPower">-</div>
                 <div class="unit">kW</div>
-            </div>
-            <div class="data-card">
-                <h4>มิเตอร์ปัจจุบัน</h4>
-                <div class="value" id="currentMeter">-</div>
-                <div class="unit">kWh</div>
             </div>
             <div class="data-card">
                 <h4>แรงดันไฟฟ้า</h4>
@@ -347,6 +380,10 @@
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 5;
         let currentConnectorStatus = null; // Track current connector status
+        let currentTransactionId = null;
+        let sessionStartTime = null;
+        let lastEnergyDelivered = null;
+        let lastMeterTimestamp = null;
 
         function log(message, type = 'info') {
             const logs = document.getElementById('logs');
@@ -413,6 +450,80 @@
             } else {
                 stopBtn.title = 'ไม่ได้อยู่ในสถานะชาร์จ';
             }
+
+            updateSessionDisplay();
+        }
+
+        function formatDateTime(value) {
+            if (!value) return '-';
+            const date = value instanceof Date ? value : new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return '-';
+            }
+            return date.toLocaleString('th-TH', {
+                hour12: false
+            });
+        }
+
+        function updateSessionDisplay() {
+            const badge = document.getElementById('sessionBadge');
+            const info = document.getElementById('sessionInfo');
+            const transactionIdElem = document.getElementById('sessionTransactionId');
+            const startTimeElem = document.getElementById('sessionStartTime');
+            const energyElem = document.getElementById('sessionEnergyDelivered');
+            const lastUpdateElem = document.getElementById('sessionLastUpdate');
+
+            transactionIdElem.textContent = currentTransactionId || '-';
+            startTimeElem.textContent = sessionStartTime ? formatDateTime(sessionStartTime) : '-';
+            energyElem.textContent = typeof lastEnergyDelivered === 'number'
+                ? `${lastEnergyDelivered.toFixed(3)} kWh`
+                : '-';
+            lastUpdateElem.textContent = lastMeterTimestamp ? formatDateTime(lastMeterTimestamp) : '-';
+
+            badge.classList.remove('active', 'idle', 'warning');
+
+            if (currentTransactionId) {
+                badge.textContent = 'กำลังชาร์จ';
+                badge.classList.add('active');
+                info.textContent = `ธุรกรรมกำลังทำงาน (ID ${currentTransactionId})`;
+            } else if (currentConnectorStatus === 'SuspendedEV' || currentConnectorStatus === 'SuspendedEVSE') {
+                badge.textContent = 'ชั่วคราวหยุด';
+                badge.classList.add('warning');
+                info.textContent = 'ธุรกรรมถูกระงับชั่วคราว';
+            } else {
+                badge.textContent = 'พร้อมใช้งาน';
+                badge.classList.add('idle');
+                info.textContent = 'ยังไม่มีธุรกรรมที่กำลังชาร์จ';
+            }
+        }
+
+        function recordTransactionId(transactionId, source = 'ระบบ') {
+            if (transactionId === undefined || transactionId === null || transactionId === '') {
+                return;
+            }
+
+            const normalized = transactionId.toString();
+            if (currentTransactionId !== normalized) {
+                currentTransactionId = normalized;
+                document.getElementById('transactionIdInput').value = normalized;
+                log(`บันทึก Transaction ID (${source}): ${normalized}`, 'info');
+                if (!sessionStartTime) {
+                    sessionStartTime = new Date();
+                }
+                updateSessionDisplay();
+            }
+        }
+
+        function clearTransactionState(reason) {
+            if (reason) {
+                log(`รีเซ็ตข้อมูลธุรกรรม (${reason})`, 'info');
+            }
+            currentTransactionId = null;
+            sessionStartTime = null;
+            lastEnergyDelivered = null;
+            lastMeterTimestamp = null;
+            document.getElementById('transactionIdInput').value = '';
+            updateSessionDisplay();
         }
 
         function isConnectorAvailableForCharging() {
@@ -424,7 +535,8 @@
             // Allow stopping when connector is Charging, SuspendedEVSE, or SuspendedEV
             return currentConnectorStatus === 'Charging' || 
                    currentConnectorStatus === 'SuspendedEVSE' || 
-                   currentConnectorStatus === 'SuspendedEV';
+                   currentConnectorStatus === 'SuspendedEV' ||
+                   currentConnectorStatus === 'Finishing';
         }
 
         function connect() {
@@ -490,6 +602,7 @@
                 ws.close();
                 ws = null;
                 log('ตัดการเชื่อมต่อแล้ว', 'info');
+                clearTransactionState('ตัดการเชื่อมต่อ');
             }
         }
 
@@ -517,6 +630,8 @@
                 alert('กรุณากรอก ID Tag');
                 return;
             }
+
+            clearTransactionState('เริ่มชาร์จ');
 
             const message = {
                 type: 'RemoteStartTransaction',
@@ -547,19 +662,38 @@
                 return;
             }
 
-            const chargePointId = document.getElementById('chargePointId').value.trim();
             const connectorId = document.getElementById('connectorId').value.trim();
+            const manualTransactionId = document.getElementById('transactionIdInput').value.trim();
+            const transactionId = manualTransactionId || currentTransactionId;
+
+            if (!transactionId) {
+                alert('ไม่พบ Transaction ID สำหรับหยุดชาร์จ\nโปรดเริ่มชาร์จใหม่หรือกรอก Transaction ID ด้วยตนเอง');
+                log('ไม่สามารถหยุดชาร์จได้: ไม่มี Transaction ID', 'error');
+                return;
+            }
+
+            if (manualTransactionId && manualTransactionId !== currentTransactionId) {
+                log(`ใช้ Transaction ID จากผู้ใช้: ${manualTransactionId}`, 'info');
+            }
+
+            const numericTransactionId = Number(transactionId);
+            if (!Number.isFinite(numericTransactionId)) {
+                alert('Transaction ID ต้องเป็นตัวเลข');
+                log(`ไม่สามารถหยุดชาร์จได้: Transaction ID (${transactionId}) ไม่ใช่ตัวเลข`, 'error');
+                return;
+            }
 
             const message = {
                 type: 'RemoteStopTransaction',
                 data: {
-                    connectorId: parseInt(connectorId),
+                    connectorId: parseInt(connectorId, 10),
+                    transactionId: numericTransactionId,
                     timestamp: new Date().toISOString()
                 }
             };
 
             ws.send(JSON.stringify(message));
-            log(`ส่งคำสั่งหยุดชาร์จ: Connector ${connectorId}, สถานะหัวเสียบ: ${currentConnectorStatus}`, 'info');
+            log(`ส่งคำสั่งหยุดชาร์จ: Connector ${connectorId}, Transaction ID: ${numericTransactionId}`, 'info');
         }
 
         function handleMessage(message) {
@@ -601,9 +735,11 @@
                     break;
                 case 'StartTransaction':
                     log(`เริ่มธุรกรรมการชาร์จ: Transaction ID ${message.data.transactionId}`, 'success');
+                    handleStartTransaction(message.data);
                     break;
                 case 'StopTransaction':
                     log(`หยุดธุรกรรมการชาร์จ: Transaction ID ${message.data.transactionId}`, 'success');
+                    handleStopTransaction(message.data);
                     break;
                 default:
                     log(`ข้อมูลประเภทไม่รู้จัก: ${message.type}`, 'error');
@@ -629,6 +765,56 @@
             // Update progress bar
             const percentage = data.chargingPercentage || 0;
             document.getElementById('progressFill').style.width = `${percentage}%`;
+
+            if (typeof data.energyDelivered === 'number') {
+                lastEnergyDelivered = data.energyDelivered;
+            } else if (typeof data.currentMeter === 'number') {
+                lastEnergyDelivered = data.currentMeter;
+            }
+
+            if (data.lastMeterTimestamp) {
+                const parsed = new Date(data.lastMeterTimestamp);
+                if (!Number.isNaN(parsed.getTime())) {
+                    lastMeterTimestamp = parsed;
+                }
+            } else {
+                lastMeterTimestamp = new Date();
+            }
+
+            if (data.transactionId !== undefined && data.transactionId !== null) {
+                recordTransactionId(data.transactionId, 'charging_data');
+            }
+
+            updateSessionDisplay();
+        }
+
+        function handleStartTransaction(data) {
+            if (!data) {
+                return;
+            }
+
+            if (data.transactionId !== undefined && data.transactionId !== null) {
+                recordTransactionId(data.transactionId, 'StartTransaction');
+            }
+
+            const start = data.startTimestamp || data.timestamp;
+            if (start) {
+                const parsed = new Date(start);
+                if (!Number.isNaN(parsed.getTime())) {
+                    sessionStartTime = parsed;
+                }
+            } else if (!sessionStartTime) {
+                sessionStartTime = new Date();
+            }
+
+            updateSessionDisplay();
+        }
+
+        function handleStopTransaction(data) {
+            if (data && data.transactionId !== undefined && data.transactionId !== null) {
+                log(`ยืนยันการหยุดธุรกรรม Transaction ID ${data.transactionId}`, 'info');
+            }
+            clearTransactionState('ธุรกรรมสิ้นสุด');
         }
 
         function updateConnectorStatus(data) {
@@ -653,6 +839,8 @@
             if (data.message) {
                 log(`ข้อความ: ${data.message}`, 'info');
             }
+
+            updateSessionDisplay();
         }
 
         function getStatusColor(status) {
@@ -699,6 +887,7 @@
             
             // Update charging buttons
             updateChargingButtons(false);
+            clearTransactionState();
         }
 
         function clearLogs() {

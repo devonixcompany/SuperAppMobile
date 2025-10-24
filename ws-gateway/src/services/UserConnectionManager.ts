@@ -9,7 +9,7 @@ interface UserConnection {
 }
 
 interface StatusUpdate {
-  type: 'status' | 'heartbeat' | 'charging' | 'connector' | 'connectorStatus';
+  type: 'status' | 'heartbeat' | 'charging' | 'connector' | 'connectorStatus' | 'charging_data';
   timestamp: string;
   data: any;
 }
@@ -95,6 +95,28 @@ export class UserConnectionManager {
           };
           this.broadcastToConnector(data.chargePointId, data.connectorId.toString(), connectorUpdate);
           return; // Return early to avoid sending duplicate status message
+        case 'connectorMetrics': {
+          const metrics = data.metrics || {};
+          const chargingUpdate: StatusUpdate = {
+            type: 'charging_data',
+            timestamp: new Date().toISOString(),
+            data: {
+              chargePointId: data.chargePointId,
+              connectorId: data.connectorId,
+              chargingPercentage: metrics.stateOfChargePercent ?? null,
+              currentPower: metrics.powerKw ?? null,
+              currentMeter: metrics.energyDeliveredKWh ?? null,
+              energyDelivered: metrics.energyDeliveredKWh ?? null,
+              voltage: metrics.voltage ?? null,
+              current: metrics.currentAmp ?? null,
+              lastMeterTimestamp: metrics.lastMeterTimestamp ?? null,
+              transactionId: data.transactionId ?? null,
+              metrics
+            }
+          };
+          this.broadcastToConnector(data.chargePointId, data.connectorId.toString(), chargingUpdate);
+          return;
+        }
         default:
           status = 'UPDATED';
       }

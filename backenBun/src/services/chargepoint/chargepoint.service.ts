@@ -448,7 +448,7 @@ export class ChargePointService {
 
     // สร้างเงื่อนไขสำหรับค้นหาข้อมูล
     const where: any = {};
-
+    
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -538,7 +538,7 @@ export class ChargePointService {
         };
       }
 
-      // ตรวจสอบว่าเวอร์ชัน OCPP รองรับหรือไม่
+      // ตรวจสอบว่าเวอร์ชัน OCPP รองรบบหรือไม่
       const supportedVersions = ['ocpp1.6', 'ocpp2.0', 'ocpp2.0.1'];
       const normalizedVersion = ocppVersion.toLowerCase();
       
@@ -901,4 +901,54 @@ export class ChargePointService {
       throw new Error(`Failed to create connectors: ${error.message}`);
      }
    }
+
+  /**
+   * ค้นหา ChargePoint และ Connector จากฐานข้อมูล และสร้าง WebSocket URL
+   */
+  async getWebSocketUrl(chargePointIdentity: string, connectorId: number) {
+    try {
+      // ค้นหา ChargePoint จาก chargePointIdentity
+      const chargePoint = await this.prisma.chargePoint.findUnique({
+        where: { chargePointIdentity },
+        include: {
+          connectors: {
+            where: { connectorId }
+          }
+        }
+      });
+
+      if (!chargePoint) {
+        throw new Error(`ChargePoint with identity '${chargePointIdentity}' not found`);
+      }
+
+      // ตรวจสอบว่ามี connector ที่ระบุหรือไม่
+      const connector = chargePoint.connectors.find(c => c.connectorId === connectorId);
+      if (!connector) {
+        throw new Error(`Connector ${connectorId} not found for ChargePoint '${chargePointIdentity}'`);
+      }
+
+      // สร้าง WebSocket URL ตามรูปแบบที่กำหนด
+      const websocketUrl = `ws://localhost:8081/user-cp/${chargePointIdentity}/${chargePoint.id}`;
+
+      return {
+        chargePoint: {
+          id: chargePoint.id,
+          chargePointIdentity: chargePoint.chargePointIdentity,
+          name: chargePoint.name,
+          stationName: chargePoint.stationName,
+          status: chargePoint.status
+        },
+        connector: {
+          id: connector.id,
+          connectorId: connector.connectorId,
+          type: connector.type,
+          status: connector.status
+        },
+        websocketUrl
+      };
+    } catch (error: any) {
+      console.error('Error getting WebSocket URL:', error);
+      throw new Error(`Failed to get WebSocket URL: ${error.message}`);
+    }
+  }
 }
