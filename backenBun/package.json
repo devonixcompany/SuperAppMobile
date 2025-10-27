@@ -15,21 +15,24 @@
     "@elysiajs/openapi": "^1.4.11",
     "@lensjs/express": "^1.4.0",
     "@lensjs/watchers": "^1.1.0",
-    "@prisma/client": "^5.9.1",
+    "@prisma/client": "^6.18.0",
     "@sinclair/typebox": "^0.34.41",
     "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
     "@types/winston": "^2.4.4",
     "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
     "elysia": "^1.4.13",
     "express": "^5.1.0",
     "winston": "^3.18.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.4",
-    "@types/node": "^20.11.16",
+    "@types/node": "^20.19.23",
     "@types/ws": "^8.18.1",
     "bun-types": "latest",
-    "prisma": "^5.9.1",
+    "prisma": "^6.18.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
 }

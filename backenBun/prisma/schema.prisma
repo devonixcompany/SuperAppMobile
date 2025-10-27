@@ -55,13 +55,36 @@ model ChargePoint {
   brand            String            // ยี่ห้อ/รุ่น เช่น "Autel MaxiCharger AC Wallbox 7kW"
   serialNumber     String            @unique // Serial Number เช่น "SN-AUTEL-23-001234" (ไม่ซ้ำ, A-Z 0-9 -/_)
   powerRating      Float             // กำลังไฟ (kW) เช่น 7.4, 11, 22, 50 (> 0, ทศนิยม ≤ 2 ตำแหน่ง)
-  
+  powerSystem      Int               @default(1)// ระบบไฟฟ้า: 1 = Single Phase, 3 = Three Phase
+  connectorCount   Int               @default(1) // จำนวนหัวชาร์จ เช่น 1, 2, 4 (≥ 1)
+
   protocol         OCPPVersion       // เวอร์ชัน OCPP ที่รองรับ: OCPP16, OCPP20, OCPP21
+  csmsUrl          String?           // URL ของ CSMS (Central System Management Software) สำหรับ OCPP
   chargePointIdentity String         @unique // Charge Point Identity สำหรับ BootNotification (1-36 ตัวอักษร, A-Z 0-9 -_)
   
+  connector1        ConnectorType      @default(TYPE_2) // ชนิดหัวชาร์จหลัก เช่น TYPE_2, CHADEMO, CCS_COMBO_2
+  serialNumber1     String            @unique
+  connectorId1      Int               @default(1) // ID หัวชาร์จหลัก (1 ถึง connectorCount)
+  powerRating1      Float
+
+  connector2        ConnectorType      @default(TYPE_2)
+  serialNumber2     String?           @unique
+  connectorId2      Int               @default(1) // ID หัวชาร์จหลัก (1 ถึง connectorCount)
+  powerRating2      Float
+
+  connector3        ConnectorType      @default(TYPE_2)
+  serialNumber3     String?           @unique
+  connectorId3      Int               @default(1) // ID หัวชาร์จหลัก (1 ถึง connectorCount)
+  powerRating3      Float
+
+  connector4        ConnectorType      @default(TYPE_2)
+  serialNumber4     String?           @unique
+  connectorId4      Int               @default(1) // ID หัวชาร์จหลัก (1 ถึง connectorCount)
+  powerRating4      Float
+
   status           ChargePointStatus @default(AVAILABLE) // สถานะ: AVAILABLE, OCCUPIED, UNAVAILABLE, FAULTED, MAINTENANCE
   maxPower         Float?            // กำลังไฟสูงสุด เช่น 22.0 (kW), 50.0 (kW) - deprecated, ใช้ powerRating แทน
-  connectorCount   Int               @default(1) // จำนวนหัวชาร์จ เช่น 1, 2, 4 (≥ 1)
+  
   
   // ฟิลด์ใหม่สำหรับ OCPP connection tracking
   lastSeen             DateTime?         // อัปเดตตอน Heartbeat/Boot
