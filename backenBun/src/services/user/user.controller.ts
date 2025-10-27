@@ -195,7 +195,6 @@ Retrieve detailed user profile information by user ID.
           // Update user profile
           const updatedUser = await userService.updateUserProfile(id, {
             email: updateData.email,
-            fullName: updateData.fullName,
             phoneNumber: updateData.phoneNumber
           });
           

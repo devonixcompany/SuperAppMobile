@@ -59,12 +59,17 @@ Register a new user account in the SuperApp system.
               'application/json': {
                 schema: {
                   type: 'object',
-                  required: ['userType', 'fullName', 'email', 'password', 'confirmPassword', 'firebaseUid'],
+                  required: ['userType', 'fullName', 'email', 'phoneNumber', 'password', 'confirmPassword', 'firebaseUid'],
                   properties: {
                     firebaseUid: {
                       type: 'string',
                       description: 'Firebase Authentication UID',
                       example: 'abc123xyz456firebase'
+                    },
+                    phoneNumber: {
+                      type: 'string',
+                      description: 'User phone number in E.164 or local format',
+                      example: '+66812345678'
                     },
                     userType: {
                       type: 'string',
@@ -101,24 +106,26 @@ Register a new user account in the SuperApp system.
                 examples: {
                   individual: {
                     summary: 'Individual User Registration',
-                    value: {
-                      firebaseUid: 'abc123xyz456firebase',
-                      userType: 'individual',
-                      fullName: 'สมชาย ใจดี',
-                      email: 'somchai@gmail.com',
-                      password: 'SecurePass123!',
-                      confirmPassword: 'SecurePass123!'
+                      value: {
+                        firebaseUid: 'abc123xyz456firebase',
+                        phoneNumber: '+66812345678',
+                        userType: 'individual',
+                        fullName: 'สมชาย ใจดี',
+                        email: 'somchai@gmail.com',
+                        password: 'SecurePass123!',
+                        confirmPassword: 'SecurePass123!'
                     }
                   },
                   corporate: {
                     summary: 'Corporate User Registration',
-                    value: {
-                      firebaseUid: 'def789uvw012firebase',
-                      userType: 'corporate',
-                      fullName: 'บริษัท ตัวอย่าง จำกัด',
-                      email: 'admin@company.com',
-                      password: 'CorporatePass456!',
-                      confirmPassword: 'CorporatePass456!'
+                      value: {
+                        firebaseUid: 'def789uvw012firebase',
+                        phoneNumber: '+66898765432',
+                        userType: 'corporate',
+                        fullName: 'บริษัท ตัวอย่าง จำกัด',
+                        email: 'admin@company.com',
+                        password: 'CorporatePass456!',
+                        confirmPassword: 'CorporatePass456!'
                     }
                   }
                 }
@@ -184,6 +191,7 @@ Register a new user account in the SuperApp system.
         },
         body: t.Object({
           firebaseUid: t.String(),
+          phoneNumber: t.String(),
           userType: t.Union([t.Literal('individual'), t.Literal('corporate')]),
           fullName: t.String(),
           email: t.String(),

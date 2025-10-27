@@ -59,7 +59,7 @@ export const chargePointController = (
           console.log('🔐 คำขอเพิ่ม Charge Point เข้า whitelist:', body);
           
           const data = body as any;
-          
+          console.log("data", data)
           // ตรวจสอบข้อมูลที่จำเป็นทั้งหมด (ไม่รวม id เพราะจะ auto-generate)
           if (!data.name || !data.stationName || !data.location || 
               !data.serialNumber || !data.chargePointIdentity || !data.protocol || 
@@ -105,7 +105,6 @@ export const chargePointController = (
             protocol: data.protocol,
             brand: data.brand,
             powerRating: data.powerRating,
-            connectorCount: data.connectorCount || 2,
             isWhitelisted: data.isWhitelisted ?? true // เพิ่มเข้า whitelist ทันที
           });
 
@@ -705,6 +704,7 @@ export const chargePointController = (
                       description: 'ชื่อเครื่องชาร์จ',
                       example: 'Central World Charging Station' 
                     },
+                    
                     stationName: { 
                       type: 'string', 
                       description: 'ชื่อสถานี (2-80 ตัวอักษร)',
@@ -1444,7 +1444,7 @@ export const chargePointController = (
             };
           }
           
-          const nearbyChargePoints = await chargePointService.findNearbyChargePoints(lat, lng, radius);
+          const nearbyChargePoints = await chargePointService.findAllChargePoints({ latitude: lat, longitude: lng, radius });
           
           return {
             success: true,

@@ -15,6 +15,6 @@ COPY . .
 # Generate Prisma Client
 RUN bunx prisma generate
 
-EXPOSE 3000
+EXPOSE 8080
 
 CMD ["bun", "run", "src/app.ts"]

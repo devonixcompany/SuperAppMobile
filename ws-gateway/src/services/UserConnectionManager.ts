@@ -63,24 +63,35 @@ export class UserConnectionManager {
 
     // ฟัง event เมื่อมีการอัปเดต charge point
     gatewaySessionManager.on('chargePointUpdated', (data) => {
-      let status: string;
-      let additionalData: any = {};
+      const {
+        type: updateReason,
+        status: existingStatus,
+        chargePointId,
+        ...rest
+      } = data;
 
-      switch (data.type) {
+      let status: string | null = existingStatus ?? null;
+      let additionalData: Record<string, any> = {};
+      let messageType: StatusUpdate['type'] = 'status';
+
+      switch (updateReason) {
         case 'lastSeen':
-          status = 'ONLINE';
+          messageType = 'heartbeat';
+          status = null;
           additionalData.lastSeen = data.lastSeen;
+          additionalData.lastActivity = data.lastActivity;
           break;
         case 'heartbeat':
-          status = 'ONLINE';
+          messageType = 'heartbeat';
+          status = null;
           additionalData.lastHeartbeat = data.lastHeartbeat;
+          additionalData.lastActivity = data.lastActivity;
           break;
         case 'authentication':
           status = data.isAuthenticated ? 'AUTHENTICATED' : 'UNAUTHENTICATED';
           additionalData.isAuthenticated = data.isAuthenticated;
           break;
-        case 'connectorStatus':
-          // Send connectorStatus as a separate message type
+        case 'connectorStatus': {
           const connectorUpdate: StatusUpdate = {
             type: 'connectorStatus',
             timestamp: new Date().toISOString(),
@@ -94,7 +105,8 @@ export class UserConnectionManager {
             }
           };
           this.broadcastToConnector(data.chargePointId, data.connectorId.toString(), connectorUpdate);
-          return; // Return early to avoid sending duplicate status message
+          return;
+        }
         case 'connectorMetrics': {
           const metrics = data.metrics || {};
           const chargingUpdate: StatusUpdate = {
@@ -111,6 +123,7 @@ export class UserConnectionManager {
               current: metrics.currentAmp ?? null,
               lastMeterTimestamp: metrics.lastMeterTimestamp ?? null,
               transactionId: data.transactionId ?? null,
+              status: metrics.connectorStatus ?? metrics.status ?? null,
               metrics
             }
           };
@@ -118,21 +131,31 @@ export class UserConnectionManager {
           return;
         }
         default:
-          status = 'UPDATED';
+          if (!status) {
+            status = 'UPDATED';
+          }
+      }
+
+      const updateData: Record<string, any> = {
+        chargePointId,
+        updateType: updateReason,
+        ...rest,
+        ...additionalData
+      };
+
+      if (status) {
+        updateData.status = status;
+      } else {
+        delete updateData.status;
       }
 
       const update: StatusUpdate = {
-        type: 'status',
+        type: messageType,
         timestamp: new Date().toISOString(),
-        data: {
-          chargePointId: data.chargePointId,
-          status,
-          updateType: data.type,
-          ...additionalData,
-          ...data
-        }
+        data: updateData
       };
-      this.broadcastToChargePoint(data.chargePointId, update);
+
+      this.broadcastToChargePoint(chargePointId, update);
     });
   }
 
@@ -155,6 +178,8 @@ export class UserConnectionManager {
     this.connections.get(connectionKey)!.push(connection);
 
     console.log(`👤 Added user connection for ${chargePointId}/${connectorId} (Total: ${this.connections.get(connectionKey)!.length})`);
+
+    this.sendInitialConnectorState(ws, chargePointId, connectorId);
 
     // เริ่ม heartbeat สำหรับ connection นี้
     this.startHeartbeat(ws, connectionKey);
@@ -209,7 +234,7 @@ export class UserConnectionManager {
               connection.ws.send(JSON.stringify(update));
               sentCount++;
             } catch (error) {
-              console.error(`❌ Error sending update to ${connectionKey}:`, error);
+              console.error(`❌ ส่งข้อมูลอัปเดตไปยัง ${connectionKey} ไม่สำเร็จ:`, error);
             }
           }
         });
@@ -217,7 +242,105 @@ export class UserConnectionManager {
     }
 
     if (sentCount > 0) {
-      console.log(`📤 Broadcasted ${update.type} update to ${sentCount} user connections for ${chargePointId}`);
+      console.log(`📤 ส่งข้อมูล ${update.type} ไปยังผู้ใช้ ${sentCount} การเชื่อมต่อสำหรับ ${chargePointId}`);
+    }
+  }
+
+  private sendInitialConnectorState(ws: WebSocket, chargePointId: string, connectorId: string): void {
+    const chargePoint = gatewaySessionManager.getChargePoint(chargePointId);
+    if (!chargePoint) {
+      console.log(`⚠️ ไม่มีข้อมูล Charge Point สดขณะส่งสถานะเริ่มต้นสำหรับ ${chargePointId}/${connectorId}`);
+      return;
+    }
+
+    const connectorNum = Number(connectorId);
+    if (!Number.isFinite(connectorNum)) {
+      console.log(`⚠️ หมายเลขหัวชาร์จ "${connectorId}" ไม่ถูกต้องขณะส่งสถานะเริ่มต้นสำหรับ ${chargePointId}`);
+      return;
+    }
+
+    let connector = chargePoint.connectors.find(c => c.connectorId === connectorNum);
+    if (!connector) {
+      console.log(`ℹ️ ไม่พบข้อมูลหัวชาร์จสำหรับ ${chargePointId}/${connectorId} ระหว่างส่งสถานะเริ่มต้น`);
+      if (chargePoint.connectorCount && connectorNum >= 1 && connectorNum <= chargePoint.connectorCount) {
+        connector = {
+          connectorId: connectorNum,
+          status: 'Unknown'
+        };
+      } else {
+        return;
+      }
+    }
+
+    if (ws.readyState === WebSocket.OPEN) {
+      const statusMessage: StatusUpdate = {
+        type: 'connectorStatus',
+        timestamp: new Date().toISOString(),
+        data: {
+          chargePointId,
+          connectorId: connector.connectorId,
+          status: connector.status || 'Unknown',
+          errorCode: (connector as any).errorCode,
+          isOnline: chargePoint.ws.readyState === WebSocket.OPEN,
+          message: 'โหลดสถานะหัวชาร์จล่าสุดสำเร็จ'
+        }
+      };
+
+      try {
+        ws.send(JSON.stringify(statusMessage));
+        console.log(`📤 ส่งสถานะหัวชาร์จเริ่มต้นไปยัง ${chargePointId}/${connectorId}: ${statusMessage.data.status}`);
+      } catch (error) {
+        console.error(`❌ ส่งสถานะหัวชาร์จเริ่มต้นไปยัง ${chargePointId}/${connectorId} ไม่สำเร็จ:`, error);
+      }
+
+      const chargePointStatus: StatusUpdate = {
+        type: 'status',
+        timestamp: new Date().toISOString(),
+        data: {
+          chargePointId,
+          connectorId: connector.connectorId,
+          status: connector.status || 'Unknown',
+          updateType: 'initialStatus',
+          isOnline: chargePoint.ws.readyState === WebSocket.OPEN,
+          message: 'โหลดสแนปชอตสถานะเครื่องชาร์จล่าสุดสำเร็จ'
+        }
+      };
+
+      try {
+        ws.send(JSON.stringify(chargePointStatus));
+      } catch (error) {
+        console.error(`❌ ส่งสถานะเริ่มต้นของเครื่องชาร์จไปยัง ${chargePointId}/${connectorId} ไม่สำเร็จ:`, error);
+      }
+    }
+
+    if (connector.metrics && ws.readyState === WebSocket.OPEN) {
+      const metrics = connector.metrics;
+      const chargingUpdate: StatusUpdate = {
+        type: 'charging_data',
+        timestamp: new Date().toISOString(),
+        data: {
+          chargePointId,
+          connectorId: connector.connectorId,
+          chargingPercentage: metrics.stateOfChargePercent ?? null,
+          currentPower: metrics.powerKw ?? null,
+          currentMeter: metrics.energyDeliveredKWh ?? null,
+          energyDelivered: metrics.energyDeliveredKWh ?? null,
+          voltage: metrics.voltage ?? null,
+          current: metrics.currentAmp ?? null,
+          lastMeterTimestamp: metrics.lastMeterTimestamp instanceof Date
+            ? metrics.lastMeterTimestamp.toISOString()
+            : metrics.lastMeterTimestamp ?? null,
+          transactionId: metrics.activeTransactionId ?? null,
+          metrics
+        }
+      };
+
+      try {
+        ws.send(JSON.stringify(chargingUpdate));
+        console.log(`📤 ส่งข้อมูลการชาร์จเริ่มต้นไปยัง ${chargePointId}/${connectorId}`);
+      } catch (error) {
+        console.error(`❌ ส่งข้อมูลการชาร์จเริ่มต้นไปยัง ${chargePointId}/${connectorId} ไม่สำเร็จ:`, error);
+      }
     }
   }
 
@@ -236,13 +359,13 @@ export class UserConnectionManager {
             connection.ws.send(JSON.stringify(update));
             sentCount++;
           } catch (error) {
-            console.error(`❌ Error sending update to ${connectionKey}:`, error);
+            console.error(`❌ ส่งข้อมูลอัปเดตไปยัง ${connectionKey} ไม่สำเร็จ:`, error);
           }
         }
       });
-
+      console.log(`📤 ส่งข้อมูลไปยัง ${connectionKey} ทั้งหมด ${sentCount} ข้อความ`);
       if (sentCount > 0) {
-        console.log(`📤 Sent ${update.type} update to ${sentCount} user connections for ${chargePointId}/${connectorId}`);
+        console.log(`📤 ส่งข้อมูลประเภท ${update.type} ไปยังผู้ใช้ ${sentCount} การเชื่อมต่อสำหรับ ${chargePointId}/${connectorId}`);
       }
     }
   }
@@ -260,14 +383,14 @@ export class UserConnectionManager {
             connection.ws.send(JSON.stringify(update));
             sentCount++;
           } catch (error) {
-            console.error(`❌ Error broadcasting to connection:`, error);
+            console.error('❌ ส่งข้อมูล broadcast ไปยังผู้ใช้ไม่สำเร็จ:', error);
           }
         }
       });
     }
 
     if (sentCount > 0) {
-      console.log(`📤 Broadcasted ${update.type} update to ${sentCount} user connections`);
+      console.log(`📤 ส่งข้อมูล broadcast ประเภท ${update.type} ไปยังผู้ใช้ทั้งหมด ${sentCount} การเชื่อมต่อ`);
     }
   }
 
@@ -288,7 +411,7 @@ export class UserConnectionManager {
         try {
           ws.send(JSON.stringify(heartbeat));
         } catch (error) {
-          console.error(`❌ Error sending heartbeat to ${connectionKey}:`, error);
+          console.error(`❌ ส่ง heartbeat ไปยัง ${connectionKey} ไม่สำเร็จ:`, error);
           this.stopHeartbeat(connectionKey);
         }
       } else {

@@ -29,61 +29,59 @@ export const logger = winston.createLogger({
   ],
 });
 
-// If we're not in production, log to the console with a simple format
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.combine(
-      winston.format.colorize(),
-      winston.format.timestamp({
-        format: 'HH:mm:ss'
-      }),
-      winston.format.printf(({ timestamp, level, message, service, method, url, ip, userAgent, statusCode, responseTime, ...meta }) => {
-        let logMessage = `${timestamp} [${level}]`;
-        
-        if (service) logMessage += ` ${service}`;
-        if (method && url) logMessage += ` ${method} ${url}`;
-        if (ip) logMessage += ` - ${ip}`;
-        if (userAgent) logMessage += ` - ${userAgent}`;
-        if (statusCode) logMessage += ` - ${statusCode}`;
-        if (responseTime) logMessage += ` - ${responseTime}ms`;
-        
-        logMessage += `: ${message}`;
-        
-        // Add metadata if present
-        if (Object.keys(meta).length > 0) {
-          logMessage += `\n${JSON.stringify(meta, null, 2)}`;
-        }
-        
-        return logMessage;
-      })
-    )
-  }));
-}
+// Always add console transport for debugging
+logger.add(new winston.transports.Console({
+  format: winston.format.combine(
+    winston.format.colorize(),
+    winston.format.timestamp({
+      format: 'HH:mm:ss'
+    }),
+    winston.format.printf(({ timestamp, level, message, service, method, url, ip, userAgent, statusCode, responseTime, ...meta }) => {
+      let logMessage = `${timestamp} [${level}]`;
+      
+      if (service) logMessage += ` ${service}`;
+      if (method && url) logMessage += ` ${method} ${url}`;
+      if (ip) logMessage += ` - ${ip}`;
+      if (userAgent) logMessage += ` - ${userAgent}`;
+      if (statusCode) logMessage += ` - ${statusCode}`;
+      if (responseTime) logMessage += ` - ${responseTime}ms`;
+      
+      logMessage += `: ${message}`;
+      
+      // Add metadata if present
+      if (Object.keys(meta).length > 0) {
+        logMessage += `\n${JSON.stringify(meta, null, 2)}`;
+      }
+      
+      return logMessage;
+    })
+  )
+}));
 
 // Store start times in a Map to track request duration
 const requestStartTimes = new Map<string, number>();
 
 // Create a request logger plugin for Elysia
 export const requestLogger = new Elysia({ name: 'request-logger' })
-  .derive(({ request, set }: { request: Request; set: any }) => {
-    const startTime = Date.now();
+  .onRequest(({ request }: { request: Request }) => {
     const url = new URL(request.url);
     const method = request.method;
     const ip = request.headers.get('x-forwarded-for') ||
               request.headers.get('x-real-ip') ||
               'unknown';
-    const userAgent = request.headers.get('user-agent') || 'unknown';
-
-    // Store start time for response time calculation
+    
+    // Log to console immediately for debugging
+    console.log(`🔥 [${new Date().toLocaleTimeString()}] ${method} ${url.pathname + url.search} - ${ip}`);
+    
+    const startTime = Date.now();
     const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    requestStartTimes.set(requestId, startTime);
-
+    
     logger.info('Incoming request', {
       requestId,
       method,
       url: url.pathname + url.search,
       ip,
-      userAgent,
+      userAgent: request.headers.get('user-agent') || 'unknown',
       timestamp: new Date().toISOString()
     });
 
@@ -104,6 +102,9 @@ export const requestLogger = new Elysia({ name: 'request-logger' })
       requestStartTimes.delete(requestId);
     }
 
+    // Log to console immediately for debugging
+    console.log(`✅ [${new Date().toLocaleTimeString()}] ${method} ${url.pathname + url.search} - ${statusCode} (${responseTime}ms)`);
+    
     logger.info('Request completed', {
       requestId,
       method,

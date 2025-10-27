@@ -26,6 +26,8 @@ interface ConnectorMeterValue {
 export interface ConnectorMetrics {
   lastMeterTimestamp?: Date;    // เวลาอัปเดตค่ามิเตอร์ล่าสุด
   energyDeliveredKWh?: number;  // พลังงานที่ส่งไปแล้ว (kWh)
+  energyBaselineKWh?: number;   // ค่าเริ่มต้นของมิเตอร์ (ใช้หักลบ)
+  rawEnergyReadingKWh?: number; // ค่ามิเตอร์แบบ absolute ล่าสุด (kWh)
   stateOfChargePercent?: number; // เปอร์เซ็นต์แบตเตอรี่รถ (SoC)
   powerKw?: number;             // กำลังไฟฟ้า (kW)
   voltage?: number;             // แรงดันไฟฟ้า (V)
@@ -139,7 +141,7 @@ export class GatewaySessionManager extends EventEmitter {
       totalMessagesReceived: 0
     };
 
-    console.log(`🚀 Gateway Session initialized: ${this.session.sessionId}`);
+    console.log(`🚀 เริ่มต้น Gateway Session แล้ว: ${this.session.sessionId}`);
   }
 
   /**
@@ -172,7 +174,7 @@ export class GatewaySessionManager extends EventEmitter {
     );
 
     if (existingIndex !== -1) {
-      console.log(`⚠️ Charge Point ${chargePointId} already exists in session`);
+      console.log(`⚠️ Charge Point ${chargePointId} มีอยู่ในเซสชันแล้ว`);
       return null;
     }
 
@@ -200,7 +202,7 @@ export class GatewaySessionManager extends EventEmitter {
     this.session!.chargePoints.push(chargePointEntry);
     this.session!.lastActivity = now;
 
-    console.log(`✅ Added Charge Point ${chargePointId} to Gateway Session (Total: ${this.session!.chargePoints.length})`);
+    console.log(`✅ เพิ่ม Charge Point ${chargePointId} เข้าสู่ Gateway Session แล้ว (จำนวนทั้งหมด: ${this.session!.chargePoints.length})`);
     
     // Emit event สำหรับการเพิ่ม charge point
     this.emit('chargePointAdded', {
@@ -232,7 +234,7 @@ export class GatewaySessionManager extends EventEmitter {
     );
 
     if (index === -1) {
-      console.log(`⚠️ Charge Point ${chargePointId} not found in session`);
+      console.log(`⚠️ ไม่พบ Charge Point ${chargePointId} ในเซสชัน`);
       return false;
     }
 
@@ -247,7 +249,7 @@ export class GatewaySessionManager extends EventEmitter {
     this.session.chargePoints.splice(index, 1);
     this.session.lastActivity = new Date();
 
-    console.log(`🗑️ Removed Charge Point ${chargePointId} from Gateway Session (Remaining: ${this.session.chargePoints.length})`);
+    console.log(`🗑️ ลบ Charge Point ${chargePointId} ออกจาก Gateway Session แล้ว (เหลือทั้งหมด: ${this.session.chargePoints.length})`);
     
     // Emit event สำหรับการลบ charge point
     this.emit('chargePointRemoved', {
@@ -315,7 +317,7 @@ export class GatewaySessionManager extends EventEmitter {
     if (chargePoint) {
       chargePoint.isAuthenticated = true;
       this.session!.lastActivity = new Date();
-      console.log(`🔐 Charge Point ${chargePointId} authenticated`);
+      console.log(`🔐 ยืนยันตัวตน Charge Point ${chargePointId} สำเร็จ`);
       
       // Emit event สำหรับการ authenticate
       this.emit('chargePointUpdated', {
@@ -353,7 +355,7 @@ export class GatewaySessionManager extends EventEmitter {
         
         return true;
       } catch (error) {
-        console.error(`Failed to send message to ${chargePointId}:`, error);
+        console.error(`ส่งข้อความไปยัง ${chargePointId} ไม่สำเร็จ:`, error);
         return false;
       }
     }
@@ -542,7 +544,7 @@ export class GatewaySessionManager extends EventEmitter {
     staleChargePointIds.forEach(id => this.removeChargePoint(id));
     
     if (staleChargePointIds.length > 0) {
-      console.log(`🧹 Cleaned up ${staleChargePointIds.length} stale charge points`);
+      console.log(`🧹 ทำความสะอาด Charge Point ที่ไม่ใช้งานจำนวน ${staleChargePointIds.length} รายการ`);
     }
     
     return staleChargePointIds.length;
@@ -654,13 +656,13 @@ export class GatewaySessionManager extends EventEmitter {
     errorCode?: string
   ): boolean {
     if (!this.session) {
-      console.error('No active session');
+      console.error('ไม่มีเซสชันที่กำลังทำงานอยู่');
       return false;
     }
 
     const chargePoint = this.getChargePoint(chargePointId);
     if (!chargePoint) {
-      console.error(`Charge point ${chargePointId} not found`);
+      console.error(`ไม่พบ Charge Point ${chargePointId}`);
       return false;
     }
 
@@ -669,7 +671,9 @@ export class GatewaySessionManager extends EventEmitter {
     
     if (connectorIndex === -1) {
       // ถ้าไม่พบ connector ให้สร้างใหม่
-      console.log(`Creating new connector ${connectorId} for charge point ${chargePointId}`);
+      console.log(
+        `🆕 [GatewaySession] สร้างหัวชาร์จ ${connectorId} ให้ ${chargePointId} (สถานะตั้งต้น: ${status}, errorCode: ${errorCode || 'ไม่มี'})`
+      );
       chargePoint.connectors.push({
         connectorId,
         status
@@ -678,7 +682,9 @@ export class GatewaySessionManager extends EventEmitter {
       // อัปเดตสถานะของ connector ที่มีอยู่
       const oldStatus = chargePoint.connectors[connectorIndex].status;
       chargePoint.connectors[connectorIndex].status = status;
-      console.log(`Updated connector ${connectorId} status from ${oldStatus} to ${status} for charge point ${chargePointId}`);
+      console.log(
+        `🧭 [GatewaySession] หัวชาร์จ ${connectorId} ของ ${chargePointId}: ${oldStatus ?? 'ยังไม่มีข้อมูล'} -> ${status} (errorCode: ${errorCode || 'ไม่มี'})`
+      );
     }
 
     // อัปเดต lastActivity
@@ -695,7 +701,9 @@ export class GatewaySessionManager extends EventEmitter {
       lastActivity: this.session.lastActivity
     });
 
-    console.log(`✅ Connector ${connectorId} status updated to ${status} for charge point ${chargePointId}`);
+    console.log(
+      `📦 [GatewaySession] บันทึกสถานะหัวชาร์จ ${connectorId} ของ ${chargePointId} เรียบร้อย (อัปเดตล่าสุด: ${this.session.lastActivity.toISOString()})`
+    );
     return true;
   }
 
@@ -706,19 +714,19 @@ export class GatewaySessionManager extends EventEmitter {
     transactionId?: number
   ): boolean {
     if (!this.session) {
-      console.error('No active session');
+      console.error('ไม่มีเซสชันที่กำลังทำงานอยู่');
       return false;
     }
 
     const chargePoint = this.getChargePoint(chargePointId);
     if (!chargePoint) {
-      console.error(`Charge point ${chargePointId} not found`);
+      console.error(`ไม่พบ Charge Point ${chargePointId}`);
       return false;
     }
 
     let connector = chargePoint.connectors.find(c => c.connectorId === connectorId);
     if (!connector) {
-      console.log(`Creating new connector ${connectorId} for charge point ${chargePointId} while updating meter values`);
+      console.log(`ระหว่างอัปเดตค่ามิเตอร์: กำลังสร้างหัวชาร์จ ${connectorId} ใหม่สำหรับ Charge Point ${chargePointId}`);
       connector = {
         connectorId,
         metrics: {}
@@ -732,15 +740,28 @@ export class GatewaySessionManager extends EventEmitter {
     let updated = false;
     let latestTimestamp = metrics.lastMeterTimestamp ? metrics.lastMeterTimestamp.getTime() : 0;
 
-    const updateEnergy = (value: number, unit?: string) => {
+    const convertToKWh = (value: number, unit?: string): number => {
       const normalizedUnit = unit?.toLowerCase();
-      if (normalizedUnit === 'kwh') {
-        metrics.energyDeliveredKWh = value;
-      } else if (normalizedUnit === 'wh' || !normalizedUnit) {
-        metrics.energyDeliveredKWh = value / 1000;
-      } else {
-        metrics.energyDeliveredKWh = value;
+      if (normalizedUnit === 'wh') {
+        return value / 1000;
       }
+      if (normalizedUnit === 'kwh' || normalizedUnit === 'kilowatt_hour' || normalizedUnit === 'kilowatthour' || !normalizedUnit) {
+        return value;
+      }
+      return value;
+    };
+
+    const updateEnergy = (value: number, unit?: string) => {
+      const kWhValue = convertToKWh(value, unit);
+      metrics.rawEnergyReadingKWh = kWhValue;
+
+      if (metrics.energyBaselineKWh == null) {
+        metrics.energyBaselineKWh = kWhValue;
+      }
+
+      const baseline = metrics.energyBaselineKWh ?? 0;
+      const delivered = kWhValue - baseline;
+      metrics.energyDeliveredKWh = delivered >= 0 ? delivered : 0;
       updated = true;
     };
 
@@ -844,7 +865,7 @@ export class GatewaySessionManager extends EventEmitter {
     });
 
     console.log(
-      `📊 Updated meter values for connector ${connectorId} on charge point ${chargePointId}:`,
+      `📊 อัปเดตค่ามิเตอร์สำหรับหัวชาร์จ ${connectorId} ของ Charge Point ${chargePointId}:`,
       {
         transactionId,
         metrics: metricsSnapshot
@@ -865,19 +886,19 @@ export class GatewaySessionManager extends EventEmitter {
     }
   ): boolean {
     if (!this.session) {
-      console.error('No active session');
+      console.error('ไม่มีเซสชันที่กำลังทำงานอยู่');
       return false;
     }
 
     const chargePoint = this.getChargePoint(chargePointId);
     if (!chargePoint) {
-      console.error(`Charge point ${chargePointId} not found when starting transaction`);
+      console.error(`ไม่พบ Charge Point ${chargePointId} เมื่อเริ่มธุรกรรม`);
       return false;
     }
 
     let connector = chargePoint.connectors.find(c => c.connectorId === connectorId);
     if (!connector) {
-      console.log(`Creating new connector ${connectorId} for charge point ${chargePointId} while starting transaction`);
+      console.log(`ขณะเริ่มธุรกรรม: กำลังสร้างหัวชาร์จ ${connectorId} ใหม่สำหรับ Charge Point ${chargePointId}`);
       connector = {
         connectorId,
         metrics: {}
@@ -892,6 +913,10 @@ export class GatewaySessionManager extends EventEmitter {
     metrics.transactionIdTag = options?.idTag;
     if (typeof options?.meterStart === 'number' && Number.isFinite(options.meterStart)) {
       metrics.meterStart = options.meterStart;
+      const meterStartKWh = options.meterStart / 1000;
+      metrics.energyBaselineKWh = meterStartKWh;
+      metrics.rawEnergyReadingKWh = meterStartKWh;
+      metrics.energyDeliveredKWh = 0;
     }
 
     const startedAt = options?.startedAt ? new Date(options.startedAt) : new Date();
@@ -918,7 +943,7 @@ export class GatewaySessionManager extends EventEmitter {
       lastActivity: this.session.lastActivity
     });
 
-    console.log(`🟢 Transaction ${transactionId} started on ${chargePointId} connector ${connectorId}`);
+    console.log(`🟢 เริ่มธุรกรรม ${transactionId} บน Charge Point ${chargePointId} หัวชาร์จ ${connectorId} แล้ว`);
     return true;
   }
 
@@ -931,13 +956,13 @@ export class GatewaySessionManager extends EventEmitter {
     }
   ): boolean {
     if (!this.session) {
-      console.error('No active session');
+      console.error('ไม่มีเซสชันที่กำลังทำงานอยู่');
       return false;
     }
 
     const chargePoint = this.getChargePoint(chargePointId);
     if (!chargePoint) {
-      console.error(`Charge point ${chargePointId} not found when stopping transaction`);
+      console.error(`ไม่พบ Charge Point ${chargePointId} เมื่อหยุดธุรกรรม`);
       return false;
     }
 
@@ -946,7 +971,7 @@ export class GatewaySessionManager extends EventEmitter {
     );
 
     if (!connector || !connector.metrics) {
-      console.warn(`No active connector found for transaction ${transactionId} on ${chargePointId}`);
+      console.warn(`ไม่พบหัวชาร์จที่มีธุรกรรม ${transactionId} กำลังทำงานบน ${chargePointId}`);
       return false;
     }
 
@@ -960,7 +985,13 @@ export class GatewaySessionManager extends EventEmitter {
     }
 
     if (typeof options?.meterStop === 'number' && Number.isFinite(options.meterStop)) {
-      metrics.energyDeliveredKWh = options.meterStop;
+      const stopKWh = options.meterStop / 1000;
+      metrics.rawEnergyReadingKWh = stopKWh;
+      if (metrics.energyBaselineKWh == null) {
+        metrics.energyBaselineKWh = stopKWh;
+      }
+      const baseline = metrics.energyBaselineKWh ?? 0;
+      metrics.energyDeliveredKWh = Math.max(stopKWh - baseline, 0);
     }
 
     metrics.activeTransactionId = undefined;
@@ -982,7 +1013,72 @@ export class GatewaySessionManager extends EventEmitter {
       lastActivity: this.session.lastActivity
     });
 
-    console.log(`🟥 Transaction ${transactionId} stopped on ${chargePointId} connector ${connector.connectorId}`);
+    console.log(`🟥 ยุติธุรกรรม ${transactionId} บน Charge Point ${chargePointId} หัวชาร์จ ${connector.connectorId} แล้ว`);
+    return true;
+  }
+
+  resetConnectorMetrics(chargePointId: string, connectorId: number): boolean {
+    if (!this.session) {
+      console.warn('ไม่พบ gateway session สำหรับรีเซ็ตมิเตอร์');
+      return false;
+    }
+    const chargePoint = this.getChargePoint(chargePointId);
+    if (!chargePoint) {
+      console.warn(`ไม่พบ Charge Point ${chargePointId} สำหรับการรีเซ็ตมิเตอร์`);
+      return false;
+    }
+
+    let connector = chargePoint.connectors.find(c => c.connectorId === connectorId);
+    if (!connector) {
+      connector = {
+        connectorId,
+        metrics: {}
+      };
+      chargePoint.connectors.push(connector);
+    }
+
+    if (!connector.metrics) {
+      connector.metrics = {};
+    }
+
+    const metrics = connector.metrics;
+    metrics.energyDeliveredKWh = 0;
+    metrics.energyBaselineKWh = undefined;
+    metrics.rawEnergyReadingKWh = undefined;
+    metrics.stateOfChargePercent = 0;
+    metrics.powerKw = 0;
+    metrics.voltage = undefined;
+    metrics.currentAmp = undefined;
+    metrics.meterStart = 0;
+    metrics.lastMeterTimestamp = new Date();
+    metrics.activeTransactionId = undefined;
+    metrics.transactionStartedAt = undefined;
+    metrics.transactionIdTag = undefined;
+    metrics.lastTransactionCompletedAt = undefined;
+
+    const now = new Date();
+    this.session!.lastActivity = now;
+    chargePoint.lastSeen = now;
+
+    const snapshot = { ...metrics };
+    this.emit('chargePointUpdated', {
+      chargePointId,
+      type: 'connectorMetrics',
+      connectorId,
+      metrics: snapshot,
+      lastActivity: this.session!.lastActivity
+    });
+
+    connector.status = 'Available';
+    this.emit('chargePointUpdated', {
+      chargePointId,
+      type: 'connectorStatus',
+      connectorId,
+      status: 'Available',
+      errorCode: 'NoError'
+    });
+
+    console.log(`🔄 รีเซ็ตค่ามิเตอร์ของหัวชาร์จ ${connectorId} บน ${chargePointId} ให้กลับเป็น 0`);
     return true;
   }
 

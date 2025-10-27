@@ -430,7 +430,7 @@ Authenticate an admin and receive access tokens.
             };
           }
           
-          const result = await adminService.refreshToken(refreshToken);
+          const result = await adminService.refreshToken(refreshToken as string);
           
           // Set new HTTP-only cookies for tokens
           if (result.success && result.data) {
@@ -596,7 +596,7 @@ Generate a new admin access token using a valid refresh token.
           
           if (refreshToken) {
             // Revoke the refresh token in database
-            await adminService.revokeRefreshToken(refreshToken);
+            await adminService.revokeRefreshToken(refreshToken as string);
           }
           
           // Clear cookies

@@ -178,10 +178,10 @@ export async function getConnectorConfiguration(ws: WebSocket): Promise<{
     normalizedConnectors.sort((a, b) => a.connectorId - b.connectorId);
 
     if (totalConnectors === 0) {
-      console.warn('⚠️ NumberOfConnectors not found in configuration response');
+      console.warn('⚠️ ไม่พบค่า NumberOfConnectors ในผลลัพธ์การขอข้อมูลการตั้งค่า');
     } else {
       console.log(
-        `🔌 Connector configuration detected: ${totalConnectors} connectors`,
+        `🔌 ตรวจพบข้อมูลหัวชาร์จทั้งหมด ${totalConnectors} หัว`,
         normalizedConnectors
       );
     }
@@ -192,7 +192,7 @@ export async function getConnectorConfiguration(ws: WebSocket): Promise<{
       rawConfiguration: response
     };
   } catch (error) {
-    console.error('Error getting connector configuration:', error);
+    console.error('เกิดข้อผิดพลาดระหว่างเรียกข้อมูลการตั้งค่าหัวชาร์จ:', error);
     throw error;
   }
 }
@@ -209,10 +209,10 @@ export async function getNumberOfConnectors(ws: WebSocket): Promise<number> {
       throw new Error('NumberOfConnectors not found in configuration');
     }
     
-    console.log(`🔌 Number of connectors: ${numberOfConnectors}`);
+    console.log(`🔌 จำนวนหัวชาร์จทั้งหมด: ${numberOfConnectors}`);
     return numberOfConnectors;
   } catch (error) {
-    console.error('Error getting number of connectors:', error);
+    console.error('เกิดข้อผิดพลาดระหว่างดึงจำนวนหัวชาร์จ:', error);
     throw error;
   }
 }

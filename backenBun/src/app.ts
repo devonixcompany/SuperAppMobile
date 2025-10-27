@@ -1,80 +1,66 @@
 import { cors } from '@elysiajs/cors';
 import { jwt } from '@elysiajs/jwt';
-import { swagger } from '@elysiajs/swagger';
-import { Elysia } from 'elysia';
+import { fromTypes, openapi } from '@elysiajs/openapi';
+import { Elysia, t } from 'elysia';
 import { prisma } from './lib/prisma';
 import { serviceContainer } from './services';
 
 // Get services from container
 const { jwtService } = serviceContainer;
 
-const app = new Elysia()
+const port = Number(process.env.PORT ?? 8080);
+const serverUrl = process.env.BASE_URL ?? `http://localhost:${port}`;
+
+const userModel = t.Object({
+  id: t.String(),
+  firebaseUid: t.String(),
+  phoneNumber: t.Optional(t.String()),
+  email: t.Optional(t.String()),
+  fullName: t.Optional(t.String()),
+  typeUser: t.Optional(t.String()),
+  status: t.Optional(t.String()),
+  createdAt: t.String({ format: 'date-time' }),
+  updatedAt: t.Optional(t.String({ format: 'date-time' }))
+}, { description: 'User information payload returned from SuperApp services' });
+
+const errorResponseModel = t.Object({
+  success: t.Boolean(),
+  message: t.String(),
+  errors: t.Optional(t.Array(t.Unknown()))
+}, { description: 'Standard error response envelope used across SuperApp APIs' });
+
+const authenticatedProfileResponseModel = t.Object({
+  success: t.Boolean(),
+  data: t.Object({
+    user: userModel
+  })
+}, { description: 'Authenticated user profile response payload' });
+
+export const app = new Elysia()
   .use(cors())
-  .use(swagger({
+  .model({
+    User: userModel,
+    ErrorResponse: errorResponseModel,
+    AuthenticatedProfileResponse: authenticatedProfileResponseModel
+  })
+  .use(openapi({
     documentation: {
       info: {
         title: 'SuperApp API',
-        version: '1.0.0',
-        description: `
-# SuperApp Backend API
-
-A comprehensive backend service for SuperApp mobile application built with Bun, Elysia, and Prisma.
-
-## Features
-- 🔐 JWT-based authentication
-- 👤 User management system
-- 📱 Mobile-first design
-- 🏢 Support for individual and corporate users
-- 🔒 Secure password handling
-- 📊 Health monitoring
-
-## Authentication
-Most endpoints require authentication via Bearer token in the Authorization header:
-\`\`\`
-Authorization: Bearer <your-jwt-token>
-\`\`\`
-
-## Error Handling
-All endpoints return consistent error responses:
-\`\`\`json
-{
-  "success": false,
-  "message": "Error description"
-}
-\`\`\`
-        `,
-        contact: {
-          name: 'SuperApp Development Team',
-          email: 'dev@superapp.com'
-        },
-        license: {
-          name: 'MIT',
-          url: 'https://opensource.org/licenses/MIT'
-        }
+        description: 'API documentation for SuperApp backend services',
+        version: '1.0.0'
       },
       servers: [
         {
-          url: 'http://localhost:3000',
-          description: 'Development server'
-        },
-        {
-          url: 'https://api.superapp.com',
-          description: 'Production server'
+          url: serverUrl,
+          description: 'Local development server'
         }
       ],
       tags: [
-        {
-          name: 'Authentication',
-          description: '🔐 User authentication and authorization endpoints including registration, login, and token refresh'
-        },
-        {
-          name: 'User Management',
-          description: '👤 User profile management endpoints for viewing, updating, and managing user accounts'
-        },
-        {
-          name: 'Health',
-          description: '🏥 System health check and monitoring endpoints'
-        }
+        { name: 'Authentication', description: 'Authentication and authorization endpoints' },
+        { name: 'User Management', description: 'User profile and administration operations' },
+        { name: 'Charge Point', description: 'Charging station provisioning and commands' },
+        { name: 'Health', description: 'Service readiness and monitoring probes' }
       ],
       components: {
         securitySchemes: {
@@ -82,194 +68,12 @@ All endpoints return consistent error responses:
             type: 'http',
             scheme: 'bearer',
             bearerFormat: 'JWT',
-            description: 'JWT token for authentication'
-          }
-        },
-        schemas: {
-          User: {
-            type: 'object',
-            properties: {
-              id: { 
-                type: 'string', 
-                description: 'Unique user identifier',
-                example: 'clp123abc456def789' 
-              },
-              email: { 
-                type: 'string', 
-                format: 'email',
-                description: 'User email address',
-                example: 'john.doe@example.com' 
-              },
-              firstName: { 
-                type: 'string',
-                description: 'User first name',
-                example: 'John' 
-              },
-              lastName: { 
-                type: 'string',
-                description: 'User last name', 
-                example: 'Doe' 
-              },
-              userType: { 
-                type: 'string', 
-                enum: ['INDIVIDUAL', 'CORPORATE'],
-                description: 'Type of user account',
-                example: 'INDIVIDUAL' 
-              },
-              status: { 
-                type: 'string', 
-                enum: ['ACTIVE', 'INACTIVE', 'PENDING'],
-                description: 'Current user account status',
-                example: 'ACTIVE' 
-              },
-              phoneNumber: { 
-                type: 'string',
-                description: 'User phone number',
-                example: '+66812345678' 
-              },
-              dateOfBirth: { 
-                type: 'string', 
-                format: 'date',
-                description: 'User date of birth (YYYY-MM-DD)',
-                example: '1990-05-15' 
-              },
-              address: { 
-                type: 'string',
-                description: 'User address',
-                example: '123 Main St, Bangkok, Thailand' 
-              },
-              companyName: { 
-                type: 'string',
-                description: 'Company name (for corporate users)',
-                example: 'Tech Solutions Ltd.' 
-              },
-              taxId: { 
-                type: 'string',
-                description: 'Tax identification number (for corporate users)',
-                example: '1234567890123' 
-              },
-              createdAt: { 
-                type: 'string', 
-                format: 'date-time',
-                description: 'Account creation timestamp',
-                example: '2024-01-15T10:30:00Z' 
-              },
-              updatedAt: { 
-                type: 'string', 
-                format: 'date-time',
-                description: 'Last update timestamp',
-                example: '2024-01-20T14:45:00Z' 
-              }
-            },
-            required: ['id', 'email', 'firstName', 'lastName', 'userType', 'status']
-          },
-          SuccessResponse: {
-            type: 'object',
-            properties: {
-              success: { 
-                type: 'boolean', 
-                description: 'Indicates if the operation was successful',
-                example: true 
-              },
-              message: { 
-                type: 'string',
-                description: 'Success message in Thai or English',
-                example: 'ดำเนินการสำเร็จ' 
-              },
-              data: { 
-                type: 'object',
-                description: 'Response data (varies by endpoint)',
-                additionalProperties: true
-              }
-            },
-            required: ['success']
-          },
-          ErrorResponse: {
-            type: 'object',
-            properties: {
-              success: { 
-                type: 'boolean', 
-                description: 'Always false for error responses',
-                example: false 
-              },
-              message: { 
-                type: 'string',
-                description: 'Error message in Thai or English',
-                example: 'เกิดข้อผิดพลาด' 
-              },
-              error: { 
-                type: 'string',
-                description: 'Error code or type (optional)',
-                example: 'VALIDATION_ERROR' 
-              },
-              details: { 
-                type: 'object',
-                description: 'Additional error details (optional)',
-                additionalProperties: true
-              }
-            },
-            required: ['success', 'message']
-          },
-          ValidationError: {
-            type: 'object',
-            properties: {
-              success: { 
-                type: 'boolean', 
-                example: false 
-              },
-              message: { 
-                type: 'string',
-                example: 'ข้อมูลไม่ถูกต้อง' 
-              },
-              errors: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    field: { 
-                      type: 'string',
-                      description: 'Field name that failed validation',
-                      example: 'email' 
-                    },
-                    message: { 
-                      type: 'string',
-                      description: 'Validation error message',
-                      example: 'รูปแบบอีเมลไม่ถูกต้อง' 
-                    }
-                  }
-                }
-              }
-            }
-          },
-          AuthTokens: {
-            type: 'object',
-            properties: {
-              accessToken: { 
-                type: 'string',
-                description: 'JWT access token for API authentication',
-                example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' 
-              },
-              refreshToken: { 
-                type: 'string',
-                description: 'JWT refresh token for token renewal',
-                example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' 
-              },
-              expiresIn: { 
-                type: 'number',
-                description: 'Access token expiration time in seconds',
-                example: 3600 
-              }
-            },
-            required: ['accessToken', 'refreshToken', 'expiresIn']
+            description: 'Include JWT access token generated by /api/auth/login in the Authorization header'
           }
         }
-      },
-      security: [
-        {
-          bearerAuth: []
-        }
-      ]
-    }
+      }
+    },
+    references: fromTypes('src/app.ts')
   }))
   .use(jwt({
     name: 'jwt',
@@ -328,6 +132,35 @@ All endpoints return consistent error responses:
             user
           }
         };
+      }, {
+        detail: {
+          tags: ['User Management'],
+          summary: 'Retrieve authenticated user profile',
+          description: 'Returns the profile information for the user associated with the provided bearer token.',
+          security: [
+            {
+              bearerAuth: []
+            }
+          ],
+          responses: {
+            200: {
+              description: 'Profile information successfully retrieved',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AuthenticatedProfileResponse' }
+                }
+              }
+            },
+            401: {
+              description: 'Missing or invalid bearer token',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' }
+                }
+              }
+            }
+          }
+        }
       })
   )
   .get('/health', () => ({
@@ -392,11 +225,10 @@ All endpoints return consistent error responses:
     }
   });
 
-const port = process.env.PORT ? parseInt(process.env.PORT) : 8080;
-
 app.listen(port, () => {
   console.log(`🦊 Server is running on port ${port}`);
-  console.log(`📚 Swagger Documentation: http://localhost:${port}/swagger`);
+  console.log(`📚 OpenAPI Documentation: ${serverUrl}/openapi`);
+  console.log(`📄 OpenAPI Schema: ${serverUrl}/openapi/json`);
   console.log(`📝 API Endpoints:`);
   console.log(`   POST /api/auth/register - User registration`);
   console.log(`   POST /api/auth/login - User login`);

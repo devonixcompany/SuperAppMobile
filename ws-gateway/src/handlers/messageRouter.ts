@@ -64,7 +64,7 @@ export function parseOCPPMessage(data: string): OCPPMessage | null {
       payload: messageTypeId === 2 ? payload : action // สำหรับ CALL payload อยู่ตำแหน่งที่ 4, สำหรับ CALLRESULT/CALLERROR อยู่ตำแหน่งที่ 3
     };
   } catch (error) {
-    console.error('Failed to parse OCPP message:', error);
+    console.error('ไม่สามารถแปลงข้อความ OCPP ได้:', error);
     return null;
   }
 }
@@ -105,11 +105,13 @@ export async function routeMessage(routeInfo: RouteInfo): Promise<MessageRespons
   const { version, message, chargePointId } = routeInfo;
   
   try {
-    console.log(`Routing ${message.action || 'response'} message for charge point ${chargePointId} using OCPP ${version}`);
+    console.log(
+      `กำลังส่งต่อข้อความ ${message.action || 'response'} ของ ${chargePointId} (messageId=${message.messageId}) ผ่าน OCPP ${version}`
+    );
 
     // จัดการเฉพาะ CALL messages (messageTypeId = 2)
     if (message.messageTypeId !== 2) {
-      console.log('Ignoring non-CALL message');
+      console.log('ข้ามข้อความที่ไม่ใช่ประเภท CALL');
       return { success: true };
     }
 
@@ -178,7 +180,7 @@ export async function handleWebSocketMessage(
   const message = parseOCPPMessage(data);
  
   if (!message) {
-    console.error('Failed to parse message from charge point:', chargePointId);
+    console.error('ไม่สามารถแปลงข้อความจาก Charge Point ได้:', chargePointId);
     return;
   }
 
@@ -198,13 +200,13 @@ export async function handleWebSocketMessage(
   if (message.messageTypeId === 2) {
     let responseMessage: string;
 
-    console.log(`🔄 Processing CALL message: ${message.action} from ${chargePointId}`);
-    console.log(`📊 Route result - Success: ${result.success}, Response:`, result.response);
+    console.log(`🔄 กำลังประมวลผลข้อความ CALL: ${message.action} จาก ${chargePointId}`);
+    console.log(`📊 ผลการจัดเส้นทาง - สำเร็จ: ${result.success}, คำตอบ:`, result.response);
 
     if (result.success && result.response !== null) {
       // สร้างข้อความ CALLRESULT
       responseMessage = formatOCPPResponse(message.messageId, result.response);
-      console.log(`✅ Sending CALLRESULT for ${message.action} to ${chargePointId}:`, responseMessage);
+      console.log(`✅ ส่ง CALLRESULT สำหรับ ${message.action} ไปยัง ${chargePointId}:`, responseMessage);
     } else if (!result.success && result.error) {
       // สร้างข้อความ CALLERROR
       responseMessage = formatOCPPError(
@@ -213,18 +215,18 @@ export async function handleWebSocketMessage(
         result.error.description,
         result.error.details
       );
-      console.log(`❌ Sending CALLERROR for ${message.action} to ${chargePointId}:`, responseMessage);
+      console.log(`❌ ส่ง CALLERROR สำหรับ ${message.action} ไปยัง ${chargePointId}:`, responseMessage);
     } else {
       // การตอบกลับเริ่มต้นสำหรับข้อความที่ไม่ต้องการข้อมูลตอบกลับ
       responseMessage = formatOCPPResponse(message.messageId, {});
-      console.log(`📤 Sending empty CALLRESULT for ${message.action} to ${chargePointId}:`, responseMessage);
+      console.log(`📤 ส่ง CALLRESULT ว่างสำหรับ ${message.action} ไปยัง ${chargePointId}:`, responseMessage);
     }
 
     // ส่งการตอบกลับไปยัง charge point
-    console.log(`🚀 About to send response to ${chargePointId} via sendResponse function`);
+    console.log(`🚀 กำลังเตรียมส่งคำตอบกลับไปยัง ${chargePointId} ผ่านฟังก์ชัน sendResponse`);
     sendResponse(responseMessage);
-    console.log(`✅ Response sent to ${chargePointId} for ${message.action}`);
+    console.log(`✅ ส่งคำตอบไปยัง ${chargePointId} สำหรับ ${message.action} เรียบร้อยแล้ว`);
   } else {
-    console.log(`ℹ️ Message type ${message.messageTypeId} from ${chargePointId} does not require response`);
+    console.log(`ℹ️ ข้อความประเภท ${message.messageTypeId} จาก ${chargePointId} ไม่จำเป็นต้องส่งคำตอบกลับ`);
   }
 }

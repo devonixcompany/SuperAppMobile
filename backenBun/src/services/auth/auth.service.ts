@@ -12,6 +12,7 @@ export class AuthService {
   ) {}
 
   async register(data: RegistrationData) {
+    console.log("dataregis",data)
     console.log("📝 [AUTH] Registration attempt:", {
       email: data.email,
       userType: data.userType,
@@ -55,6 +56,7 @@ export class AuthService {
       const newUser = await this.userService.createUser({
         firebaseUid: firebaseUid,
         phoneNumber: phoneNumber,
+        email: email,
         password: hashedPassword,
         typeUser: typeUser,
         status: "ACTIVE",

@@ -927,23 +927,50 @@ export class ChargePointService {
         throw new Error(`Connector ${connectorId} not found for ChargePoint '${chargePointIdentity}'`);
       }
 
-      // สร้าง WebSocket URL ตามรูปแบบที่กำหนด
-      const websocketUrl = `ws://localhost:8081/user-cp/${chargePointIdentity}/${chargePoint.id}`;
+      let pricingTier = null;
+      if (chargePoint.defaultPricingTierId) {
+        pricingTier = await this.prisma.pricingTier.findUnique({
+          where: { id: chargePoint.defaultPricingTierId }
+        });
+      }
 
+      // สร้าง WebSocket URL ตามรูปแบบที่กำหนด
+      const websocketUrl = `ws://localhost:3000/user-cp/${chargePointIdentity}/${connectorId}`;
+      console.log("respone websocketUrl", websocketUrl)
       return {
         chargePoint: {
           id: chargePoint.id,
           chargePointIdentity: chargePoint.chargePointIdentity,
           name: chargePoint.name,
           stationName: chargePoint.stationName,
+          location: chargePoint.location,
+          openingHours: chargePoint.openingHours,
+          is24Hours: chargePoint.is24Hours,
+          protocol: chargePoint.protocol,
+          powerRating: chargePoint.powerRating,
+          brand: chargePoint.brand,
+          defaultPricingTierId: chargePoint.defaultPricingTierId,
           status: chargePoint.status
         },
         connector: {
           id: connector.id,
           connectorId: connector.connectorId,
           type: connector.type,
-          status: connector.status
+          status: connector.status,
+          maxCurrent: connector.maxCurrent,
+          maxPower: connector.maxPower
         },
+        pricingTier: pricingTier
+          ? {
+              id: pricingTier.id,
+              name: pricingTier.name,
+              baseRate: pricingTier.baseRate,
+              peakRate: pricingTier.peakRate,
+              offPeakRate: pricingTier.offPeakRate,
+              currency: pricingTier.currency,
+              tierType: pricingTier.tierType
+            }
+          : null,
         websocketUrl
       };
     } catch (error: any) {

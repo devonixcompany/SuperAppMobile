@@ -33,6 +33,19 @@ async function handleRemoteStartTransaction(chargePoint: any, data: any, userWs:
     // สร้างคำสั่ง RemoteStartTransaction ตามมาตรฐาน OCPP 1.6 (CALL message type 2)
     const messageId = `remote-start-${Date.now()}`;
     const connectorId = data.connectorId || 1;
+
+    // Reset local meter statistics for this connector before starting
+    try {
+      gatewaySessionManager.resetConnectorMetrics(
+        chargePoint.chargePointId,
+        connectorId
+      );
+    } catch (metricError) {
+      console.warn(
+        `⚠️ ไม่สามารถรีเซ็ตค่ามิเตอร์ของหัวชาร์จ ${connectorId} บน ${chargePoint.chargePointId}:`,
+        metricError
+      );
+    }
     const remoteStartPayload: Record<string, any> = {
       idTag: data.idTag || 'FF88888801'
     };
@@ -68,7 +81,6 @@ async function handleRemoteStartTransaction(chargePoint: any, data: any, userWs:
         idTag: remoteStartPayload.idTag
       }
     }));
-    
   } catch (error) {
     console.error('Error handling RemoteStartTransaction:', error);
     userWs.send(JSON.stringify({
@@ -160,7 +172,25 @@ async function handleRemoteStopTransaction(chargePoint: any, data: any, userWs: 
         transactionId: numericTransactionId
       }
     }));
-    
+
+    const resolvedConnectorId = connectorId ?? chargePoint.connectors.find(
+      (c: any) => c.metrics?.activeTransactionId === numericTransactionId
+    )?.connectorId;
+
+    if (typeof resolvedConnectorId === 'number' && Number.isFinite(resolvedConnectorId)) {
+      try {
+        gatewaySessionManager.resetConnectorMetrics(
+          chargePoint.chargePointId,
+          resolvedConnectorId
+        );
+      } catch (metricError) {
+        console.warn(
+          `⚠️ ไม่สามารถรีเซ็ตค่ามิเตอร์ของหัวชาร์จ ${resolvedConnectorId} บน ${chargePoint.chargePointId}:`,
+          metricError
+        );
+      }
+    }
+
   } catch (error) {
     console.error('Error handling RemoteStopTransaction:', error);
     userWs.send(JSON.stringify({
@@ -181,6 +211,158 @@ const chargePointCache = new Map<string, any>();
 
 // สร้าง UserConnectionManager instance
 const userConnectionManager = new UserConnectionManager();
+
+// กำหนดค่าการตรวจสอบ heartbeat ของเครื่องชาร์จหลังจากโหลดข้อมูลจากฐานข้อมูล
+const HEARTBEAT_CHECK_INITIAL_DELAY_MS = 5000;   // หน่วงเวลา 5 วินาทีหลังเริ่มระบบก่อนเช็กครั้งแรก
+const HEARTBEAT_CHECK_INTERVAL_MS = 60000;       // ตรวจสอบทุก ๆ 60 วินาที
+const SINGLE_CHARGE_POINT_CHECK_DELAY_MS = 3000; // เวลารอหลังจากมีเครื่องชาร์จเชื่อมต่อใหม่
+
+let heartbeatCheckInitialTimeout: NodeJS.Timeout | null = null;
+let heartbeatCheckInterval: NodeJS.Timeout | null = null;
+const pendingHeartbeatChecks = new Map<string, NodeJS.Timeout>();
+
+/**
+ * ยกเลิกตัวจับเวลาการตรวจสอบ heartbeat ของเครื่องชาร์จรายตัว
+ */
+function cancelPendingChargePointHeartbeatCheck(chargePointId: string): void {
+  const timeout = pendingHeartbeatChecks.get(chargePointId);
+  if (timeout) {
+    clearTimeout(timeout);
+    pendingHeartbeatChecks.delete(chargePointId);
+  }
+}
+
+/**
+ * ตรวจสอบการตอบสนองของเครื่องชาร์จที่เชื่อมต่ออยู่
+ * - ส่ง WebSocket ping frame เพื่อให้เครื่องชาร์จตอบ pong
+ * - ส่ง TriggerMessage (Heartbeat) เพื่อกระตุ้นให้เครื่องชาร์จส่ง Heartbeat ตามมาตรฐาน OCPP
+ */
+function performChargePointHeartbeatCheck(reason: string, targetChargePointIds?: string[]): void {
+  const allChargePoints = gatewaySessionManager.getAllChargePoints();
+  const targetChargePoints = targetChargePointIds
+    ? allChargePoints.filter(cp => targetChargePointIds.includes(cp.chargePointId))
+    : allChargePoints;
+
+  if (targetChargePoints.length === 0) {
+    if (targetChargePointIds && targetChargePointIds.length > 0) {
+      console.log(
+        `📡 ข้ามการตรวจสอบ heartbeat (${reason}) - ไม่พบเครื่องชาร์จที่กำหนดไว้: ${targetChargePointIds.join(', ')}`
+      );
+    } else {
+      console.log(`📡 ข้ามการตรวจสอบ heartbeat (${reason}) - ยังไม่มีเครื่องชาร์จที่เชื่อมต่ออยู่`);
+    }
+    return;
+  }
+
+  let pingSentCount = 0;
+  let triggerSentCount = 0;
+
+  targetChargePoints.forEach((chargePoint) => {
+    if (!chargePoint.ws || chargePoint.ws.readyState !== WebSocket.OPEN) {
+      console.log(
+        `⚠️ ข้ามการตรวจสอบ ${chargePoint.chargePointId} เพราะสถานะ WebSocket ไม่ใช่ OPEN (state=${chargePoint.ws?.readyState})`
+      );
+      return;
+    }
+
+    try {
+      chargePoint.ws.ping();
+      pingSentCount++;
+    } catch (error) {
+      console.error(`❌ ส่ง ping ไปยัง ${chargePoint.chargePointId} ไม่สำเร็จ:`, error);
+    }
+
+    const messageId = `trigger-heartbeat-${chargePoint.chargePointId}-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 6)}`;
+    const triggerMessage = [
+      2,
+      messageId,
+      'TriggerMessage',
+      {
+        requestedMessage: 'Heartbeat'
+      }
+    ];
+
+    if (gatewaySessionManager.sendMessage(chargePoint.chargePointId, triggerMessage)) {
+      triggerSentCount++;
+    } else {
+      console.log(`⚠️ ส่ง TriggerMessage ไปยัง ${chargePoint.chargePointId} ไม่สำเร็จ`);
+    }
+  });
+
+  console.log(
+    `📡 ตรวจสอบ heartbeat (${reason}) เสร็จสิ้น: ping=${pingSentCount}/${targetChargePoints.length}, TriggerMessage=${triggerSentCount}`
+  );
+}
+
+/**
+ * จัดคิวตรวจสอบ heartbeat สำหรับเครื่องชาร์จที่เพิ่งเชื่อมต่อใหม่
+ */
+function scheduleChargePointHeartbeatCheck(chargePointId: string, reason: string): void {
+  cancelPendingChargePointHeartbeatCheck(chargePointId);
+
+  const timeout = setTimeout(() => {
+    pendingHeartbeatChecks.delete(chargePointId);
+    performChargePointHeartbeatCheck(`${reason}:${chargePointId}`, [chargePointId]);
+  }, SINGLE_CHARGE_POINT_CHECK_DELAY_MS);
+
+  pendingHeartbeatChecks.set(chargePointId, timeout);
+}
+
+/**
+ * เริ่มการตรวจสอบ heartbeat แบบรอบระยะเวลา
+ */
+function startChargePointHeartbeatChecks(): void {
+  if (heartbeatCheckInitialTimeout || heartbeatCheckInterval) {
+    return;
+  }
+
+  console.log(
+    `📡 กำลังตั้งเวลาตรวจสอบ heartbeat ของเครื่องชาร์จ (เริ่มใน ${HEARTBEAT_CHECK_INITIAL_DELAY_MS / 1000}s, ทุก ${HEARTBEAT_CHECK_INTERVAL_MS / 1000}s)`
+  );
+
+  // ตรวจสอบทันทีหลังโหลดข้อมูล เพื่อบันทึกสถานะเริ่มต้น (ถ้ายังไม่มีจะขึ้น log ข้าม)
+  performChargePointHeartbeatCheck('initial-cache-load');
+
+  const runPeriodicCheck = () => performChargePointHeartbeatCheck('periodic-scan');
+
+  heartbeatCheckInitialTimeout = setTimeout(() => {
+    runPeriodicCheck();
+    heartbeatCheckInterval = setInterval(runPeriodicCheck, HEARTBEAT_CHECK_INTERVAL_MS);
+  }, HEARTBEAT_CHECK_INITIAL_DELAY_MS);
+}
+
+/**
+ * หยุดการตรวจสอบ heartbeat และล้างตัวจับเวลา
+ */
+function stopChargePointHeartbeatChecks(): void {
+  if (heartbeatCheckInitialTimeout) {
+    clearTimeout(heartbeatCheckInitialTimeout);
+    heartbeatCheckInitialTimeout = null;
+  }
+
+  if (heartbeatCheckInterval) {
+    clearInterval(heartbeatCheckInterval);
+    heartbeatCheckInterval = null;
+  }
+
+  for (const timeout of pendingHeartbeatChecks.values()) {
+    clearTimeout(timeout);
+  }
+  pendingHeartbeatChecks.clear();
+}
+
+// รับฟังเหตุการณ์เครื่องชาร์จเชื่อมต่อ/ตัดการเชื่อมต่อ เพื่อจัดคิวตรวจสอบ heartbeat
+gatewaySessionManager.on('chargePointAdded', ({ chargePointId }) => {
+  console.log(`🔔 ตรวจพบเครื่องชาร์จเชื่อมต่อใหม่: ${chargePointId} -> จัดคิวตรวจสอบ heartbeat`);
+  scheduleChargePointHeartbeatCheck(chargePointId, 'charge-point-added');
+});
+
+gatewaySessionManager.on('chargePointRemoved', ({ chargePointId }) => {
+  console.log(`🔕 เครื่องชาร์จถูกถอดการเชื่อมต่อ: ${chargePointId} -> ยกเลิกการตรวจสอบที่รออยู่`);
+  cancelPendingChargePointHeartbeatCheck(chargePointId);
+});
 
 /**
  * ฟังก์ชั่นดึงข้อมูล charge point จากแคชโดยใช้ chargePointId เป็นคีย์หลัก
@@ -230,23 +412,23 @@ async function initializeCache() {
 // จัดการ HTTP upgrade สำหรับ WebSocket connections
 server.on('upgrade', (request, socket, head) => {
   const url = new URL(request.url || '', `http://${request.headers.host}`);
-  console.log("URL connect:", url.pathname);
+  console.log('เส้นทาง URL ที่ขอเชื่อมต่อ:', url.pathname);
   
   if (url.pathname.startsWith('/user-cp/')) {
     // Handle user WebSocket upgrade
-    console.log("Routing to User WebSocket server");
+    console.log('กำลังเปลี่ยนเส้นทางไปยัง User WebSocket server');
     userWss.handleUpgrade(request, socket, head, (ws) => {
       userWss.emit('connection', ws, request);
     });
   } else if (url.pathname.startsWith('/ocpp/')) {
     // Handle OCPP WebSocket upgrade
-    console.log("Routing to OCPP WebSocket server");
+    console.log('กำลังเปลี่ยนเส้นทางไปยัง OCPP WebSocket server');
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit('connection', ws, request);
     });
   } else {
     // Default to OCPP for backward compatibility (direct /chargePointId)
-    console.log("Routing to OCPP WebSocket server (backward compatibility)");
+    console.log('กำลังเปลี่ยนเส้นทางไปยัง OCPP WebSocket server (โหมดรองรับของเดิม)');
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit('connection', ws, request);
     });
@@ -258,7 +440,7 @@ server.on('upgrade', (request, socket, head) => {
  * Handle User WebSocket connections for monitoring charging status
  */
 userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
-  console.log('New User WebSocket connection attempt');
+  console.log('มีการพยายามเชื่อมต่อ User WebSocket ใหม่');
   
   try {
     // แยก charge point ID และ connector ID จาก URL path
@@ -267,7 +449,7 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
     
     // ตรวจสอบรูปแบบ URL: /user-cp/{chargePointId}/{connectorId}
     if (pathParts.length !== 3 || pathParts[0] !== 'user-cp') {
-      console.error('Invalid user URL format. Expected /user-cp/{chargePointId}/{connectorId}');
+      console.error('รูปแบบ URL ของผู้ใช้ไม่ถูกต้อง ต้องเป็น /user-cp/{chargePointId}/{connectorId}');
       ws.close(1008, 'Invalid URL format');
       return;
     }
@@ -275,7 +457,7 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
     const chargePointId = pathParts[1];
     const connectorId = pathParts[2];
     
-    console.log(`User connection for charge point: ${chargePointId}, connector: ${connectorId}`);
+    console.log(`เชื่อมต่อผู้ใช้สำหรับ Charge Point: ${chargePointId} หัวชาร์จ: ${connectorId}`);
     
     // ตรวจสอบว่า charge point มีอยู่ในระบบหรือไม่
     // ตรวจสอบทั้งใน gatewaySessionManager และ cache
@@ -283,20 +465,20 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
     const cachedChargePoint = getChargePointFromCache(chargePointId);
     
     if (!chargePoint && !cachedChargePoint) {
-      console.log(`Charge point ${chargePointId} not found in session or cache`);
+      console.log(`ไม่พบ Charge Point ${chargePointId} ในเซสชันหรือแคช`);
       ws.close(1008, 'Charge point not found or offline');
       return;
     }
     
     // เพิ่ม connection ลงใน UserConnectionManager
     userConnectionManager.addConnection(ws, chargePointId, connectorId);
-    console.log("chargePointchargePointchargePointchargePointchargePointchargePointchargePointchargePoint",chargePoint)
+    console.log('สถานะ Charge Point ปัจจุบัน:', chargePoint);
     
     // จัดการข้อความที่เข้ามาจาก user WebSocket
     ws.on('message', async (data: Buffer) => {
       try {
         const message = JSON.parse(data.toString());
-        console.log(`📨 Received message from user ${chargePointId}/${connectorId}:`, message);
+        console.log(`📨 รับข้อความจากผู้ใช้ ${chargePointId}/${connectorId}:`, message);
         
         // ตรวจสอบว่า charge point ยังเชื่อมต่ออยู่หรือไม่
         const currentChargePoint = gatewaySessionManager.getChargePoint(chargePointId);
@@ -321,7 +503,7 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
             await handleRemoteStopTransaction(currentChargePoint, message.data, ws);
             break;
           default:
-            console.log(`Unknown message type: ${message.type}`);
+            console.log(`ไม่รู้จักประเภทข้อความจากผู้ใช้: ${message.type}`);
             ws.send(JSON.stringify({
               type: 'error',
               timestamp: new Date().toISOString(),
@@ -332,7 +514,7 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
             }));
         }
       } catch (error) {
-        console.error('Error handling user message:', error);
+        console.error('เกิดข้อผิดพลาดระหว่างประมวลผลข้อความจากผู้ใช้:', error);
         ws.send(JSON.stringify({
           type: 'error',
           timestamp: new Date().toISOString(),
@@ -360,11 +542,11 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
         } : undefined
       }
     };
-    console.log("initialStatusinitialStatusinitialStatusinitialStatusinitialStatusinitialStatusinitialStatusinitialStatusinitialStatus",initialStatus)
+    console.log('ส่งสถานะเริ่มต้นให้ผู้ใช้:', initialStatus);
     ws.send(JSON.stringify(initialStatus));
     
   } catch (error) {
-    console.error('Error handling User WebSocket connection:', error);
+    console.error('เกิดข้อผิดพลาดระหว่างจัดการการเชื่อมต่อ User WebSocket:', error);
     ws.close(1011, 'Internal server error');
   }
 });
@@ -374,7 +556,7 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
     
   } catch (error) {
     console.error('❌ Failed to initialize cache:', error);
-    console.log('⚠️ Server will continue without cache data');
+    console.log('⚠️ เซิร์ฟเวอร์จะทำงานต่อโดยไม่มีข้อมูลแคช');
   }
 }
 
@@ -705,27 +887,27 @@ wss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
       }
     }
     
-    console.log("OCPP chargePointId:", chargePointId);
+    console.log('Charge Point ID สำหรับการเชื่อมต่อ OCPP:', chargePointId);
     
     // Step 2: ตรวจสอบว่ามี charge point ID หรือไม่
     if (!chargePointId || chargePointId === 'ocpp') {
-      console.error('No charge point ID provided in URL');
+      console.error('ไม่ได้ส่ง Charge Point ID มาพร้อม URL');
       ws.close(1008, 'Charge point ID required');
       return;
     }
     
-    console.log("websocket protocol:",  ws.protocol)
+    console.log('โปรโตคอลที่เครื่องชาร์จเลือกใช้:', ws.protocol);
     // Step 3: แยก OCPP version จาก subprotocol หรือใช้ค่าเริ่มต้น 1.6
     const subprotocol = ws.protocol || 'ocpp1.6';
     const ocppVersion = subprotocolToVersion(subprotocol) || '1.6';
     
-    console.log(`Attempting OCPP connection for charge point: ${chargePointId} with OCPP ${ocppVersion}`);
+    console.log(`กำลังเชื่อมต่อ OCPP กับ Charge Point ${chargePointId} โดยใช้เวอร์ชัน ${ocppVersion}`);
     
     // Step 4: OCPP connection - จัดการการเชื่อมต่อปกติ
     await handleConnection(ws, request, chargePointId, ocppVersion);
     
   } catch (error) {
-    console.error('Error handling OCPP WebSocket connection:', error);
+    console.error('เกิดข้อผิดพลาดระหว่างจัดการการเชื่อมต่อ OCPP WebSocket:', error);
     ws.close(1011, 'Internal server error');
   }
 });
@@ -735,7 +917,7 @@ wss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
  * Handle WebSocket server errors
  */
 wss.on('error', (error) => {
-  console.error('WebSocket server error:', error);
+  console.error('เกิดข้อผิดพลาดในระดับ WebSocket server:', error);
 });
 
 /**
@@ -750,7 +932,7 @@ sessionMonitor.startMonitoring(30000); // Monitor every 30 seconds
 setInterval(() => {
   const cleanedCount = gatewaySessionManager.cleanupStaleChargePoints();
   if (cleanedCount > 0) {
-    console.log(`Cleaned up ${cleanedCount} stale charge points`);
+    console.log(`ทำความสะอาด Charge Point ที่ไม่ใช้งานจำนวน ${cleanedCount} รายการ`);
   }
 }, 5 * 60 * 1000); // Every 5 minutes
 
@@ -762,9 +944,10 @@ setInterval(() => {
  * Step 3: ปิด WebSocket server
  */
 process.on('SIGTERM', () => {
-  console.log('Received SIGTERM, shutting down gracefully...');
+  console.log('ได้รับสัญญาณ SIGTERM กำลังปิดระบบอย่างปลอดภัย...');
   
   // Step 1: หยุดการตรวจสอบ session
+  stopChargePointHeartbeatChecks();
   sessionMonitor.stopMonitoring();
   
   // Step 2: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
@@ -775,11 +958,11 @@ process.on('SIGTERM', () => {
   
   // Step 3: ปิด WebSocket server
   wss.close(() => {
-    console.log('WebSocket server closed');
+    console.log('ปิด WebSocket server เรียบร้อย');
     
     // Step 4: ปิด HTTP server
     server.close(() => {
-      console.log('HTTP server closed');
+      console.log('ปิด HTTP server เรียบร้อย');
       process.exit(0);
     });
   });
@@ -793,9 +976,10 @@ process.on('SIGTERM', () => {
  * Step 3: ปิด WebSocket server
  */
 process.on('SIGINT', () => {
-  console.log('Received SIGINT, shutting down gracefully...');
+  console.log('ได้รับสัญญาณ SIGINT กำลังปิดระบบอย่างปลอดภัย...');
   
   // Step 1: หยุดการตรวจสอบ session
+  stopChargePointHeartbeatChecks();
   sessionMonitor.stopMonitoring();
   
   // Step 2: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
@@ -806,11 +990,11 @@ process.on('SIGINT', () => {
   
   // Step 3: ปิด WebSocket server
   wss.close(() => {
-    console.log('WebSocket server closed');
+    console.log('ปิด WebSocket server เรียบร้อย');
     
     // Step 4: ปิด HTTP server
     server.close(() => {
-      console.log('HTTP server closed');
+      console.log('ปิด HTTP server เรียบร้อย');
       process.exit(0);
     });
   });
@@ -824,24 +1008,26 @@ process.on('SIGINT', () => {
  * Step 3: เริ่มต้นแคชด้วยข้อมูล charge point
  * Step 4: แสดงสถิติ session เริ่มต้น
  */
-const PORT = process.env.PORT || 8081;
-server.listen(PORT, async () => {
+const PORT = process.env.PORT || 3000;
+const HOST = '0.0.0.0'; // รับการเชื่อมต่อจากทุก IP address
+server.listen(Number(PORT), HOST, async () => {
   // Step 1 & 2: เริ่มต้น server และแสดงข้อมูล
-  console.log(`OCPP WebSocket server running on port ${PORT}`);
-  console.log(`OCPP WebSocket endpoint: ws://localhost:${PORT}/ocpp/{chargePointId}`);
-  console.log(`User WebSocket endpoint: ws://localhost:${PORT}/user-cp/{chargePointId}/{connectorId}`);
-  console.log(`Legacy OCPP endpoint: ws://localhost:${PORT}/{chargePointId} (backward compatibility)`);
-  console.log('Session monitoring started');
+  console.log(`OCPP WebSocket server เปิดใช้งานบน ${HOST}:${PORT}`);
+  console.log(`ปลายทาง OCPP WebSocket: ws://<your-ip-address>:${PORT}/ocpp/{chargePointId}`);
+  console.log(`ปลายทาง User WebSocket: ws://<your-ip-address>:${PORT}/user-cp/{chargePointId}/{connectorId}`);
+  console.log(`ปลายทาง OCPP แบบเดิม: ws://<your-ip-address>:${PORT}/{chargePointId}`);
+  console.log('เริ่มระบบติดตามสถานะเซสชันแล้ว');
     // ✅ Step 3.1: เคลียร์ cache ก่อนเริ่มต้นใหม่
-   chargePointCache.clear();
-  console.log('🧹 Cleared old cache before initialization');
+ chargePointCache.clear();
+  console.log('🧹 ล้างข้อมูลแคชเดิมก่อนเริ่มใช้งาน');
   // Step 3: เริ่มต้นแคชด้วยข้อมูล charge point
   await initializeCache();
+  startChargePointHeartbeatChecks();
   
   // Step 4: แสดงสถิติ session เริ่มต้นหลังจาก 1 วินาที
   setTimeout(() => {
     const stats = gatewaySessionManager.getStats();
-    console.log('Initial gateway session stats:', stats);
+    console.log('สถิติเบื้องต้นของ gateway session:', stats);
   }, 1000);
 });
 

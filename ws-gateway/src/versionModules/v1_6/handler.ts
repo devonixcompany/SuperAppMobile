@@ -51,12 +51,14 @@ export async function handleStatusNotification(
   messageId: string,
   payload: any
 ): Promise<any> {
-  console.log(`🔌 StatusNotification from ${chargePointId}:`, payload);
+  console.log(
+    `🔌 [OCPP] รับ StatusNotification จาก ${chargePointId}: connector=${payload.connectorId}, status=${payload.status}, errorCode=${payload.errorCode || 'ไม่มี'}`
+  );
 
   try {
     // Check required data
     if (payload.connectorId === undefined || !payload.status) {
-      console.error(`❌ Incomplete StatusNotification data from ${chargePointId}`);
+      console.error(`❌ ข้อมูล StatusNotification จาก ${chargePointId} ไม่ครบถ้วน`);
       return {};
     }
 
@@ -72,15 +74,19 @@ export async function handleStatusNotification(
     );
 
     if (updateResult) {
-      console.log(`✅ Updated connector ${payload.connectorId} status to ${payload.status} for ${chargePointId}`);
+      console.log(
+        `🧾 [OCPP] ผลอัปเดตใน GatewaySession: สำเร็จ (connector=${payload.connectorId}, status=${payload.status})`
+      );
     } else {
-      console.warn(`⚠️ Failed to update connector status for ${chargePointId}`);
+      console.warn(`⚠️ อัปเดตสถานะหัวชาร์จของ ${chargePointId} ไม่สำเร็จ (connector=${payload.connectorId})`);
     }
 
     // Update connector status in backend (if API endpoint exists)
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
     
-    console.log(`📤 Updating connector ${payload.connectorId} status to ${payload.status} for ${chargePointId}`);
+    console.log(
+      `📤 [OCPP] กำลังแจ้งระบบอื่นเกี่ยวกับสถานะใหม่: connector=${payload.connectorId}, status=${payload.status} ของ ${chargePointId}`
+    );
     
     // Note: May need to add API endpoint for updating connector status in backend
     // const updateResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/connectors/${payload.connectorId}/status`, {
@@ -95,13 +101,13 @@ export async function handleStatusNotification(
     //   })
     // });
 
-    console.log(`✅ Received StatusNotification for ${chargePointId} connector ${payload.connectorId}`);
+  console.log(`✅ [OCPP] ประมวลผล StatusNotification ของ ${chargePointId} หัวชาร์จ ${payload.connectorId} เสร็จสิ้น`);
 
     // Send response acknowledging receipt
     return {};
 
   } catch (error) {
-    console.error(`💥 Error handling StatusNotification from ${chargePointId}:`, error);
+    console.error(`💥 เกิดข้อผิดพลาดระหว่างประมวลผล StatusNotification จาก ${chargePointId}:`, error);
     return {};
   }
 }
@@ -123,7 +129,7 @@ async function updateConnectorStatus(chargePointId: string, payload: OCPP16Statu
       vendorErrorCode: payload.vendorErrorCode
     };
 
-    console.log(`Updating connector ${payload.connectorId} status for charge point ${chargePointId}:`, updateData);
+    console.log(`กำลังอัปเดตสถานะหัวชาร์จ ${payload.connectorId} ของ ${chargePointId}:`, updateData);
 
     const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/status`, {
       method: 'POST',
@@ -135,19 +141,19 @@ async function updateConnectorStatus(chargePointId: string, payload: OCPP16Statu
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Failed to update connector status: ${response.status} - ${errorText}`);
+      console.error(`อัปเดตสถานะหัวชาร์จไม่สำเร็จ: ${response.status} - ${errorText}`);
       return;
     }
 
     const result = await response.json();
-    console.log(`Successfully updated connector ${payload.connectorId} status for charge point ${chargePointId}:`, result);
+    console.log(`อัปเดตสถานะหัวชาร์จ ${payload.connectorId} ของ ${chargePointId} ในฐานข้อมูลสำเร็จ:`, result);
   } catch (error) {
-    console.error(`Error updating connector ${payload.connectorId} status for charge point ${chargePointId}:`, error);
+    console.error(`เกิดข้อผิดพลาดระหว่างอัปเดตสถานะหัวชาร์จ ${payload.connectorId} ของ ${chargePointId}:`, error);
   }
 }
 
 export async function handleMeterValues(chargePointId: string, payload: OCPP16MeterValuesRequest): Promise<any> {
-  console.log('OCPP 1.6 - Handling MeterValues:', payload);
+  console.log('OCPP 1.6 - กำลังประมวลผล MeterValues:', payload);
   
   // Check required fields
   if (!payload.connectorId || !payload.meterValue) {
@@ -164,12 +170,12 @@ export async function handleMeterValues(chargePointId: string, payload: OCPP16Me
     );
 
     if (updateResult) {
-      console.log(`✅ Stored meter values for connector ${payload.connectorId} on ${chargePointId}`);
+      console.log(`✅ บันทึกค่ามิเตอร์ของหัวชาร์จ ${payload.connectorId} สำหรับ ${chargePointId} แล้ว`);
     } else {
-      console.warn(`⚠️ No meter values stored for connector ${payload.connectorId} on ${chargePointId}`);
+      console.warn(`⚠️ ไม่มีข้อมูลมิเตอร์ที่ถูกบันทึกสำหรับหัวชาร์จ ${payload.connectorId} ของ ${chargePointId}`);
     }
   } catch (error) {
-    console.error(`💥 Error updating meter values for ${chargePointId}:`, error);
+    console.error(`💥 เกิดข้อผิดพลาดระหว่างอัปเดตค่ามิเตอร์ของ ${chargePointId}:`, error);
   }
 
   return {}; // Empty response for MeterValues
@@ -186,12 +192,12 @@ export async function handleBootNotification(
   messageId: string,
   payload: OCPP16BootNotificationRequest
 ): Promise<any> {
-  console.log(`🚀 BootNotification from ${chargePointId}:`, payload);
+  console.log(`🚀 รับ BootNotification จาก ${chargePointId}:`, payload);
 
   try {
     // Check required data
     if (!payload.chargePointVendor || !payload.chargePointModel) {
-      console.error(`❌ Incomplete BootNotification data from ${chargePointId}`);
+      console.error(`❌ ข้อมูล BootNotification จาก ${chargePointId} ไม่ครบถ้วน`);
       return {
         status: 'Rejected',
         currentTime: new Date().toISOString(),
@@ -202,7 +208,7 @@ export async function handleBootNotification(
     // Update Charge Point information in backend
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
     
-    console.log(`📤 Updating Charge Point information in backend for ${chargePointId}`);
+    console.log(`📤 กำลังอัปเดตข้อมูล Charge Point ในระบบหลังบ้านสำหรับ ${chargePointId}`);
     
     const updateResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/update-from-boot`, {
       method: 'POST',
@@ -222,9 +228,9 @@ export async function handleBootNotification(
     });
 
     if (!updateResponse.ok) {
-      console.error(`❌ Failed to update Charge Point information: ${updateResponse.status}`);
+      console.error(`❌ อัปเดตข้อมูล Charge Point ไม่สำเร็จ: ${updateResponse.status}`);
     } else {
-      console.log(`✅ Successfully updated Charge Point information for ${chargePointId}`);
+      console.log(`✅ อัปเดตข้อมูล Charge Point สำหรับ ${chargePointId} ในระบบหลังบ้านเรียบร้อย`);
     }
 
     // Send response accepting connection
@@ -235,7 +241,7 @@ export async function handleBootNotification(
     };
 
   } catch (error) {
-    console.error(`💥 Error handling BootNotification from ${chargePointId}:`, error);
+    console.error(`💥 เกิดข้อผิดพลาดระหว่างประมวลผล BootNotification จาก ${chargePointId}:`, error);
     
     return {
       status: 'Rejected',
@@ -262,7 +268,7 @@ async function updateChargePointFromBootNotification(chargePointId: string, payl
       ocppProtocolRaw: 'ocpp1.6'
     };
 
-    console.log(`Updating charge point ${chargePointId} from BootNotification:`, updateData);
+    console.log(`กำลังอัปเดตข้อมูล Charge Point ${chargePointId} จาก BootNotification:`, updateData);
 
     const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/update-from-boot`, {
       method: 'POST',
@@ -274,19 +280,19 @@ async function updateChargePointFromBootNotification(chargePointId: string, payl
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Failed to update charge point from BootNotification: ${response.status} - ${errorText}`);
+      console.error(`อัปเดต Charge Point จาก BootNotification ไม่สำเร็จ: ${response.status} - ${errorText}`);
       return;
     }
 
     const result = await response.json();
-    console.log(`Successfully updated charge point ${chargePointId} from BootNotification:`, result);
+    console.log(`อัปเดต Charge Point ${chargePointId} จาก BootNotification สำเร็จ:`, result);
   } catch (error) {
-    console.error(`Error updating charge point ${chargePointId} from BootNotification:`, error);
+    console.error(`เกิดข้อผิดพลาดระหว่างอัปเดต Charge Point ${chargePointId} จาก BootNotification:`, error);
   }
 }
 
 export function handleGetConfiguration(payload: { key?: string[] }, chargePointId?: string): any {
-  console.log('OCPP 1.6 - Handling GetConfiguration:', payload);
+  console.log('OCPP 1.6 - กำลังประมวลผล GetConfiguration:', payload);
   
   // Default configuration values for OCPP 1.6
   const defaultConfiguration: Record<string, string> = {
@@ -338,7 +344,7 @@ export function handleGetConfiguration(payload: { key?: string[] }, chargePointI
   // If chargePointId exists, fetch specific configuration from database
   if (chargePointId) {
     fetchChargePointConfiguration(chargePointId).catch(error => {
-      console.error('Failed to fetch charge point configuration:', error);
+      console.error('ดึงข้อมูลการตั้งค่า Charge Point ไม่สำเร็จ:', error);
     });
   }
 
@@ -355,7 +361,7 @@ async function fetchChargePointConfiguration(chargePointId: string): Promise<voi
   try {
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
     
-    console.log(`Fetching configuration for charge point ${chargePointId}`);
+    console.log(`กำลังดึงข้อมูลการตั้งค่าสำหรับ Charge Point ${chargePointId}`);
 
     const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}`, {
       method: 'GET',
@@ -366,18 +372,18 @@ async function fetchChargePointConfiguration(chargePointId: string): Promise<voi
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Failed to fetch charge point configuration: ${response.status} - ${errorText}`);
+      console.error(`ดึงข้อมูลการตั้งค่า Charge Point ไม่สำเร็จ: ${response.status} - ${errorText}`);
       return;
     }
 
     const chargePoint = await response.json();
-    console.log(`Successfully fetched charge point ${chargePointId} configuration:`, chargePoint);
+    console.log(`ดึงข้อมูลการตั้งค่า Charge Point ${chargePointId} สำเร็จ:`, chargePoint);
     
     // Update configuration based on charge point data
     // This could be used to customize configuration values based on the specific charge point
     
   } catch (error) {
-    console.error(`Error fetching charge point ${chargePointId} configuration:`, error);
+    console.error(`เกิดข้อผิดพลาดระหว่างดึงข้อมูลการตั้งค่า Charge Point ${chargePointId}:`, error);
   }
 }
 
@@ -392,7 +398,7 @@ export async function handleHeartbeat(
   messageId: string,
   payload: any
 ): Promise<any> {
-  console.log(`💓 Heartbeat from ${chargePointId}`);
+  console.log(`💓 รับ Heartbeat จาก ${chargePointId}`);
 
   // Always send response first - OCPP communication should not depend on backend
   const response = {
@@ -405,7 +411,7 @@ export async function handleHeartbeat(
     const skipBackendUpdate = process.env.SKIP_BACKEND_UPDATE === 'true';
     
     if (skipBackendUpdate) {
-      console.log(`⏭️ Skipping backend heartbeat update for ${chargePointId} (SKIP_BACKEND_UPDATE=true)`);
+      console.log(`⏭️ ข้ามการอัปเดต Heartbeat ไปยัง backend สำหรับ ${chargePointId} (SKIP_BACKEND_UPDATE=true)`);
       return response;
     }
 
@@ -431,21 +437,21 @@ export async function handleHeartbeat(
 
     if (!heartbeatResponse.ok) {
       const errorText = await heartbeatResponse.text().catch(() => 'Unknown error');
-      console.warn(`⚠️ Backend heartbeat update failed for ${chargePointId}: ${heartbeatResponse.status} - ${errorText}`);
-      console.log(`ℹ️ OCPP heartbeat response sent successfully despite backend error`);
+      console.warn(`⚠️ อัปเดต Heartbeat ไปยัง backend สำหรับ ${chargePointId} ไม่สำเร็จ: ${heartbeatResponse.status} - ${errorText}`);
+      console.log(`ℹ️ ส่งคำตอบ OCPP Heartbeat กลับไปยังเครื่องชาร์จแล้ว แม้ backend จะผิดพลาด`);
     } else {
-      console.log(`✅ Successfully updated heartbeat for ${chargePointId} in backend`);
+      console.log(`✅ อัปเดต Heartbeat ของ ${chargePointId} ใน backend สำเร็จ`);
     }
 
   } catch (error: any) {
     if (error.name === 'AbortError') {
-      console.warn(`⏰ Backend heartbeat update timeout for ${chargePointId}`);
+      console.warn(`⏰ การอัปเดต Heartbeat ไปยัง backend ของ ${chargePointId} ใช้เวลานานเกินกำหนด`);
     } else if (error.code === 'ECONNREFUSED') {
-      console.warn(`🔌 Backend not available for heartbeat update (${chargePointId})`);
+      console.warn(`🔌 ไม่สามารถเชื่อมต่อ backend เพื่ออัปเดต Heartbeat (${chargePointId})`);
     } else {
-      console.warn(`⚠️ Backend heartbeat update error for ${chargePointId}:`, error.message);
+      console.warn(`⚠️ เกิดข้อผิดพลาดระหว่างอัปเดต Heartbeat ไปยัง backend สำหรับ ${chargePointId}:`, error.message);
     }
-    console.log(`ℹ️ OCPP heartbeat response sent successfully despite backend error`);
+    console.log(`ℹ️ ส่งคำตอบ OCPP Heartbeat กลับไปยังเครื่องชาร์จเรียบร้อย แม้ backend จะผิดพลาด`);
   }
 
   return response;
@@ -462,7 +468,7 @@ async function updateChargePointLastSeen(chargePointId: string): Promise<void> {
       lastSeen: new Date().toISOString()
     };
 
-    console.log(`Updating last seen for charge point ${chargePointId}`);
+    console.log(`กำลังอัปเดตเวลาที่เห็นล่าสุด (lastSeen) สำหรับ Charge Point ${chargePointId}`);
 
     const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/heartbeat`, {
       method: 'POST',
@@ -474,19 +480,19 @@ async function updateChargePointLastSeen(chargePointId: string): Promise<void> {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Failed to update charge point last seen: ${response.status} - ${errorText}`);
+      console.error(`อัปเดต lastSeen ของ Charge Point ไม่สำเร็จ: ${response.status} - ${errorText}`);
       return;
     }
 
     const result = await response.json();
-    console.log(`Successfully updated charge point ${chargePointId} last seen:`, result);
+    console.log(`อัปเดต lastSeen ของ Charge Point ${chargePointId} สำเร็จ:`, result);
   } catch (error) {
-    console.error(`Error updating charge point ${chargePointId} last seen:`, error);
+    console.error(`เกิดข้อผิดพลาดระหว่างอัปเดต lastSeen ของ Charge Point ${chargePointId}:`, error);
   }
 }
 
 export function handleAuthorize(payload: { idTag: string }): any {
-  console.log('OCPP 1.6 - Handling Authorize:', payload);
+  console.log('OCPP 1.6 - กำลังประมวลผล Authorize:', payload);
   
   if (!payload.idTag) {
     throw new Error('Missing idTag in Authorize request');
@@ -511,7 +517,7 @@ export async function handleStartTransaction(
   reservationId?: number;
 }
 ): Promise<any> {
-  console.log('OCPP 1.6 - Handling StartTransaction:', payload);
+  console.log('OCPP 1.6 - กำลังประมวลผล StartTransaction:', payload);
   
   if (!payload.connectorId || !payload.idTag || payload.meterStart === undefined || !payload.timestamp) {
     throw new Error('Missing required fields in StartTransaction');
@@ -534,7 +540,7 @@ export async function handleStartTransaction(
       }
     );
   } catch (error) {
-    console.error(`Error updating session for StartTransaction on ${chargePointId}:`, error);
+    console.error(`เกิดข้อผิดพลาดระหว่างอัปเดตเซสชันสำหรับ StartTransaction ของ ${chargePointId}:`, error);
   }
 
   return {
@@ -556,7 +562,7 @@ export async function handleStopTransaction(
   transactionData?: any[];
 }
 ): Promise<any> {
-  console.log('OCPP 1.6 - Handling StopTransaction:', payload);
+  console.log('OCPP 1.6 - กำลังประมวลผล StopTransaction:', payload);
   
   if (!payload.transactionId || !payload.timestamp || payload.meterStop === undefined) {
     throw new Error('Missing required fields in StopTransaction');
@@ -574,7 +580,7 @@ export async function handleStopTransaction(
       }
     );
   } catch (error) {
-    console.error(`Error updating session for StopTransaction on ${chargePointId}:`, error);
+    console.error(`เกิดข้อผิดพลาดระหว่างอัปเดตเซสชันสำหรับ StopTransaction ของ ${chargePointId}:`, error);
   }
   
   return {
@@ -585,7 +591,7 @@ export async function handleStopTransaction(
 }
 
 export async function handleMessage(messageType: string, payload: any, chargePointId?: string, messageId?: string): Promise<any> {
-  console.log(`OCPP 1.6 - Handling message type: ${messageType} for charge point: ${chargePointId}`);
+  console.log(`OCPP 1.6 - กำลังประมวลผลข้อความชนิด ${messageType} สำหรับ Charge Point: ${chargePointId}`);
   
   switch (messageType) {
     case 'BootNotification':
@@ -605,7 +611,7 @@ export async function handleMessage(messageType: string, payload: any, chargePoi
     case 'StopTransaction':
       return handleStopTransaction(chargePointId || '', payload);
     default:
-      console.warn(`Unknown OCPP 1.6 message type: ${messageType}`);
+      console.warn(`ไม่รู้จักข้อความ OCPP 1.6 ประเภท: ${messageType}`);
       return {
         status: 'Rejected',
         errorCode: 'NotSupported',

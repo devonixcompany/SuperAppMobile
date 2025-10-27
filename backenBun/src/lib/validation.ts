@@ -43,6 +43,8 @@ export function validatePassword(password: string): { isValid: boolean; message?
 }
 
 export function validateRegistrationData(data: RegistrationData): void {
+
+  console.log("data",data)
   if (!data.firebaseUid || !data.firebaseUid.trim()) {
     throw new ValidationError('กรุณาระบุ Firebase UID');
   }
