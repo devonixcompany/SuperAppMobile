@@ -40,99 +40,58 @@ model UserVehicle {
 }
 
 model ChargePoint {
-  id               String            @id // รหัสจุดชาร์จ เช่น "CP_BKK_001", "CP_CNX_002"
-  name             String            // ชื่อจุดชาร์จ เช่น "Central World", "Big C Ladprao"
-  stationName      String            // ชื่อสถานี เช่น "EV บางนา" (2-80 ตัวอักษร)
-  location         String            // ที่อยู่ เช่น "999/9 Rama I Rd, Pathumwan, Bangkok"
-  latitude         Decimal?          // ละติจูด เช่น 13.7563 (สำหรับแสดงบนแผนที่)
-  longitude        Decimal?          // ลองจิจูด เช่น 100.5018 (สำหรับแสดงบนแผนที่)
-  
-  // เวลาเปิด-ปิด
-  openingHours     String?           // เวลาเปิด-ปิด เช่น "06:00-22:00" หรือ "24/7"
-  is24Hours        Boolean           @default(false) // ตลอด 24 ชั่วโมงหรือไม่
-  
-  // ข้อมูลเครื่องชาร์จ
-  brand            String            // ยี่ห้อ/รุ่น เช่น "Autel MaxiCharger AC Wallbox 7kW"
-  serialNumber     String            @unique // Serial Number เช่น "SN-AUTEL-23-001234" (ไม่ซ้ำ, A-Z 0-9 -/_)
-  powerRating      Float             // กำลังไฟ (kW) เช่น 7.4, 11, 22, 50 (> 0, ทศนิยม ≤ 2 ตำแหน่ง)
-  powerSystem      Int               @default(1)// ระบบไฟฟ้า: 1 = Single Phase, 3 = Three Phase
-  connectorCount   Int               @default(1) // จำนวนหัวชาร์จ เช่น 1, 2, 4 (≥ 1)
+  id                   String            @id
+  name                 String
+  stationName          String
+  location             String
+  latitude             Decimal?
+  longitude            Decimal?
+  openingHours         String?
+  is24Hours            Boolean           @default(false)
+  brand                String
+  serialNumber         String            @unique
+  powerRating          Float
+  protocol             OCPPVersion
+  chargePointIdentity  String            @unique
+  status               ChargePointStatus @default(AVAILABLE)
+  maxPower             Float?
+  connectorCount       Int               @default(1)
+  lastSeen             DateTime?
+  heartbeatIntervalSec Int?
+  vendor               String?
+  model                String?
+  firmwareVersion      String?
+  ocppProtocolRaw      String?
+  ocppSessionId        String?
+  isWhitelisted        Boolean           @default(true)
+  ownerId              String?
+  ownershipType        OwnershipType     @default(PUBLIC)
+  isPublic             Boolean           @default(true)
+  defaultPricingTierId String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  urlwebSocket         String?
+  owner                User?             @relation("UserChargePoints", fields: [ownerId], references: [id])
+  sessions             ChargingSession[]
+  connectors           Connector[]
+  pricing_tiers        pricing_tiers[]
+  transactions         Transaction[]
 
-  protocol         OCPPVersion       // เวอร์ชัน OCPP ที่รองรับ: OCPP16, OCPP20, OCPP21
-  csmsUrl          String?           // URL ของ CSMS (Central System Management Software) สำหรับ OCPP
-  chargePointIdentity String         @unique // Charge Point Identity สำหรับ BootNotification (1-36 ตัวอักษร, A-Z 0-9 -_)
-  
-  connector1        ConnectorType      @default(TYPE_2) // ชนิดหัวชาร์จหลัก เช่น TYPE_2, CHADEMO, CCS_COMBO_2
-  serialNumber1     String            @unique
-  connectorId1      Int               @default(1) // ID หัวชาร์จหลัก (1 ถึง connectorCount)
-  powerRating1      Float
-
-  connector2        ConnectorType      @default(TYPE_2)
-  serialNumber2     String?           @unique
-  connectorId2      Int               @default(1) // ID หัวชาร์จหลัก (1 ถึง connectorCount)
-  powerRating2      Float
-
-  connector3        ConnectorType      @default(TYPE_2)
-  serialNumber3     String?           @unique
-  connectorId3      Int               @default(1) // ID หัวชาร์จหลัก (1 ถึง connectorCount)
-  powerRating3      Float
-
-  connector4        ConnectorType      @default(TYPE_2)
-  serialNumber4     String?           @unique
-  connectorId4      Int               @default(1) // ID หัวชาร์จหลัก (1 ถึง connectorCount)
-  powerRating4      Float
-
-  status           ChargePointStatus @default(AVAILABLE) // สถานะ: AVAILABLE, OCCUPIED, UNAVAILABLE, FAULTED, MAINTENANCE
-  maxPower         Float?            // กำลังไฟสูงสุด เช่น 22.0 (kW), 50.0 (kW) - deprecated, ใช้ powerRating แทน
-  
-  
-  // ฟิลด์ใหม่สำหรับ OCPP connection tracking
-  lastSeen             DateTime?         // อัปเดตตอน Heartbeat/Boot
-  heartbeatIntervalSec Int?              // จาก BootNotification หรือ Config
-  vendor               String?           // จาก BootNotification
-  model                String?           // จาก BootNotification
-  firmwareVersion      String?           // จาก BootNotification (ถ้ามี)
-  ocppProtocolRaw      String?           // เช่น "ocpp1.6"
-  ocppSessionId        String?           // ไอดีภายในของการเชื่อมต่อปัจจุบัน (ถ้ามี)
-  // helper flags
-  isWhitelisted        Boolean           @default(true) // เปิด/ปิดอนุญาตเชื่อมต่อ
-  
-  ownerId          String?           // ID ของเจ้าของ (null = สาธารณะ)
-  ownershipType    OwnershipType     @default(PUBLIC) // ประเภทความเป็นเจ้าของ: PUBLIC, PRIVATE, SHARED
-  isPublic         Boolean           @default(true) // เปิดให้บริการสาธารณะหรือไม่
-  
-  // การตั้งราคาแบบง่าย - On-Peak และ Off-Peak
-  onPeakRate       Float             @default(10.0) // ราคา on-peak (บาท/kWh) เช่น 10.0
-  onPeakStartTime  String            @default("10:00") // เวลาเริ่ม on-peak เช่น "10:00"
-  onPeakEndTime    String            @default("12:00") // เวลาสิ้นสุด on-peak เช่น "12:00"
-  offPeakRate      Float             @default(20.0) // ราคา off-peak (บาท/kWh) เช่น 20.0
-  offPeakStartTime String            @default("16:00") // เวลาเริ่ม off-peak เช่น "16:00"
-  offPeakEndTime   String            @default("22:00") // เวลาสิ้นสุด off-peak เช่น "22:00"
-  
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  
-  owner            User?             @relation("UserChargePoints", fields: [ownerId], references: [id])
-  sessions         ChargingSession[] // เซสชันการชาร์จทั้งหมด
-  connectors       Connector[]       // หัวชาร์จทั้งหมดในจุดนี้
-  transactions     Transaction[]     // ธุรกรรมทั้งหมดที่เกิดขึ้นในจุดนี้
-  urlwebSocket     String?           // URL ของ WebSocket สำหรับเชื่อมต่อกับเซิร์ฟเวอร์ OCPP
-  
   @@map("charge_points")
 }
 
 model Connector {
-  id            String            @id @default(cuid())
-  chargePointId String
-  connectorId   Int
-  type          ConnectorType     @default(TYPE_2)
-  typeDescription String?        // ข้อความชนิดหัวชาร์จที่รับมาจาก OCPP (raw string)
-  status        ConnectorStatus   @default(AVAILABLE)
-  maxPower      Float?
-  maxCurrent    Float?
-  sessions      ChargingSession[]
-  chargePoint   ChargePoint       @relation(fields: [chargePointId], references: [id], onDelete: Cascade)
-  transactions  Transaction[]
+  id              String            @id @default(cuid())
+  chargePointId   String
+  connectorId     Int
+  type            ConnectorType     @default(TYPE_2)
+  status          ConnectorStatus   @default(AVAILABLE)
+  maxPower        Float?
+  maxCurrent      Float?
+  typeDescription String?
+  sessions        ChargingSession[]
+  chargePoint     ChargePoint       @relation(fields: [chargePointId], references: [id], onDelete: Cascade)
+  transactions    Transaction[]
 
   @@unique([chargePointId, connectorId])
   @@map("connectors")
@@ -140,24 +99,26 @@ model Connector {
 
 model Transaction {
   id              String            @id @default(cuid())
-  transactionId   String            @unique // รหัสธุรกรรมเฉพาะ เช่น "TXN_20240115_001"
-  userId          String            // ID ของผู้ใช้ที่ทำธุรกรรม
-  vehicleId       String?           // ID ของรถที่ใช้ชาร์จ (optional)
-  chargePointId   String            // ID ของจุดชาร์จที่ใช้
-  connectorId     String            // ID ของหัวชาร์จที่ใช้
-  startTime       DateTime          // เวลาเริ่มชาร์จ เช่น 2024-01-15T14:30:00Z
-  endTime         DateTime?         // เวลาสิ้นสุดชาร์จ เช่น 2024-01-15T16:45:00Z
-  startMeterValue Float             @default(0) // ค่ามิเตอร์เริ่มต้น เช่น 1250.5 kWh
-  endMeterValue   Float?            // ค่ามิเตอร์สิ้นสุด เช่น 1275.8 kWh
-  totalEnergy     Float?            // พลังงานรวมที่ใช้ เช่น 25.3 kWh
-  totalCost       Float?            // ค่าใช้จ่ายรวม เช่น 126.50 บาท
-  appliedRate     Float?            // อัตราที่ใช้จริงในการคิดค่าบริการ เช่น 5.00 บาท/kWh
-  pricingPeriod   PricingPeriod?    // ช่วงเวลาที่ใช้ในการคิดราคา เช่น ON_PEAK, OFF_PEAK
-  status          TransactionStatus @default(ACTIVE) // สถานะธุรกรรม: ACTIVE, COMPLETED, FAILED, CANCELED
-  stopReason      String?           // เหตุผลที่หยุดชาร์จ เช่น "User stopped", "Full battery"
-  meterValues     MeterValue[]      // ค่ามิเตอร์ตลอดการชาร์จ
+  transactionId   String            @unique
+  userId          String
+  vehicleId       String?
+  chargePointId   String
+  connectorId     String
+  pricingTierId   String?
+  startTime       DateTime
+  endTime         DateTime?
+  startMeterValue Float             @default(0)
+  endMeterValue   Float?
+  totalEnergy     Float?
+  totalCost       Float?
+  appliedRate     Float?
+  pricingPeriod   PricingPeriod?
+  status          TransactionStatus @default(ACTIVE)
+  stopReason      String?
+  meterValues     MeterValue[]
   chargePoint     ChargePoint       @relation(fields: [chargePointId], references: [id])
   connector       Connector         @relation(fields: [connectorId], references: [id])
+  pricing_tiers   pricing_tiers?    @relation(fields: [pricingTierId], references: [id])
   user            User              @relation(fields: [userId], references: [id])
   vehicle         UserVehicle?      @relation(fields: [vehicleId], references: [id])
 
@@ -229,6 +190,66 @@ model Notification {
   createdAt DateTime         @default(now())
 
   @@map("notifications")
+}
+
+model Admin {
+  id            String              @id @default(uuid())
+  email         String              @unique
+  password      String
+  role          AdminRole           @default(STAFF)
+  firstName     String?
+  lastName      String?
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  refreshTokens AdminRefreshToken[]
+}
+
+model AdminRefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  adminId   String
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  isRevoked Boolean   @default(false)
+  revokedAt DateTime?
+  admin     Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@map("admin_refresh_tokens")
+}
+
+model pricing_schedules {
+  id            String        @id
+  pricingTierId String
+  dayOfWeek     DayOfWeek?
+  startTime     String
+  endTime       String
+  periodType    PricingPeriod @default(STANDARD)
+  rate          Float
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime
+  pricing_tiers pricing_tiers @relation(fields: [pricingTierId], references: [id], onDelete: Cascade)
+}
+
+model pricing_tiers {
+  id                String              @id
+  chargePointId     String?
+  name              String
+  description       String?
+  tierType          PricingTierType     @default(STANDARD)
+  baseRate          Float
+  peakRate          Float?
+  offPeakRate       Float?
+  currency          String              @default("THB")
+  isActive          Boolean             @default(true)
+  validFrom         DateTime?
+  validTo           DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime
+  pricing_schedules pricing_schedules[]
+  charge_points     ChargePoint?        @relation(fields: [chargePointId], references: [id])
+  transactions      Transaction[]
 }
 
 enum UserStatus {
@@ -328,34 +349,10 @@ enum UserType {
 }
 
 enum PricingPeriod {
-  ON_PEAK
+  STANDARD
+  PEAK
   OFF_PEAK
-}
-
-model Admin {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  password     String
-  role         AdminRole @default(STAFF)
-  firstName    String?
-  lastName     String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  refreshTokens AdminRefreshToken[]
-}
-
-model AdminRefreshToken {
-  id           String   @id @default(cuid())
-  token        String   @unique
-  adminId      String
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
-  isRevoked    Boolean  @default(false)
-  revokedAt    DateTime?
-  admin        Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  
-  @@map("admin_refresh_tokens")
+  SUPER_OFF_PEAK
 }
 
 enum AdminRole {
@@ -363,3 +360,19 @@ enum AdminRole {
   STAFF
 }
 
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum PricingTierType {
+  STANDARD
+  PEAK_OFF_PEAK
+  TIME_OF_USE
+  DYNAMIC
+}

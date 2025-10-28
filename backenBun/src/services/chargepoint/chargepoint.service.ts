@@ -372,12 +372,12 @@ export class ChargePointService {
         },
         update: {
           // แปลงสถานะจาก OCPP ให้ตรงกับ enum ภายในระบบ
-          status: this.mapOcppStatusToConnectorStatus(statusData.status)
+          status: statusData.status
         },
         create: {
           chargePointId: chargePoint.id,
           connectorId: statusData.connectorId,
-          status: this.mapOcppStatusToConnectorStatus(statusData.status),
+          status: statusData.status,
           type: 'TYPE_2' // กำหนดชนิดหัวชาร์จเริ่มต้น
       }
       });
@@ -935,7 +935,8 @@ export class ChargePointService {
       }
 
       // สร้าง WebSocket URL ตามรูปแบบที่กำหนด
-      const websocketUrl = `ws://localhost:3000/user-cp/${chargePointIdentity}/${connectorId}`;
+      const baseWebSocketUrl = process.env.WEBSOCKET_URL || 'ws://localhost:3000';
+      const websocketUrl = `${baseWebSocketUrl}/user-cp/${chargePointIdentity}/${connectorId}`;
       console.log("respone websocketUrl", websocketUrl)
       return {
         chargePoint: {

@@ -81,27 +81,42 @@ export async function handleStatusNotification(
       console.warn(`⚠️ อัปเดตสถานะหัวชาร์จของ ${chargePointId} ไม่สำเร็จ (connector=${payload.connectorId})`);
     }
 
-    // Update connector status in backend (if API endpoint exists)
+    // Update connector status in backend database
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
     
     console.log(
-      `📤 [OCPP] กำลังแจ้งระบบอื่นเกี่ยวกับสถานะใหม่: connector=${payload.connectorId}, status=${payload.status} ของ ${chargePointId}`
+      `📤 [OCPP] กำลังอัพเดทฐานข้อมูล: connector=${payload.connectorId}, status=${payload.status} ของ ${chargePointId}`
     );
     
-    // Note: May need to add API endpoint for updating connector status in backend
-    // const updateResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/connectors/${payload.connectorId}/status`, {
-    //   method: 'PUT',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify({
-    //     status: payload.status,
-    //     errorCode: payload.errorCode,
-    //     timestamp: new Date().toISOString()
-    //   })
-    // });
+    try {
+      const updateResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          connectorId: payload.connectorId,
+          status: payload.status,
+          errorCode: payload.errorCode || 'NoError',
+          timestamp: payload.timestamp || new Date().toISOString(),
+          info: payload.info,
+          vendorId: payload.vendorId,
+          vendorErrorCode: payload.vendorErrorCode
+        })
+      });
 
-  console.log(`✅ [OCPP] ประมวลผล StatusNotification ของ ${chargePointId} หัวชาร์จ ${payload.connectorId} เสร็จสิ้น`);
+      if (updateResponse.ok) {
+        const result = await updateResponse.json();
+        console.log(`✅ [DB] อัพเดทฐานข้อมูลสำเร็จ: ${chargePointId} connector=${payload.connectorId} status=${payload.status}`);
+      } else {
+        const errorText = await updateResponse.text();
+        console.error(`❌ [DB] อัพเดทฐานข้อมูลไม่สำเร็จ (${updateResponse.status}): ${errorText}`);
+      }
+    } catch (dbError) {
+      console.error(`💥 [DB] เกิดข้อผิดพลาดในการเรียก API ฐานข้อมูล:`, dbError);
+    }
+
+    console.log(`✅ [OCPP] ประมวลผล StatusNotification ของ ${chargePointId} หัวชาร์จ ${payload.connectorId} เสร็จสิ้น`);
 
     // Send response acknowledging receipt
     return {};

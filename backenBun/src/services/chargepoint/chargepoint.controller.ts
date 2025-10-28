@@ -442,11 +442,14 @@ export const chargePointController = (
      */
     .post(
       '/:chargePointIdentity/update-from-boot',
-      async ({ params, body, set }) => {
+      async ({ params, body, query, set }) => {
         try {
           console.log('🔄 อัปเดตข้อมูลจาก BootNotification สำหรับ Charge Point:', params.chargePointIdentity, body);
+          console.log('📋 Query parameters:', query);
           
           const { chargePointIdentity } = params;
+          const { y } = query;
+          
           const updateData = body as {
             vendor?: string;
             model?: string;
@@ -456,6 +459,11 @@ export const chargePointController = (
             heartbeatIntervalSec?: number;
             ocppProtocolRaw?: string;
           };
+
+          // ถ้ามี parameter y ให้ log หรือประมวลผลตามต้องการ
+          if (y) {
+            console.log(`🔧 พารามิเตอร์ y ที่ได้รับ: ${y}`);
+          }
 
           const updatedChargePoint = await chargePointService.updateFromBootNotification(chargePointIdentity, updateData);
           
@@ -473,7 +481,8 @@ export const chargePointController = (
           return {
             success: true,
             message: 'อัปเดตข้อมูลจาก BootNotification สำเร็จ',
-            data: updatedChargePoint
+            data: updatedChargePoint,
+            ...(y && { yParameter: y }) // เพิ่ม y parameter ใน response ถ้ามี
           };
         } catch (error: any) {
           console.error('💥 เกิดข้อผิดพลาดในการอัปเดตข้อมูลจาก BootNotification:', error);
@@ -488,8 +497,20 @@ export const chargePointController = (
         detail: {
           tags: ['OCPP'],
           summary: '🔄 Update from BootNotification',
-          description: 'อัปเดตข้อมูลเครื่องชาร์จจาก BootNotification message'
-        }
+          description: 'อัปเดตข้อมูลเครื่องชาร์จจาก BootNotification message รองรับ query parameter y',
+          parameters: [
+            {
+              name: 'y',
+              in: 'query',
+              description: 'พารามิเตอร์เสริม y',
+              schema: { type: 'string' },
+              required: false
+            }
+          ]
+        },
+        query: t.Object({
+          y: t.Optional(t.String())
+        })
       }
     )
     
