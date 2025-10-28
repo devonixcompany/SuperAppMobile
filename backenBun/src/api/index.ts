@@ -24,6 +24,53 @@ app.get('/chargepoints', async (req, res) => {
   }
 });
 
+// GET /chargepoints/locations - ดึงเฉพาะตำแหน่ง (latitude, longitude) ของทุก ChargePoint
+app.get('/chargepoints/locations', async (req, res) => {
+  try {
+    const rows = await prisma.chargePoint.findMany({
+      select: {
+        id: true,
+        name: true,
+        latitude: true,
+        longitude: true,
+      },
+    });
+
+    const locations = rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      latitude: r.latitude != null ? Number(r.latitude) : null,
+      longitude: r.longitude != null ? Number(r.longitude) : null,
+    }));
+
+    res.json(locations);
+  } catch (error) {
+    console.error('Error fetching locations:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /chargepoints/:id/location - ดึงตำแหน่งของ ChargePoint ตาม ID
+app.get('/chargepoints/:id/location', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cp = await prisma.chargePoint.findUnique({
+      where: { id },
+      select: { id: true, name: true, latitude: true, longitude: true },
+    });
+    if (!cp) return res.status(404).json({ error: 'ChargePoint not found' });
+    return res.json({
+      id: cp.id,
+      name: cp.name,
+      latitude: cp.latitude != null ? Number(cp.latitude) : null,
+      longitude: cp.longitude != null ? Number(cp.longitude) : null,
+    });
+  } catch (error) {
+    console.error('Error fetching location:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /chargepoints/:id - ดึงข้อมูล ChargePoint ตาม ID
 app.get('/chargepoints/:id', async (req, res) => {
   try {
