@@ -4,6 +4,7 @@ import * as SecureStore from "expo-secure-store";
 const SERVICE_NAME = "SuperApp";
 
 export interface LoginCredentials {
+  id?: string; // เพิ่ม user id (optional)
   phoneNumber: string;
   password: string;
   firebaseUid?: string; // เพิ่ม firebaseUid (optional)

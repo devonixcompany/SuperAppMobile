@@ -443,21 +443,22 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
   console.log('มีการพยายามเชื่อมต่อ User WebSocket ใหม่');
   
   try {
-    // แยก charge point ID และ connector ID จาก URL path
+    // แยก charge point ID, connector ID และ user ID จาก URL path
     const url = new URL(request.url || '', `http://${request.headers.host}`);
     const pathParts = url.pathname.split('/').filter(part => part !== '');
     
-    // ตรวจสอบรูปแบบ URL: /user-cp/{chargePointId}/{connectorId}
-    if (pathParts.length !== 3 || pathParts[0] !== 'user-cp') {
-      console.error('รูปแบบ URL ของผู้ใช้ไม่ถูกต้อง ต้องเป็น /user-cp/{chargePointId}/{connectorId}');
+    // ตรวจสอบรูปแบบ URL: /user-cp/{chargePointId}/{connectorId}/{userId}
+    if (pathParts.length !== 4 || pathParts[0] !== 'user-cp') {
+      console.error('รูปแบบ URL ของผู้ใช้ไม่ถูกต้อง ต้องเป็น /user-cp/{chargePointId}/{connectorId}/{userId}');
       ws.close(1008, 'Invalid URL format');
       return;
     }
     
     const chargePointId = pathParts[1];
     const connectorId = pathParts[2];
+    const userId = pathParts[3];
     
-    console.log(`เชื่อมต่อผู้ใช้สำหรับ Charge Point: ${chargePointId} หัวชาร์จ: ${connectorId}`);
+    console.log(`เชื่อมต่อผู้ใช้สำหรับ Charge Point: ${chargePointId} หัวชาร์จ: ${connectorId} ผู้ใช้: ${userId}`);
     
     // ตรวจสอบว่า charge point มีอยู่ในระบบหรือไม่
     // ตรวจสอบทั้งใน gatewaySessionManager และ cache
@@ -470,8 +471,8 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
       return;
     }
     
-    // เพิ่ม connection ลงใน UserConnectionManager
-    userConnectionManager.addConnection(ws, chargePointId, connectorId);
+    // เพิ่ม connection ลงใน UserConnectionManager พร้อม userId
+    userConnectionManager.addConnection(ws, chargePointId, connectorId, userId);
     console.log('สถานะ Charge Point ปัจจุบัน:', chargePoint);
     
     // จัดการข้อความที่เข้ามาจาก user WebSocket

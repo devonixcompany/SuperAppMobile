@@ -1630,11 +1630,12 @@ export const chargePointController = (
      */
     .get(
       '/:chargePointIdentity/:connectorId/websocket-url',
-      async ({ params, set }) => {
+      async ({ params, query, set }) => {
         try {
           const { chargePointIdentity, connectorId } = params;
+          const { userId } = query;
           const connectorIdNum = parseInt(connectorId);
-
+          console.log("get websocket url start")
           if (isNaN(connectorIdNum)) {
             set.status = 400;
             return {
@@ -1643,7 +1644,18 @@ export const chargePointController = (
             };
           }
 
-          const result = await chargePointService.getWebSocketUrl(chargePointIdentity, connectorIdNum);
+          // Verify user ID is provided
+          if (!userId) {
+            set.status = 400;
+            return {
+              success: false,
+              message: 'User ID is required'
+            };
+          }
+       
+          console.log("check user id getwebscoket userId",userId)
+
+          const result = await chargePointService.getWebSocketUrl(chargePointIdentity, connectorIdNum, userId);
 
           return {
             success: true,
@@ -1665,10 +1677,41 @@ export const chargePointController = (
           chargePointIdentity: t.String(),
           connectorId: t.String()
         }),
+        query: t.Object({
+          userId: t.String()
+        }),
         detail: {
           tags: ['Charge Points'],
           summary: '🔗 Get WebSocket URL',
-          description: 'ดึง WebSocket URL สำหรับเชื่อมต่อกับเครื่องชาร์จและหัวชาร์จที่ระบุ'
+          description: 'ดึง WebSocket URL สำหรับเชื่อมต่อกับเครื่องชาร์จและหัวชาร์จที่ระบุ พร้อม verify user ID',
+          security: [
+            {
+              bearerAuth: []
+            }
+          ],
+          parameters: [
+            {
+              name: 'chargePointIdentity',
+              in: 'path',
+              required: true,
+              description: 'ID ของเครื่องชาร์จ',
+              schema: { type: 'string', example: 'CP_BKK_001' }
+            },
+            {
+              name: 'connectorId',
+              in: 'path',
+              required: true,
+              description: 'ID ของหัวชาร์จ',
+              schema: { type: 'string', example: '1' }
+            },
+            {
+              name: 'userId',
+              in: 'query',
+              required: true,
+              description: 'ID ของผู้ใช้งาน',
+              schema: { type: 'string', example: 'user_uuid_here' }
+            }
+          ]
         }
       }
     );

@@ -5,6 +5,7 @@ interface UserConnection {
   ws: WebSocket;
   chargePointId: string;
   connectorId: string;
+  userId?: string;
   connectedAt: Date;
 }
 
@@ -162,12 +163,13 @@ export class UserConnectionManager {
   /**
    * เพิ่ม user connection ใหม่
    */
-  addConnection(ws: WebSocket, chargePointId: string, connectorId: string): void {
+  addConnection(ws: WebSocket, chargePointId: string, connectorId: string, userId?: string): void {
     const connectionKey = `${chargePointId}:${connectorId}`;
     const connection: UserConnection = {
       ws,
       chargePointId,
       connectorId,
+      userId,
       connectedAt: new Date()
     };
 
@@ -177,7 +179,8 @@ export class UserConnectionManager {
     }
     this.connections.get(connectionKey)!.push(connection);
 
-    console.log(`👤 Added user connection for ${chargePointId}/${connectorId} (Total: ${this.connections.get(connectionKey)!.length})`);
+    const userInfo = userId ? ` (User: ${userId})` : '';
+    console.log(`👤 Added user connection for ${chargePointId}/${connectorId}${userInfo} (Total: ${this.connections.get(connectionKey)!.length})`);
 
     this.sendInitialConnectorState(ws, chargePointId, connectorId);
 

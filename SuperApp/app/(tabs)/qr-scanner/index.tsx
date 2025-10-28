@@ -1,4 +1,5 @@
 import env from "@/config/env";
+import { getCredentials, getTokens } from "@/utils/keychain";
 import {
   normalizeUrlToDevice,
   normalizeWebSocketUrlToDevice,
@@ -125,8 +126,40 @@ export default function QRScannerScreen() {
     setIsProcessing(true);
 
     try {
+      // ดึง user credentials เพื่อเอา user ID
+      const credentials = await getCredentials();
+      if (!credentials?.id) {
+        throw new Error("ไม่พบข้อมูลผู้ใช้ กรุณาเข้าสู่ระบบใหม่");
+      }
+
+      // ดึง authentication tokens
+      const tokens = await getTokens();
+      if (!tokens?.accessToken) {
+        throw new Error("ไม่พบ access token กรุณาเข้าสู่ระบบใหม่");
+      }
+
       const payload = resolveScannedPayload(String(data));
-      const response = await fetch(payload.requestUrl);
+      
+      console.log('QR Scanner Debug - User ID:', credentials.id);
+      console.log('QR Scanner Debug - Access Token:', tokens.accessToken ? 'Present' : 'Missing');
+      console.log('QR Scanner Debug - Request URL:', payload.requestUrl);
+      
+      // เพิ่ม userId เป็น query parameter
+      const url = new URL(payload.requestUrl);
+      url.searchParams.set('userId', credentials.id);
+      const requestUrlWithUserId = url.toString();
+      
+      console.log('QR Scanner Debug - Final URL:', requestUrlWithUserId);
+      
+      const response = await fetch(requestUrlWithUserId, {
+        headers: {
+          'Authorization': `Bearer ${tokens.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('QR Scanner Debug - Response Status:', response.status);
+      console.log('QR Scanner Debug - Response OK:', response.ok);
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => null);
@@ -221,7 +254,7 @@ export default function QRScannerScreen() {
   if (hasPermission === false) {
     return (
       <SafeAreaView className="flex-1 bg-black items-center justify-center px-6">
-        <Ionicons name="camera-off" size={64} color="white" />
+        <Ionicons name="camera-outline" size={64} color="white" />
         <Text className="text-white text-xl font-semibold mt-4 text-center">
           ไม่สามารถเข้าถึงกล้องได้
         </Text>
@@ -271,24 +304,52 @@ export default function QRScannerScreen() {
           }}
           enableTorch={torchEnabled}
         >
-          <View className="flex-1 items-center justify-center">
-            <View className="relative">
-              <View className="w-64 h-64 border-2 border-white/50 rounded-2xl">
-                <View className="absolute -top-1 -left-1 w-6 h-6 border-l-4 border-t-4 border-[#51BC8E] rounded-tl-lg" />
-                <View className="absolute -top-1 -right-1 w-6 h-6 border-r-4 border-t-4 border-[#51BC8E] rounded-tr-lg" />
-                <View className="absolute -bottom-1 -left-1 w-6 h-6 border-l-4 border-b-4 border-[#51BC8E] rounded-bl-lg" />
-                <View className="absolute -bottom-1 -right-1 w-6 h-6 border-r-4 border-b-4 border-[#51BC8E] rounded-br-lg" />
+          {/* Camera Overlay Content */}
+          <View style={StyleSheet.absoluteFillObject} className="flex-1">
+            {/* Top Status Bar */}
+            <View className="absolute top-0 left-0 right-0 bg-black/30 p-4 z-20">
+              <Text className="text-white text-center text-sm">
+                📱 กำลังสแกน QR Code...
+              </Text>
+            </View>
+
+            {/* Center Scanning Frame */}
+            <View className="flex-1 items-center justify-center">
+              <View className="relative">
+                <View className="w-64 h-64 border-2 border-white/50 rounded-2xl">
+                  <View className="absolute -top-1 -left-1 w-6 h-6 border-l-4 border-t-4 border-[#51BC8E] rounded-tl-lg" />
+                  <View className="absolute -top-1 -right-1 w-6 h-6 border-r-4 border-t-4 border-[#51BC8E] rounded-tr-lg" />
+                  <View className="absolute -bottom-1 -left-1 w-6 h-6 border-l-4 border-b-4 border-[#51BC8E] rounded-bl-lg" />
+                  <View className="absolute -bottom-1 -right-1 w-6 h-6 border-r-4 border-b-4 border-[#51BC8E] rounded-br-lg" />
+                </View>
+              </View>
+
+              <View className="mt-8 items-center bg-black/50 px-6 py-4 rounded-2xl">
+                <Text className="text-white text-lg font-semibold mb-2">
+                  วาง QR Code ในกรอบ
+                </Text>
+                <Text className="text-white/90 text-center leading-6">
+                  สแกน QR Code เพื่อเริ่มชาร์จ EV{"\n"}
+                  หรือทำธุรกรรมอื่นๆ
+                </Text>
               </View>
             </View>
 
-            <View className="mt-8 items-center bg-black/50 px-6 py-4 rounded-2xl">
-              <Text className="text-white text-lg font-semibold mb-2">
-                วาง QR Code ในกรอบ
+            {/* Bottom Info Panel */}
+            <View className="absolute bottom-0 left-0 right-0 bg-black/40 p-4 z-20">
+              <Text className="text-white/80 text-center text-xs mb-2">
+                💡 เคล็ดลับ: ใช้ไฟฉายหากแสงไม่เพียงพอ
               </Text>
-              <Text className="text-white/90 text-center leading-6">
-                สแกน QR Code เพื่อเริ่มชาร์จ EV{"\n"}
-                หรือทำธุรกรรมอื่นๆ
-              </Text>
+              <View className="flex-row justify-center space-x-4">
+                <View className="flex-row items-center">
+                  <View className="w-2 h-2 bg-green-500 rounded-full mr-2" />
+                  <Text className="text-white text-xs">พร้อมสแกน</Text>
+                </View>
+                <View className="flex-row items-center">
+                  <Ionicons name="shield-checkmark" size={12} color="#51BC8E" />
+                  <Text className="text-white text-xs ml-1">ปลอดภัย</Text>
+                </View>
+              </View>
             </View>
           </View>
         </CameraView>

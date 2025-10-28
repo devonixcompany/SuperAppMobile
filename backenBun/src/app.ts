@@ -92,8 +92,9 @@ export const app = new Elysia()
     }
 
     const token = authHeader.substring(7);
+      console.log("check verify",token)
     const payload = await jwtService.verifyToken(token);
-
+    console.log("check payload",payload)
     if (!payload) {
       return {
         user: null

@@ -78,7 +78,7 @@ export class ChargePointService {
    * สร้าง WebSocket URL สำหรับเครื่องชาร์จ
    */
   private generateWebSocketUrl(chargePointId: string, protocol: OCPPVersion): string {
-    const wsGatewayUrl = process.env.WS_GATEWAY_URL || 'ws://localhost:8081';
+    const wsGatewayUrl = process.env.WEBSOCKET_URL || 'ws://localhost:3000';
     return `${wsGatewayUrl}/ocpp/${chargePointId}`;
   }
 
@@ -907,8 +907,14 @@ export class ChargePointService {
   /**
    * ค้นหา ChargePoint และ Connector จากฐานข้อมูล และสร้าง WebSocket URL
    */
-  async getWebSocketUrl(chargePointIdentity: string, connectorId: number) {
+  async getWebSocketUrl(chargePointIdentity: string, connectorId: number, userId?: string) {
     try {
+               const User = await this.prisma.user.findUnique({
+        where: { id: userId },
+              });
+      if (!User) {
+        throw new Error(`User with ID '${userId}' not found`);
+      }
       // ค้นหา ChargePoint จาก chargePointIdentity
       const chargePoint = await this.prisma.chargePoint.findUnique({
         where: { chargePointIdentity },
@@ -929,17 +935,15 @@ export class ChargePointService {
         throw new Error(`Connector ${connectorId} not found for ChargePoint '${chargePointIdentity}'`);
       }
 
-      let pricingTier = null;
-      // Note: defaultPricingTierId field doesn't exist in schema, using simple pricing from ChargePoint
-      // if (chargePoint.defaultPricingTierId) {
-      //   pricingTier = await this.prisma.pricingTier.findUnique({
-      //     where: { id: chargePoint.defaultPricingTierId }
-      //   });
-      // }
-
-      // สร้าง WebSocket URL ตามรูปแบบที่กำหนด
+      // สร้าง WebSocket URL ตามรูปแบบที่กำหนด พร้อมต่อ userId ถ้ามี
       const baseWebSocketUrl = process.env.WEBSOCKET_URL || 'ws://localhost:3000';
-      const websocketUrl = `${baseWebSocketUrl}/user-cp/${chargePointIdentity}/${connectorId}`;
+      let websocketUrl = `${baseWebSocketUrl}/user-cp/${chargePointIdentity}/${connectorId}`;
+      
+      // ต่อ userId เข้ากับ URL ถ้ามีการส่งมา
+      if (userId) {
+        websocketUrl += `/${userId}`;
+      }
+      
       console.log("respone websocketUrl", websocketUrl)
       return {
         chargePoint: {

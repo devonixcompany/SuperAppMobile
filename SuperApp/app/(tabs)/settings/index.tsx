@@ -411,6 +411,9 @@ export default function SettingsScreen() {
                   • Phone: {storedCredentials?.phoneNumber ?? "—"}
                 </Text>
                 <Text className="text-sm text-blue-700">
+                  • ID: {storedCredentials?.id ?? "—"}
+                </Text>
+                <Text className="text-sm text-blue-700">
                   • Name: {storedCredentials?.fullName ?? "—"}
                 </Text>
                 <Text className="text-sm text-blue-700">
