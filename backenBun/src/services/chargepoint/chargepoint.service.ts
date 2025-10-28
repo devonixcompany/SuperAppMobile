@@ -69,7 +69,6 @@ export class ChargePointService {
         ownerId: true,
         ownershipType: true,
         isPublic: true,
-        defaultPricingTierId: true,
         urlwebSocket: true
       }
     });
@@ -268,7 +267,6 @@ export class ChargePointService {
         data,
         include: {
           connectors: true,
-          pricingTiers: true,
           owner: true
         }
       });
@@ -372,12 +370,12 @@ export class ChargePointService {
         },
         update: {
           // แปลงสถานะจาก OCPP ให้ตรงกับ enum ภายในระบบ
-          status: statusData.status
+          status: this.mapOcppStatusToConnectorStatus(statusData.status)
         },
         create: {
           chargePointId: chargePoint.id,
           connectorId: statusData.connectorId,
-          status: statusData.status,
+          status: this.mapOcppStatusToConnectorStatus(statusData.status),
           type: 'TYPE_2' // กำหนดชนิดหัวชาร์จเริ่มต้น
       }
       });
@@ -413,7 +411,11 @@ export class ChargePointService {
   private mapOcppStatusToConnectorStatus(ocppStatus: string): any {
     const statusMap: { [key: string]: string } = {
       'Available': 'AVAILABLE',
-      'Occupied': 'OCCUPIED',
+      'Preparing': 'PREPARING',
+      'Charging': 'CHARGING',
+      'Occupied': 'CHARGING',  // OCPP 'Occupied' maps to 'CHARGING'
+      'SuspendedEV': 'SUSPENDEDEV',
+      'SuspendedEVSE': 'SUSPENDEDEVSE',
       'Reserved': 'RESERVED',
       'Unavailable': 'UNAVAILABLE',
       'Faulted': 'FAULTED'
@@ -928,11 +930,12 @@ export class ChargePointService {
       }
 
       let pricingTier = null;
-      if (chargePoint.defaultPricingTierId) {
-        pricingTier = await this.prisma.pricingTier.findUnique({
-          where: { id: chargePoint.defaultPricingTierId }
-        });
-      }
+      // Note: defaultPricingTierId field doesn't exist in schema, using simple pricing from ChargePoint
+      // if (chargePoint.defaultPricingTierId) {
+      //   pricingTier = await this.prisma.pricingTier.findUnique({
+      //     where: { id: chargePoint.defaultPricingTierId }
+      //   });
+      // }
 
       // สร้าง WebSocket URL ตามรูปแบบที่กำหนด
       const baseWebSocketUrl = process.env.WEBSOCKET_URL || 'ws://localhost:3000';
@@ -950,7 +953,6 @@ export class ChargePointService {
           protocol: chargePoint.protocol,
           powerRating: chargePoint.powerRating,
           brand: chargePoint.brand,
-          defaultPricingTierId: chargePoint.defaultPricingTierId,
           status: chargePoint.status
         },
         connector: {
@@ -961,17 +963,7 @@ export class ChargePointService {
           maxCurrent: connector.maxCurrent,
           maxPower: connector.maxPower
         },
-        pricingTier: pricingTier
-          ? {
-              id: pricingTier.id,
-              name: pricingTier.name,
-              baseRate: pricingTier.baseRate,
-              peakRate: pricingTier.peakRate,
-              offPeakRate: pricingTier.offPeakRate,
-              currency: pricingTier.currency,
-              tierType: pricingTier.tierType
-            }
-          : null,
+        pricingTier: null, // Pricing tier functionality not implemented yet
         websocketUrl
       };
     } catch (error: any) {

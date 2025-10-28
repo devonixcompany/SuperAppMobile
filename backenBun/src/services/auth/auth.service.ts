@@ -166,6 +166,7 @@ export class AuthService {
             id: user.id,
             firebaseUid: user.firebaseUid,
             phoneNumber: user.phoneNumber,
+            fullName: user.fullName,
             typeUser: user.typeUser,
             status: user.status,
             createdAt: user.createdAt,

@@ -411,6 +411,12 @@ export default function SettingsScreen() {
                   • Phone: {storedCredentials?.phoneNumber ?? "—"}
                 </Text>
                 <Text className="text-sm text-blue-700">
+                  • Name: {storedCredentials?.fullName ?? "—"}
+                </Text>
+                <Text className="text-sm text-blue-700">
+                  • Firebase UID: {storedCredentials?.firebaseUid ?? "—"}
+                </Text>
+                <Text className="text-sm text-blue-700">
                   • Access Token:{" "}
                   {formatTokenPreview(storedTokens?.accessToken)}
                 </Text>

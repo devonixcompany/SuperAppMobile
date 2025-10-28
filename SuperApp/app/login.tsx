@@ -91,10 +91,12 @@ export default function LoginScreen() {
 
       console.log("✅ Login successful:", responseData);
 
-      // เก็บ credentials ลง keychain อย่างปลอดภัย
+      // เก็บ credentials ลง keychain อย่างปลอดภัย (รวม firebaseUid และ fullName)
       const credentialsStored = await storeCredentials({
         phoneNumber: phoneNumber.trim(),
         password,
+        firebaseUid: responseData.data?.user?.firebaseUid,
+        fullName: responseData.data?.user?.fullName,
       });
       console.log("🔐 Credentials stored:", credentialsStored);
 

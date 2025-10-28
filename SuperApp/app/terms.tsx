@@ -1,14 +1,49 @@
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, Ellipse, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+// นำเข้าฟังก์ชันจัดการ keychain
+import { getTokens } from '@/utils/keychain';
 
 export default function TermsScreen() {
   const router = useRouter();
   const [currentPage, setCurrentPage] = useState(0);
   const [showSplash, setShowSplash] = useState(true);
+  // State สำหรับการเช็คว่ามี session อยู่หรือไม่
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  // ฟังก์ชันเช็คว่าเคย login แล้วหรือยัง
+  const checkExistingSession = useCallback(async () => {
+    try {
+      setCheckingSession(true); // เริ่มเช็ค session
+
+      // ดึง tokens ที่เก็บไว้
+      const tokens = await getTokens();
+
+      // ถ้ามี access token แสดงว่าเคย login แล้ว
+      if (tokens?.accessToken) {
+        console.log("✅ Found existing session, redirecting to home...");
+        // นำทางไปหน้า home ทันที (แทนที่หน้าปัจจุบัน)
+        router.replace("/(tabs)/home" as any);
+        return;
+      }
+
+      console.log("ℹ️ No existing session found");
+    } catch (error) {
+      console.error("Error checking session:", error);
+    } finally {
+      setCheckingSession(false); // เช็ค session เสร็จแล้ว
+    }
+  }, []);
+
+  // ใช้ useFocusEffect เพื่อเช็ค session ทุกครั้งที่เข้าหน้านี้
+  useFocusEffect(
+    useCallback(() => {
+      checkExistingSession();
+    }, [checkExistingSession]),
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -121,6 +156,16 @@ const fristpage = () => (
   const ProgressDot = ({ isActive }: { isActive: boolean }) => (
     <View className={`w-8 h-1.5 rounded-xl ${isActive ? 'bg-[#2EC27E]' : 'bg-[#D7DCE8]'}`} />
   );
+
+  // ถ้ากำลังเช็ค session อยู่ ให้แสดง loading screen
+  if (checkingSession) {
+    return (
+      <SafeAreaView className="flex-1 bg-[#EEF0F6] items-center justify-center">
+        <ActivityIndicator size="large" color="#51BC8E" />
+        <Text className="text-[#6B7280] mt-4">กำลังตรวจสอบ...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-[#EEF0F6]">

@@ -6,6 +6,8 @@ const SERVICE_NAME = "SuperApp";
 export interface LoginCredentials {
   phoneNumber: string;
   password: string;
+  firebaseUid?: string; // เพิ่ม firebaseUid (optional)
+  fullName?: string; // เพิ่ม fullName (optional)
 }
 
 export interface AuthTokens {
