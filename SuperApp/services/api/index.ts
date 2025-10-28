@@ -3,6 +3,12 @@
  * Export all API service modules
  */
 
+// Export all services
 export { authService } from './auth.service';
-export { http, apiClient } from './client';
-export type { ApiResponse, ApiError } from './client';
+export { chargepointService } from './chargepoint.service';
+export { userService } from './user.service';
+
+// Export API client and utilities
+export { apiClient, http } from './client';
+export type { ApiError, ApiResponse } from './client';
+
