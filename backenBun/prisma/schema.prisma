@@ -39,10 +39,18 @@ model UserVehicle {
   @@map("user_vehicles")
 }
 
+model Station {
+  id        String            @id @default(uuid())
+  name      String            @unique
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  chargePoints ChargePoint[]  @relation("StationChargePoints")
+}
+
 model ChargePoint {
-  id               String            @id @default(uuid()) // รหัสจุดชาร์จ (auto-generated UUID)
+  id               String            @id @default(cuid()) // รหัสจุดชาร์จ เช่น "CP_BKK_001", "CP_CNX_002"
   name             String            // ชื่อจุดชาร์จ เช่น "Central World", "Big C Ladprao"
-  stationName      String            // ชื่อสถานี เช่น "EV บางนา" (2-80 ตัวอักษร)
+  stationId        String?                 // รหัสสถานี (foreign key ไปยัง Station.id)
   location         String            // ที่อยู่ เช่น "999/9 Rama I Rd, Pathumwan, Bangkok"
   latitude         Decimal?          // ละติจูด เช่น 13.7563 (สำหรับแสดงบนแผนที่)
   longitude        Decimal?          // ลองจิจูด เช่น 100.5018 (สำหรับแสดงบนแผนที่)
@@ -95,10 +103,10 @@ model ChargePoint {
   updatedAt        DateTime          @updatedAt
   
   owner            User?             @relation("UserChargePoints", fields: [ownerId], references: [id])
-  sessions         ChargingSession[] // เซสชันการชาร์จทั้งหมด
   connectors       Connector[]       // หัวชาร์จทั้งหมดในจุดนี้
   transactions     Transaction[]     // ธุรกรรมทั้งหมดที่เกิดขึ้นในจุดนี้
   urlwebSocket     String?           // URL ของ WebSocket สำหรับเชื่อมต่อกับเซิร์ฟเวอร์ OCPP
+  station          Station?          @relation("StationChargePoints", fields: [stationId], references: [id])
   
   @@map("charge_points")
 }
@@ -114,7 +122,6 @@ model Connector {
   status        ConnectorStatus   @default(AVAILABLE)
   maxPower      Float?
   maxCurrent    Float?
-  sessions      ChargingSession[]
   chargePoint   ChargePoint       @relation(fields: [chargePointId], references: [id], onDelete: Cascade)
   transactions  Transaction[]
 
@@ -136,10 +143,8 @@ model Transaction {
   totalEnergy     Float?            // พลังงานรวมที่ใช้ เช่น 25.3 kWh
   totalCost       Float?            // ค่าใช้จ่ายรวม เช่น 126.50 บาท
   appliedRate     Float?            // อัตราที่ใช้จริงในการคิดค่าบริการ เช่น 5.00 บาท/kWh
-  pricingPeriod   PricingPeriod?    // ช่วงเวลาที่ใช้ในการคิดราคา เช่น ON_PEAK, OFF_PEAK
   status          TransactionStatus @default(ACTIVE) // สถานะธุรกรรม: ACTIVE, COMPLETED, FAILED, CANCELED
   stopReason      String?           // เหตุผลที่หยุดชาร์จ เช่น "User stopped", "Full battery"
-  meterValues     MeterValue[]      // ค่ามิเตอร์ตลอดการชาร์จ
   chargePoint     ChargePoint       @relation(fields: [chargePointId], references: [id])
   connector       Connector         @relation(fields: [connectorId], references: [id])
   user            User              @relation(fields: [userId], references: [id])
@@ -148,48 +153,8 @@ model Transaction {
   @@map("transactions")
 }
 
-model MeterValue {
-  id            String      @id @default(cuid())
-  transactionId String
-  timestamp     DateTime
-  value         Float
-  power         Float?
-  current       Float?
-  voltage       Float?
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 
-  @@map("meter_values")
-}
 
-model ChargingSession {
-  id            String        @id @default(cuid())
-  sessionId     String        @unique
-  chargePointId String
-  connectorId   String
-  userId        String?
-  status        SessionStatus @default(ACTIVE)
-  startTime     DateTime      @default(now())
-  endTime       DateTime?
-  lastActivity  DateTime      @default(now())
-  chargePoint   ChargePoint   @relation(fields: [chargePointId], references: [id])
-  connector     Connector     @relation(fields: [connectorId], references: [id])
-
-  @@map("charging_sessions")
-}
-
-model Reservation {
-  id            String            @id @default(cuid())
-  userId        String
-  chargePointId String
-  connectorId   String?
-  startTime     DateTime
-  endTime       DateTime
-  status        ReservationStatus @default(ACTIVE)
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-
-  @@map("reservations")
-}
 
 model OCPPMessage {
   id            String           @id @default(cuid())
@@ -259,7 +224,7 @@ enum ConnectorType {
 
 enum ConnectorStatus {
   AVAILABLE
-  PREPARING
+  PREPARUNG
   CHARGING
   SUSPENDEDEV
   SUSPENDEDEVSE
@@ -315,10 +280,34 @@ enum UserType {
 }
 
 enum PricingPeriod {
-  STANDARD
-  PEAK
+  ON_PEAK
   OFF_PEAK
-  SUPER_OFF_PEAK
+}
+
+model Admin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  password     String
+  role         AdminRole @default(STAFF)
+  firstName    String?
+  lastName     String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  refreshTokens AdminRefreshToken[]
+}
+
+model AdminRefreshToken {
+  id           String   @id @default(cuid())
+  token        String   @unique
+  adminId      String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  isRevoked    Boolean  @default(false)
+  revokedAt    DateTime?
+  admin        Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  
+  @@map("admin_refresh_tokens")
 }
 
 enum AdminRole {

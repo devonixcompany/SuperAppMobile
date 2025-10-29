@@ -1,6 +1,13 @@
 // OCPP 1.6 Message Handler
 // Implements logic specific to OCPP 1.6 messages
 
+import { BACKEND_URL, WS_GATEWAY_API_KEY } from '../../config/env';
+
+const withGatewayHeaders = (headers: Record<string, string> = {}) => ({
+  'X-Api-Key': WS_GATEWAY_API_KEY,
+  ...headers
+});
+
 export interface OCPP16StatusNotificationRequest {
   connectorId: number;
   errorCode: string;
@@ -82,18 +89,16 @@ export async function handleStatusNotification(
     }
 
     // Update connector status in backend database
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     console.log(
       `📤 [OCPP] กำลังอัพเดทฐานข้อมูล: connector=${payload.connectorId}, status=${payload.status} ของ ${chargePointId}`
     );
     
     try {
-      const updateResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/status`, {
+      const updateResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/status`, {
         method: 'POST',
-        headers: {
+        headers: withGatewayHeaders({
           'Content-Type': 'application/json',
-        },
+        }),
         body: JSON.stringify({
           connectorId: payload.connectorId,
           status: payload.status,
@@ -132,8 +137,6 @@ export async function handleStatusNotification(
  */
 async function updateConnectorStatus(chargePointId: string, payload: OCPP16StatusNotificationRequest): Promise<void> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     const updateData = {
       connectorId: payload.connectorId,
       status: payload.status,
@@ -146,11 +149,11 @@ async function updateConnectorStatus(chargePointId: string, payload: OCPP16Statu
 
     console.log(`กำลังอัปเดตสถานะหัวชาร์จ ${payload.connectorId} ของ ${chargePointId}:`, updateData);
 
-    const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/status`, {
+    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/status`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify(updateData)
     });
 
@@ -221,15 +224,13 @@ export async function handleBootNotification(
     }
 
     // Update Charge Point information in backend
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     console.log(`📤 กำลังอัปเดตข้อมูล Charge Point ในระบบหลังบ้านสำหรับ ${chargePointId}`);
     
-    const updateResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/update-from-boot`, {
+    const updateResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/update-from-boot`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         vendor: payload.chargePointVendor,
         model: payload.chargePointModel,
@@ -271,8 +272,6 @@ export async function handleBootNotification(
  */
 async function updateChargePointFromBootNotification(chargePointId: string, payload: OCPP16BootNotificationRequest): Promise<void> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     const updateData = {
       vendor: payload.chargePointVendor,
       model: payload.chargePointModel,
@@ -285,11 +284,11 @@ async function updateChargePointFromBootNotification(chargePointId: string, payl
 
     console.log(`กำลังอัปเดตข้อมูล Charge Point ${chargePointId} จาก BootNotification:`, updateData);
 
-    const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/update-from-boot`, {
+    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/update-from-boot`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify(updateData)
     });
 
@@ -374,15 +373,11 @@ export function handleGetConfiguration(payload: { key?: string[] }, chargePointI
  */
 async function fetchChargePointConfiguration(chargePointId: string): Promise<void> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     console.log(`กำลังดึงข้อมูลการตั้งค่าสำหรับ Charge Point ${chargePointId}`);
 
-    const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}`, {
+    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      }
+      headers: withGatewayHeaders()
     });
 
     if (!response.ok) {
@@ -422,7 +417,6 @@ export async function handleHeartbeat(
 
   // Try to update backend if available (optional operation)
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
     const skipBackendUpdate = process.env.SKIP_BACKEND_UPDATE === 'true';
     
     if (skipBackendUpdate) {
@@ -437,11 +431,11 @@ export async function handleHeartbeat(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
     
-    const heartbeatResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/heartbeat`, {
+    const heartbeatResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/heartbeat`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         lastSeen: heartbeatTimestamp
       }),
@@ -477,19 +471,17 @@ export async function handleHeartbeat(
  */
 async function updateChargePointLastSeen(chargePointId: string): Promise<void> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     const updateData = {
       lastSeen: new Date().toISOString()
     };
 
     console.log(`กำลังอัปเดตเวลาที่เห็นล่าสุด (lastSeen) สำหรับ Charge Point ${chargePointId}`);
 
-    const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/heartbeat`, {
+    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/heartbeat`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify(updateData)
     });
 

@@ -41,9 +41,50 @@ const PUBLIC_ROUTES = [
   '/health',
   '/api/auth/login',
   '/api/auth/register',
-  '/api/auth/refresh',
-  '/api/chargepoints/ws-gateway/chargepoints'
+  '/api/auth/refresh'
 ];
+
+const GATEWAY_API_KEY = process.env.WS_GATEWAY_API_KEY || 'your-api-key';
+
+const extractGatewayKey = (request: Request) => {
+  const headerValue =
+    request.headers.get('x-api-key') ||
+    request.headers.get('authorization') ||
+    '';
+
+  if (!headerValue) {
+    return null;
+  }
+
+  return headerValue.startsWith('Bearer ')
+    ? headerValue.substring(7).trim()
+    : headerValue.trim();
+};
+
+type GatewayRouteRule = {
+  methods: string[];
+  pattern: RegExp;
+};
+
+const GATEWAY_ROUTE_RULES: GatewayRouteRule[] = [
+  { methods: ['GET'], pattern: /^\/api\/chargepoints\/ws-gateway\/chargepoints$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/validate-whitelist$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/validate-ocpp$/ },
+  { methods: ['PUT'], pattern: /^\/api\/chargepoints\/[^/]+\/connection-status$/ },
+  { methods: ['GET'], pattern: /^\/api\/chargepoints\/[^/]+$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/status$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/update-from-boot$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/heartbeat$/ },
+  { methods: ['GET'], pattern: /^\/api\/chargepoints\/check-connectors\/[^/]+$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/create-connectors$/ }
+];
+
+const isGatewayRoute = (method: string, path: string) =>
+  GATEWAY_ROUTE_RULES.some(
+    (rule) =>
+      rule.methods.includes(method.toUpperCase()) && rule.pattern.test(path)
+  );
 
 const isPublicRoute = (path: string) => {
   if (path.startsWith('/openapi')) {
@@ -153,15 +194,35 @@ export const app = new Elysia()
     }
 
     const path = new URL(request.url).pathname;
+    const method = request.method.toUpperCase();
 
     if (isPublicRoute(path)) {
       return;
     }
 
+    if (isGatewayRoute(method, path)) {
+      const gatewayKey = extractGatewayKey(request);
+      if (gatewayKey && gatewayKey === GATEWAY_API_KEY) {
+        return;
+      }
+
+      logger.warn('Unauthorized gateway access attempt', {
+        path,
+        method,
+        status: 401
+      });
+      set.status = 401;
+      return {
+        success: false,
+        message: 'Unauthorized: invalid gateway key'
+      };
+    }
+
     if (!user) {
       logger.warn('Unauthorized API access blocked', {
         path,
-        method: request.method
+        method,
+        status: 401
       });
       set.status = 401;
       return {

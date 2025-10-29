@@ -3,7 +3,7 @@ import { Elysia, t } from 'elysia';
 import { ValidationService } from '../validation/validation.service';
 import { ChargePointService } from './chargepoint.service';
 
-const WS_GATEWAY_API_KEY = process.env.WS_GATEWAY_API_KEY || 'adsadadw12';
+const WS_GATEWAY_API_KEY = process.env.WS_GATEWAY_API_KEY || 'your-api-key';
 
 export const chargePointController = (
   chargePointService: ChargePointService,

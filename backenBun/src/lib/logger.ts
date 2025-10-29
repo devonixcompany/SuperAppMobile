@@ -29,51 +29,119 @@ export const logger = winston.createLogger({
   ],
 });
 
-// Always add console transport for debugging
-logger.add(new winston.transports.Console({
-  format: winston.format.combine(
-    winston.format.colorize(),
-    winston.format.timestamp({
-      format: 'HH:mm:ss'
-    }),
-    winston.format.printf((info) => {
-      const {
-        timestamp,
-        level,
-        message,
-        ...rest
-      } = info as winston.Logform.TransformableInfo & Record<string, unknown>;
+const LOG_CONSOLE_ENABLED = process.env.LOG_CONSOLE !== 'false';
 
-      const service = rest.service as string | undefined;
-      const method = rest.method as string | undefined;
-      const url = rest.url as string | undefined;
-      const ip = rest.ip as string | undefined;
-      const userAgent = rest.userAgent as string | undefined;
-      const statusCode = rest.statusCode as number | undefined;
-      const responseTime = rest.responseTime as number | undefined;
+if (LOG_CONSOLE_ENABLED) {
+  logger.add(new winston.transports.Console({
+    format: winston.format.combine(
+      winston.format.colorize(),
+      winston.format.timestamp({
+        format: 'HH:mm:ss'
+      }),
+      winston.format.printf((info) => {
+        const {
+          timestamp,
+          level,
+          message,
+          ...rest
+        } = info as winston.Logform.TransformableInfo & Record<string, unknown>;
 
-      // Preserve all metadata (including method/url/etc.) for JSON output
-      const meta = { ...rest };
+        const service = rest.service as string | undefined;
+        const method = rest.method as string | undefined;
+        const url = rest.url as string | undefined;
+        const ip = rest.ip as string | undefined;
+        const userAgent = rest.userAgent as string | undefined;
+        const statusCode = rest.statusCode as number | undefined;
+        const responseTime = rest.responseTime as number | undefined;
 
-      let logMessage = `${timestamp} [${level}]`;
+        const meta = { ...rest };
 
-      if (service) logMessage += ` ${service}`;
-      if (method && url) logMessage += ` ${method} ${url}`;
-      if (ip) logMessage += ` - ${ip}`;
-      if (userAgent) logMessage += ` - ${userAgent}`;
-      if (statusCode) logMessage += ` - ${statusCode}`;
-      if (responseTime) logMessage += ` - ${responseTime}ms`;
+        let logMessage = `${timestamp} [${level}]`;
 
-      logMessage += `: ${message}`;
+        if (service) logMessage += ` ${service}`;
+        if (method && url) logMessage += ` ${method} ${url}`;
+        if (ip) logMessage += ` - ${ip}`;
+        if (userAgent) logMessage += ` - ${userAgent}`;
+        if (statusCode) logMessage += ` - ${statusCode}`;
+        if (responseTime) logMessage += ` - ${responseTime}ms`;
 
-      if (Object.keys(meta).length > 0) {
-        logMessage += `\n${JSON.stringify(meta, null, 2)}`;
+        logMessage += `: ${message}`;
+
+        if (Object.keys(meta).length > 0) {
+          logMessage += `\n${JSON.stringify(meta, null, 2)}`;
+        }
+
+        return logMessage;
+      })
+    )
+  }));
+}
+
+type LogMethod = (message: any, ...meta: any[]) => winston.Logger;
+
+const consoleLevelIcons: Record<string, string> = {
+  error: '❌',
+  warn: '⚠️',
+  info: 'ℹ️',
+  debug: '🐞'
+};
+
+const formatConsolePayload = (
+  level: string,
+  message: unknown,
+  meta: Record<string, unknown>
+) => {
+  const icon = consoleLevelIcons[level] ?? '🔎';
+  const timestamp = new Date().toLocaleTimeString();
+  const metaCopy = { ...meta };
+  delete metaCopy.service;
+
+  let output = `${icon} [${timestamp}] ${String(message)}`;
+
+  if (Object.keys(metaCopy).length > 0) {
+    output += ` ${JSON.stringify(metaCopy)}`;
+  }
+
+  return output;
+};
+
+const wrapWithConsole = (level: 'error' | 'warn' | 'info' | 'debug') => {
+  const original = logger[level].bind(logger) as LogMethod;
+
+  return ((message: unknown, ...meta: unknown[]) => {
+    if (LOG_CONSOLE_ENABLED) {
+      const metaObject =
+        meta.length === 0
+          ? {}
+          : meta.length === 1 && typeof meta[0] === 'object' && meta[0] !== null
+            ? (meta[0] as Record<string, unknown>)
+            : meta.reduce<Record<string, unknown>>((acc, current, index) => {
+                acc[`meta${index}`] = current;
+                return acc;
+              }, {});
+
+      const payload = formatConsolePayload(level, message, metaObject);
+
+      switch (level) {
+        case 'error':
+          console.error(payload);
+          break;
+        case 'warn':
+          console.warn(payload);
+          break;
+        default:
+          console.log(payload);
       }
+    }
 
-      return logMessage;
-    })
-  )
-}));
+    return original(message, ...meta);
+  }) as LogMethod;
+};
+
+logger.error = wrapWithConsole('error') as typeof logger.error;
+logger.warn = wrapWithConsole('warn') as typeof logger.warn;
+logger.info = wrapWithConsole('info') as typeof logger.info;
+logger.debug = wrapWithConsole('debug') as typeof logger.debug;
 
 // Store start times in a Map to track request duration
 const requestStartTimes = new Map<string, number>();
@@ -122,14 +190,22 @@ export const requestLogger = new Elysia({ name: 'request-logger' })
     // Log to console immediately for debugging
     console.log(`✅ [${new Date().toLocaleTimeString()}] ${method} ${url.pathname + url.search} - ${statusCode} (${responseTime}ms)`);
     
-    logger.info('Request completed', {
+    const logPayload = {
       requestId,
       method,
       url: url.pathname + url.search,
       statusCode,
       responseTime,
       timestamp: new Date().toISOString()
-    });
+    };
+
+    logger.info('Request completed', logPayload);
+
+    if (process.env.LOG_CONSOLE !== 'false') {
+      console.log(
+        `✅ [${new Date().toLocaleTimeString()}] ${method} ${url.pathname + url.search} - ${statusCode} (${responseTime}ms)`
+      );
+    }
   })
   .onError(({ request, set, error, requestId, startTime }: any) => {
     const endTime = Date.now();
@@ -143,7 +219,7 @@ export const requestLogger = new Elysia({ name: 'request-logger' })
       requestStartTimes.delete(requestId);
     }
 
-    logger.error('Request failed', {
+    const logPayload = {
       requestId,
       method,
       url: url.pathname + url.search,
@@ -152,7 +228,15 @@ export const requestLogger = new Elysia({ name: 'request-logger' })
       error: error.message,
       stack: error.stack,
       timestamp: new Date().toISOString()
-    });
+    };
+
+    logger.error('Request failed', logPayload);
+
+    if (process.env.LOG_CONSOLE !== 'false') {
+      console.error(
+        `❌ [${new Date().toLocaleTimeString()}] ${method} ${url.pathname + url.search} - ${statusCode} (${responseTime}ms): ${error.message}`
+      );
+    }
   });
 
 // Helper function to log API calls with more details
