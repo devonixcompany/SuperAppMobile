@@ -69,6 +69,19 @@ export const storeTokens = async (tokens: AuthTokens): Promise<boolean> => {
 };
 
 /**
+ * Clear stored authentication tokens
+ */
+export const clearTokens = async (): Promise<boolean> => {
+  try {
+    await SecureStore.deleteItemAsync(`${SERVICE_NAME}_tokens`);
+    return true;
+  } catch (error) {
+    console.error("Error clearing tokens:", error);
+    return false;
+  }
+};
+
+/**
  * Retrieve authentication tokens
  */
 export const getTokens = async (): Promise<AuthTokens | null> => {

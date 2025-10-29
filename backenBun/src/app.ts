@@ -2,6 +2,7 @@ import { cors } from '@elysiajs/cors';
 import { jwt } from '@elysiajs/jwt';
 import { fromTypes, openapi } from '@elysiajs/openapi';
 import { Elysia, t } from 'elysia';
+import { logger, requestLogger } from './lib/logger';
 import { prisma } from './lib/prisma';
 import { serviceContainer } from './services';
 
@@ -36,7 +37,26 @@ const authenticatedProfileResponseModel = t.Object({
   })
 }, { description: 'Authenticated user profile response payload' });
 
+const PUBLIC_ROUTES = [
+  '/health',
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/refresh',
+  '/api/chargepoints/ws-gateway/chargepoints'
+];
+
+const isPublicRoute = (path: string) => {
+  if (path.startsWith('/openapi')) {
+    return true;
+  }
+
+  return PUBLIC_ROUTES.some(
+    (route) => path === route || path.startsWith(`${route}/`)
+  );
+};
+
 export const app = new Elysia()
+  .use(requestLogger)
   .use(cors())
   .model({
     User: userModel,
@@ -79,9 +99,6 @@ export const app = new Elysia()
     name: 'jwt',
     secret: process.env.JWT_SECRET || 'your-secret-key'
   }))
-  .use(serviceContainer.getAuthController())
-  .use(serviceContainer.getUserController())
-  .use(serviceContainer.getChargePointController())
   .derive(async ({ request, set }: { request: Request; set: any }) => {
     const authHeader = request.headers.get('authorization');
     
@@ -92,10 +109,12 @@ export const app = new Elysia()
     }
 
     const token = authHeader.substring(7);
-      console.log("check verify",token)
     const payload = await jwtService.verifyToken(token);
-    console.log("check payload",payload)
+
     if (!payload) {
+      logger.warn('Unauthorized access attempt: invalid token', {
+        path: new URL(request.url).pathname
+      });
       return {
         user: null
       };
@@ -114,6 +133,10 @@ export const app = new Elysia()
     });
 
     if (!user || user.status !== 'ACTIVE') {
+      logger.warn('Unauthorized access attempt: inactive or missing user', {
+        path: new URL(request.url).pathname,
+        userId: payload.userId
+      });
       return {
         user: null
       };
@@ -123,6 +146,33 @@ export const app = new Elysia()
       user
     };
   })
+  // Global guard: block non-public routes when JWT is missing or invalid
+  .onBeforeHandle(({ request, user, set }: any) => {
+    if (request.method === 'OPTIONS') {
+      return;
+    }
+
+    const path = new URL(request.url).pathname;
+
+    if (isPublicRoute(path)) {
+      return;
+    }
+
+    if (!user) {
+      logger.warn('Unauthorized API access blocked', {
+        path,
+        method: request.method
+      });
+      set.status = 401;
+      return {
+        success: false,
+        message: 'Unauthorized: missing or invalid token'
+      };
+    }
+  })
+  .use(serviceContainer.getAuthController())
+  .use(serviceContainer.getUserController())
+  .use(serviceContainer.getChargePointController())
   .guard(
     ({ user }: any) => !!user,
     (app: any) =>

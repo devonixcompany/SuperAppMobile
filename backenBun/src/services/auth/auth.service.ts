@@ -67,7 +67,7 @@ export class AuthService {
       });
 
       // Generate tokens
-      const token = await this.jwtService.generateToken(newUser);
+      const accessToken = await this.jwtService.generateToken(newUser);
       const refreshToken = await this.jwtService.generateRefreshToken(newUser);
       console.log("🎫 [AUTH] Tokens generated successfully");
 
@@ -87,7 +87,7 @@ export class AuthService {
             status: newUser.status,
             createdAt: newUser.createdAt,
           },
-          token,
+          accessToken,
           refreshToken,
         },
       };
@@ -214,7 +214,7 @@ export class AuthService {
       }
 
       // Generate new tokens
-      const newToken = await this.jwtService.generateToken(user);
+      const newAccessToken = await this.jwtService.generateToken(user);
       const newRefreshToken = await this.jwtService.generateRefreshToken(user);
       console.log("🎫 [AUTH] New tokens generated");
 
@@ -226,7 +226,7 @@ export class AuthService {
         success: true,
         message: "Token refreshed successfully",
         data: {
-          token: newToken,
+          accessToken: newAccessToken,
           refreshToken: newRefreshToken,
         },
       };

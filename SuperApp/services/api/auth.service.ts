@@ -3,6 +3,7 @@
  * Handles all auth-related API calls
  */
 
+import API_CONFIG from '@/config/api.config';
 import type {
   LoginRequest,
   LoginResponse,
@@ -20,48 +21,72 @@ export const authService = {
    * Login with phone number and password
    */
   async login(credentials: LoginRequest) {
-    return http.post<LoginResponse>('/api/auth/login', credentials);
+    return http.post<LoginResponse>(
+      API_CONFIG.ENDPOINTS.AUTH.LOGIN,
+      credentials,
+      { skipAuth: true, retryOnAuthError: false }
+    );
   },
 
   /**
    * Register a new user
    */
   async register(data: RegisterRequest) {
-    return http.post<RegisterResponse>('/api/auth/register', data);
+    return http.post<RegisterResponse>(
+      API_CONFIG.ENDPOINTS.AUTH.REGISTER,
+      data,
+      { skipAuth: true, retryOnAuthError: false }
+    );
   },
 
   /**
    * Verify OTP code
    */
   async verifyOTP(data: VerifyOTPRequest) {
-    return http.post<VerifyOTPResponse>('/api/auth/verify-otp', data);
+    return http.post<VerifyOTPResponse>(
+      API_CONFIG.ENDPOINTS.AUTH.VERIFY_OTP,
+      data,
+      { skipAuth: true, retryOnAuthError: false }
+    );
   },
 
   /**
    * Refresh access token
    */
   async refreshToken(data: RefreshTokenRequest) {
-    return http.post<RefreshTokenResponse>('/api/auth/refresh-token', data);
+    return http.post<RefreshTokenResponse>(
+      API_CONFIG.ENDPOINTS.AUTH.REFRESH_TOKEN,
+      data,
+      { skipAuth: true, retryOnAuthError: false }
+    );
   },
 
   /**
    * Logout user
    */
   async logout() {
-    return http.post('/api/auth/logout');
+    return http.post(API_CONFIG.ENDPOINTS.AUTH.LOGOUT);
   },
 
   /**
    * Request password reset
    */
   async requestPasswordReset(phoneNumber: string) {
-    return http.post('/api/auth/request-password-reset', { phoneNumber });
+    return http.post(
+      API_CONFIG.ENDPOINTS.AUTH.FORGOT_PASSWORD,
+      { phoneNumber },
+      { skipAuth: true, retryOnAuthError: false }
+    );
   },
 
   /**
    * Reset password
    */
   async resetPassword(data: { phoneNumber: string; otp: string; newPassword: string }) {
-    return http.post('/api/auth/reset-password', data);
+    return http.post(
+      API_CONFIG.ENDPOINTS.AUTH.RESET_PASSWORD,
+      data,
+      { skipAuth: true, retryOnAuthError: false }
+    );
   },
 };

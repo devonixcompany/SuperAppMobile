@@ -36,23 +36,40 @@ logger.add(new winston.transports.Console({
     winston.format.timestamp({
       format: 'HH:mm:ss'
     }),
-    winston.format.printf(({ timestamp, level, message, service, method, url, ip, userAgent, statusCode, responseTime, ...meta }) => {
+    winston.format.printf((info) => {
+      const {
+        timestamp,
+        level,
+        message,
+        ...rest
+      } = info as winston.Logform.TransformableInfo & Record<string, unknown>;
+
+      const service = rest.service as string | undefined;
+      const method = rest.method as string | undefined;
+      const url = rest.url as string | undefined;
+      const ip = rest.ip as string | undefined;
+      const userAgent = rest.userAgent as string | undefined;
+      const statusCode = rest.statusCode as number | undefined;
+      const responseTime = rest.responseTime as number | undefined;
+
+      // Preserve all metadata (including method/url/etc.) for JSON output
+      const meta = { ...rest };
+
       let logMessage = `${timestamp} [${level}]`;
-      
+
       if (service) logMessage += ` ${service}`;
       if (method && url) logMessage += ` ${method} ${url}`;
       if (ip) logMessage += ` - ${ip}`;
       if (userAgent) logMessage += ` - ${userAgent}`;
       if (statusCode) logMessage += ` - ${statusCode}`;
       if (responseTime) logMessage += ` - ${responseTime}ms`;
-      
+
       logMessage += `: ${message}`;
-      
-      // Add metadata if present
+
       if (Object.keys(meta).length > 0) {
         logMessage += `\n${JSON.stringify(meta, null, 2)}`;
       }
-      
+
       return logMessage;
     })
   )
@@ -63,7 +80,7 @@ const requestStartTimes = new Map<string, number>();
 
 // Create a request logger plugin for Elysia
 export const requestLogger = new Elysia({ name: 'request-logger' })
-  .onRequest(({ request }: { request: Request }) => {
+  .derive(({ request }: { request: Request }) => {
     const url = new URL(request.url);
     const method = request.method;
     const ip = request.headers.get('x-forwarded-for') ||

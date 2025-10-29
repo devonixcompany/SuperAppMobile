@@ -3,6 +3,8 @@ import { Elysia, t } from 'elysia';
 import { ValidationService } from '../validation/validation.service';
 import { ChargePointService } from './chargepoint.service';
 
+const WS_GATEWAY_API_KEY = process.env.WS_GATEWAY_API_KEY || 'adsadadw12';
+
 export const chargePointController = (
   chargePointService: ChargePointService,
   validationService: ValidationService
@@ -940,8 +942,26 @@ export const chargePointController = (
     // API สำหรับ ws-gateway ดึงข้อมูลเครื่องชาร์จทั้งหมด
     .get(
       '/ws-gateway/chargepoints',
-      async ({ set }) => {
+      async ({ set, request }) => {
         try {
+          const incomingKeyRaw =
+            request.headers.get('x-api-key') ||
+            request.headers.get('authorization') ||
+            '';
+
+          const incomingKey = incomingKeyRaw.startsWith('Bearer ')
+            ? incomingKeyRaw.substring(7).trim()
+            : incomingKeyRaw.trim();
+
+          if (incomingKey !== WS_GATEWAY_API_KEY) {
+            console.warn('Unauthorized ws-gateway access attempt detected');
+            set.status = 401;
+            return {
+              success: false,
+              message: 'Invalid gateway access key'
+            };
+          }
+
           const chargePoints = await chargePointService.getAllChargePointsForWSGateway();
           
           return {

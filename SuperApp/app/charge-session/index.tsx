@@ -14,8 +14,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BlurView } from "expo-blur";
 
 type ConnectionState = "connecting" | "connected" | "error" | "closed";
 
@@ -47,14 +49,20 @@ type ChargingDataPayload = {
   cost?: number;
 };
 
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
 const COLORS = {
   primary: "#1D2144",
   accent: "#0CC46C",
-  background: "#F5F6FA",
-  card: "#FFFFFF",
-  textPrimary: "#1A1A1A",
-  textSecondary: "#808080",
-  divider: "#D9D9D9",
+  background: "#0A0E27",
+  card: "rgba(255, 255, 255, 0.05)",
+  cardLight: "rgba(255, 255, 255, 0.1)",
+  textPrimary: "#FFFFFF",
+  textSecondary: "#A0A6C5",
+  divider: "rgba(255, 255, 255, 0.1)",
+  glow: "#00E5FF",
+  glowPurple: "#B84FFF",
+  glowGreen: "#0CC46C",
 };
 
 const CONNECTOR_READY_STATUSES = new Set([
@@ -162,6 +170,14 @@ export default function ChargeSessionScreen() {
   const chargingGlow = useRef(new Animated.Value(0.3)).current;
   const circleScale = useRef(new Animated.Value(1)).current;
   const chargingAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  // เพิ่ม animations ใหม่สำหรับ effects
+  const particleAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const glowIntensity = useRef(new Animated.Value(0)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("connecting");
   const [status, setStatus] = useState<StatusMessagePayload | null>(null);
@@ -510,6 +526,77 @@ export default function ChargeSessionScreen() {
         );
       }
       chargingAnimationRef.current.start();
+
+      // เริ่ม animations พิเศษ
+      Animated.loop(
+        Animated.timing(particleAnim, {
+          toValue: 1,
+          duration: 3000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      ).start();
+
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.15,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+
+      Animated.loop(
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 8000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      ).start();
+
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowIntensity, {
+            toValue: 1,
+            duration: 2000,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowIntensity, {
+            toValue: 0,
+            duration: 2000,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(floatAnim, {
+            toValue: 1,
+            duration: 2500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(floatAnim, {
+            toValue: 0,
+            duration: 2500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+
     } else {
       if (chargingAnimationRef.current) {
         chargingAnimationRef.current.stop();
@@ -517,6 +604,11 @@ export default function ChargeSessionScreen() {
       }
       chargingGlow.setValue(0);
       circleScale.setValue(1);
+      particleAnim.setValue(0);
+      pulseAnim.setValue(1);
+      rotateAnim.setValue(0);
+      glowIntensity.setValue(0);
+      floatAnim.setValue(0);
     }
 
     return () => {
@@ -527,11 +619,31 @@ export default function ChargeSessionScreen() {
       chargingGlow.setValue(0);
       circleScale.setValue(1);
     };
-  }, [chargingGlow, circleScale, isCharging]);
+  }, [chargingGlow, circleScale, isCharging, particleAnim, pulseAnim, rotateAnim, glowIntensity, floatAnim]);
 
   const glowTranslate = chargingGlow.interpolate({
     inputRange: [0, 1],
     outputRange: [-320, 320],
+  });
+
+  const particleY = particleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -100],
+  });
+
+  const particleOpacity = particleAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0, 1, 0],
+  });
+
+  const rotateInterpolate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const floatY = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -20],
   });
 
   if (!normalizedWsUrl) {
@@ -662,12 +774,45 @@ export default function ChargeSessionScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* Background with animated gradients */}
+      <LinearGradient
+        colors={['#0A0E27', '#1a1f3a', '#0A0E27']}
+        style={styles.backgroundGradient}
+      >
+        {/* Animated background particles */}
+        {isCharging && (
+          <>
+            {[...Array(6)].map((_, i) => (
+              <Animated.View
+                key={i}
+                style={[
+                  styles.backgroundParticle,
+                  {
+                    left: `${(i * 20 + 10)}%`,
+                    opacity: particleOpacity,
+                    transform: [
+                      { translateY: particleY },
+                      { scale: pulseAnim }
+                    ]
+                  }
+                ]}
+              >
+                <LinearGradient
+                  colors={[COLORS.glow, COLORS.glowPurple, COLORS.glowGreen]}
+                  style={styles.particleGradient}
+                />
+              </Animated.View>
+            ))}
+          </>
+        )}
+      </LinearGradient>
+
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
+          <Ionicons name="chevron-back" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>เริ่มชาร์จ</Text>
         <View style={styles.headerPlaceholder} />
@@ -678,174 +823,332 @@ export default function ChargeSessionScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.statusCard}>
-          {/* แสดงพลังงานเฉพาะเมื่อเริ่มชาร์จแล้ว */}
-          {isCharging || activeTransactionId ? (
-            <Text style={styles.energyText}>{energyDelivered} kWh</Text>
-          ) : (
-            <Text style={styles.energyText}>-- kWh</Text>
-          )}
-          <Text style={styles.statusSubText}>
-            {connectionState === "connected"
-              ? statusDisplayText
-              : connectionState === "connecting"
-                ? "กำลังเชื่อมต่อ..."
-                : "ยังไม่พร้อมใช้งาน"}
-          </Text>
-
-      
-
-          {/* แสดงเปอร์เซ็นต์และ progress bar เฉพาะเมื่อเริ่มชาร์จแล้ว */}
-          {(isCharging || activeTransactionId) && chargingData?.chargingPercentage != null && (
-            <View style={styles.progressWrapper}>
-              <Animated.View style={[styles.percentageCircle, { transform: [{ scale: circleScale }] }]}>
-                <Text style={styles.percentageText}>
-                  {chargingData.chargingPercentage.toFixed(1)}%
-                </Text>
-              </Animated.View>
-              <View style={styles.progressTrack}>
-                <Animated.View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: `${Math.min(
-                        Math.max(chargingData.chargingPercentage, 0),
-                        100,
-                      )}%`,
-                    },
-                  ]}
-                >
-                  {isCharging && (
-                    <Animated.View
-                      style={[
-                        styles.progressPulse,
-                        {
-                          opacity: chargingGlow,
-                        },
-                      ]}
-                    />
-                  )}
-                </Animated.View>
-              </View>
-              <Text style={styles.progressLabel}>
-                ระดับการชาร์จ
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.illustrationCard}>
+        {/* Main charging display card */}
+        <Animated.View style={[
+          styles.statusCard,
+          isCharging && {
+            transform: [{ translateY: floatY }]
+          }
+        ]}>
           <LinearGradient
-            colors={["rgba(28, 34, 68, 0.95)", "rgba(12, 196, 108, 0.7)"]}
+            colors={isCharging
+              ? ['rgba(0, 229, 255, 0.15)', 'rgba(184, 79, 255, 0.15)', 'rgba(12, 196, 108, 0.15)']
+              : ['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.02)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.statusCardGradient}
+          >
+            {isCharging && (
+              <Animated.View style={[styles.glowRing, {
+                opacity: glowIntensity,
+                transform: [{ scale: pulseAnim }]
+              }]}>
+                <LinearGradient
+                  colors={[COLORS.glow, 'transparent']}
+                  style={styles.glowRingGradient}
+                />
+              </Animated.View>
+            )}
+
+            {/* Energy display with enhanced styling */}
+            <View style={styles.energyDisplayContainer}>
+              {isCharging || activeTransactionId ? (
+                <Animated.Text style={[
+                  styles.energyText,
+                  isCharging && {
+                    textShadowColor: COLORS.glow,
+                    textShadowRadius: 20,
+                    textShadowOffset: { width: 0, height: 0 }
+                  }
+                ]}>
+                  {energyDelivered}
+                  <Text style={styles.energyUnit}> kWh</Text>
+                </Animated.Text>
+              ) : (
+                <Text style={styles.energyText}>
+                  --
+                  <Text style={styles.energyUnit}> kWh</Text>
+                </Text>
+              )}
+            </View>
+
+            <Text style={styles.statusSubText}>
+              {connectionState === "connected"
+                ? statusDisplayText
+                : connectionState === "connecting"
+                  ? "กำลังเชื่อมต่อ..."
+                  : "ยังไม่พร้อมใช้งาน"}
+            </Text>
+
+            {/* Enhanced progress display */}
+            {(isCharging || activeTransactionId) && chargingData?.chargingPercentage != null && (
+              <View style={styles.progressWrapper}>
+                <Animated.View style={[
+                  styles.percentageCircle,
+                  { transform: [{ scale: circleScale }, { rotate: rotateInterpolate }] }
+                ]}>
+                  {isCharging && (
+                    <Animated.View style={[styles.circleGlow, {
+                      opacity: glowIntensity
+                    }]}>
+                      <LinearGradient
+                        colors={[COLORS.glow, COLORS.glowPurple, COLORS.glowGreen]}
+                        style={styles.circleGlowGradient}
+                      />
+                    </Animated.View>
+                  )}
+                  <View style={styles.percentageInner}>
+                    <Ionicons name="flash" size={32} color={COLORS.glowGreen} />
+                    <Text style={styles.percentageText}>
+                      {chargingData.chargingPercentage.toFixed(1)}%
+                    </Text>
+                  </View>
+                </Animated.View>
+
+                <View style={styles.progressTrack}>
+                  <Animated.View
+                    style={[
+                      styles.progressFill,
+                      {
+                        width: `${Math.min(
+                          Math.max(chargingData.chargingPercentage, 0),
+                          100,
+                        )}%`,
+                      },
+                    ]}
+                  >
+                    <LinearGradient
+                      colors={[COLORS.glow, COLORS.glowGreen]}
+                      start={{ x: 0, y: 0.5 }}
+                      end={{ x: 1, y: 0.5 }}
+                      style={styles.progressGradient}
+                    />
+                    {isCharging && (
+                      <Animated.View
+                        style={[
+                          styles.progressPulse,
+                          {
+                            opacity: chargingGlow,
+                            transform: [{ translateX: glowTranslate }]
+                          },
+                        ]}
+                      />
+                    )}
+                  </Animated.View>
+                </View>
+                <Text style={styles.progressLabel}>
+                  ระดับการชาร์จ
+                </Text>
+              </View>
+            )}
+          </LinearGradient>
+        </Animated.View>
+
+        {/* Enhanced illustration card */}
+        <Animated.View style={[
+          styles.illustrationCard,
+          isCharging && {
+            transform: [{ scale: pulseAnim }]
+          }
+        ]}>
+          <LinearGradient
+            colors={isCharging
+              ? ['rgba(0, 229, 255, 0.25)', 'rgba(184, 79, 255, 0.25)', 'rgba(12, 196, 108, 0.25)']
+              : ['rgba(28, 34, 68, 0.95)', 'rgba(12, 196, 108, 0.7)']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.illustrationGradient}
           >
-            <Ionicons name="car-sport-outline" size={80} color="#FFFFFF" />
-            <Ionicons name="flash" size={36} color="#FFFFFF" />
-            <Ionicons name="hardware-chip-outline" size={34} color="white" />
+            {/* Rotating ring effect */}
             {isCharging && (
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.chargingGlow,
-                  {
-                    transform: [{ translateX: glowTranslate }],
-                  },
-                ]}
-              >
+              <Animated.View style={[
+                styles.rotatingRing,
+                { transform: [{ rotate: rotateInterpolate }] }
+              ]}>
                 <LinearGradient
-                  colors={[
-                    "rgba(255,255,255,0)",
-                    "rgba(12,196,108,0.8)",
-                    "rgba(255,255,255,0)",
-                  ]}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.chargingGlowGradient}
+                  colors={['transparent', COLORS.glow, 'transparent']}
+                  style={styles.rotatingRingGradient}
                 />
               </Animated.View>
             )}
+
+            <Animated.View style={[
+              styles.illustrationContent,
+              isCharging && {
+                transform: [{ translateY: floatY }]
+              }
+            ]}>
+              <Ionicons name="car-sport-outline" size={80} color="#FFFFFF" />
+              <Animated.View style={[
+                styles.flashIcon,
+                isCharging && {
+                  opacity: glowIntensity,
+                  transform: [{ scale: pulseAnim }]
+                }
+              ]}>
+                <Ionicons name="flash" size={36} color={COLORS.glowGreen} />
+              </Animated.View>
+              <Ionicons name="hardware-chip-outline" size={34} color="white" />
+            </Animated.View>
+
+            {isCharging && (
+              <>
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.chargingGlow,
+                    {
+                      transform: [{ translateX: glowTranslate }],
+                    },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={[
+                      "rgba(255,255,255,0)",
+                      "rgba(0, 229, 255, 0.8)",
+                      "rgba(255,255,255,0)",
+                    ]}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    style={styles.chargingGlowGradient}
+                  />
+                </Animated.View>
+
+                {/* Energy sparks */}
+                {[...Array(3)].map((_, i) => (
+                  <Animated.View
+                    key={i}
+                    style={[
+                      styles.energySpark,
+                      {
+                        left: `${30 + i * 20}%`,
+                        opacity: particleOpacity,
+                        transform: [{ translateY: particleY }]
+                      }
+                    ]}
+                  >
+                    <Ionicons name="flash" size={16} color={COLORS.glow} />
+                  </Animated.View>
+                ))}
+              </>
+            )}
+          </LinearGradient>
+        </Animated.View>
+
+        {/* Enhanced station card */}
+        <View style={styles.stationCard}>
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.03)']}
+            style={styles.stationCardGradient}
+          >
+            <View style={styles.stationHeader}>
+              <LinearGradient
+                colors={[COLORS.glow, COLORS.glowGreen]}
+                style={styles.stationHeaderIcon}
+              >
+                <Ionicons name="flash" size={20} color="#FFFFFF" />
+              </LinearGradient>
+              <View style={styles.stationHeaderTextContainer}>
+                <Text style={styles.stationHeaderTitle}>{powerLabel}</Text>
+                <Text style={styles.stationHeaderSubtitle}>{headerSubtitle}</Text>
+              </View>
+              <View style={[styles.statusBadge, statusBadgeStyle]}>
+                <View style={styles.statusDot} />
+                <Text style={styles.statusBadgeText}>{statusBadgeText}</Text>
+              </View>
+            </View>
+            <View style={styles.stationBody}>
+              {stationRows.map((row, index) => (
+                <View key={row.label} style={styles.stationRow}>
+                  <Text style={styles.rowLabel}>{row.label}</Text>
+                  <Text style={styles.rowValue}>{row.value}</Text>
+                  {index < stationRows.length - 1 && (
+                    <View style={styles.rowDivider} />
+                  )}
+                </View>
+              ))}
+            </View>
           </LinearGradient>
         </View>
 
-        <View style={styles.stationCard}>
-          <View style={styles.stationHeader}>
-            <View style={styles.stationHeaderIcon}>
-              <Ionicons name="flash" size={20} color={COLORS.accent} />
-            </View>
-            <View>
-              <Text style={styles.stationHeaderTitle}>{powerLabel}</Text>
-              <Text style={styles.stationHeaderSubtitle}>{headerSubtitle}</Text>
-            </View>
-            <View style={[styles.statusBadge, statusBadgeStyle]}>
-              <Text style={styles.statusBadgeText}>{statusBadgeText}</Text>
-            </View>
-          </View>
-          <View style={styles.stationBody}>
-            {stationRows.map((row) => (
-              <View key={row.label} style={styles.stationRow}>
-                <Text style={styles.rowLabel}>{row.label}</Text>
-                <Text style={styles.rowValue}>{row.value}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
+        {/* Enhanced controls card */}
         <View style={styles.controlsCard}>
-          <Text style={styles.controlsTitle}>ควบคุมการชาร์จ</Text>
-          <Text style={styles.helperBadge}>
-            สถานะหัวชาร์จปัจจุบัน: {statusDisplayText}
-          </Text>
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.03)']}
+            style={styles.controlsCardGradient}
+          >
+            <Text style={styles.controlsTitle}>ควบคุมการชาร์จ</Text>
+            <View style={styles.helperBadge}>
+              <Ionicons name="information-circle" size={16} color={COLORS.glow} />
+              <Text style={styles.helperBadgeText}>
+                สถานะ: {statusDisplayText}
+              </Text>
+            </View>
 
-          <Text style={styles.inputLabel}>ID Tag</Text>
-          <TextInput
-            value={idTag}
-            onChangeText={setIdTag}
-            placeholder="เช่น EV-USER-001"
-            placeholderTextColor={COLORS.textSecondary}
-            style={styles.textInput}
-          />
+            <Text style={styles.inputLabel}>ID Tag</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="person-circle-outline" size={20} color={COLORS.textSecondary} />
+              <TextInput
+                value={idTag}
+                onChangeText={setIdTag}
+                placeholder="เช่น EV-USER-001"
+                placeholderTextColor={COLORS.textSecondary}
+                style={styles.textInput}
+              />
+            </View>
 
-          <View style={styles.buttonsRow}>
-            <TouchableOpacity
-              disabled={!canStartCharging}
-              activeOpacity={0.8}
-              onPress={handleStartCharging}
-              style={[
-                styles.primaryButtonWrapper,
-                !canStartCharging && styles.primaryButtonDisabledWrapper,
-              ]}
-            >
-              {canStartCharging ? (
-                <LinearGradient
-                  colors={[COLORS.primary, COLORS.accent]}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.primaryButton}
-                >
-                  <Text style={styles.primaryButtonText}>{primaryButtonLabel}</Text>
-                </LinearGradient>
-              ) : (
-                <View style={[styles.primaryButton, styles.primaryButtonDisabled]}>
-                  <Text style={styles.primaryButtonText}>{primaryButtonLabel}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            {canStopCharging && (
+            <View style={styles.buttonsRow}>
               <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={handleStopCharging}
+                disabled={!canStartCharging}
+                activeOpacity={0.8}
+                onPress={handleStartCharging}
+                style={[
+                  styles.primaryButtonWrapper,
+                  !canStartCharging && styles.primaryButtonDisabledWrapper,
+                ]}
               >
-                <Text style={styles.secondaryButtonText}>หยุดชาร์จ</Text>
+                {canStartCharging ? (
+                  <LinearGradient
+                    colors={[COLORS.glow, COLORS.glowGreen]}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    style={styles.primaryButton}
+                  >
+                    <Ionicons name="flash" size={20} color="#FFFFFF" />
+                    <Text style={styles.primaryButtonText}>{primaryButtonLabel}</Text>
+                  </LinearGradient>
+                ) : (
+                  <View style={[styles.primaryButton, styles.primaryButtonDisabled]}>
+                    <Ionicons name="flash-off" size={20} color="rgba(255, 255, 255, 0.5)" />
+                    <Text style={styles.primaryButtonText}>{primaryButtonLabel}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
-            )}
-          </View>
 
-          {helperText && (
-            <Text style={styles.helperText}>{helperText}</Text>
-          )}
+              {canStopCharging && (
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={handleStopCharging}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={['rgba(220, 53, 69, 0.2)', 'rgba(220, 53, 69, 0.1)']}
+                    style={styles.secondaryButtonGradient}
+                  >
+                    <Ionicons name="stop-circle-outline" size={20} color="#DC3545" />
+                    <Text style={styles.secondaryButtonText}>หยุดชาร์จ</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {helperText && (
+              <View style={styles.helperTextContainer}>
+                <Ionicons name="alert-circle-outline" size={18} color={COLORS.glow} />
+                <Text style={styles.helperText}>{helperText}</Text>
+              </View>
+            )}
+          </LinearGradient>
         </View>
 
         {lastHeartbeat && (
@@ -863,12 +1166,32 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  backgroundGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: -1,
+  },
+  backgroundParticle: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    bottom: '20%',
+  },
+  particleGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 4,
+  },
   centered: {
     justifyContent: "center",
     alignItems: "center",
   },
   missingWsText: {
-    color: COLORS.primary,
+    color: COLORS.textPrimary,
     textAlign: "center",
     fontSize: 16,
     lineHeight: 24,
@@ -878,7 +1201,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.glow,
   },
   missingWsButtonText: {
     color: "#FFFFFF",
@@ -891,21 +1214,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    zIndex: 1,
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "rgba(29,33,68,0.15)",
-    backgroundColor: "#FFFFFF",
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "600",
-    color: COLORS.primary,
+    color: COLORS.textPrimary,
   },
   headerPlaceholder: {
     width: 40,
@@ -919,26 +1243,54 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   statusCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 20,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: COLORS.glow,
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  statusCardGradient: {
+    paddingVertical: 24,
+    paddingHorizontal: 20,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  glowRing: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 24,
+  },
+  glowRingGradient: {
+    flex: 1,
+    borderRadius: 24,
+  },
+  energyDisplayContainer: {
+    alignItems: 'center',
+    marginBottom: 8,
   },
   energyText: {
-    fontSize: 32,
-    fontWeight: "600",
-    color: COLORS.primary,
+    fontSize: 48,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+    letterSpacing: 1,
+  },
+  energyUnit: {
+    fontSize: 24,
+    fontWeight: "400",
+    color: COLORS.textSecondary,
   },
   statusSubText: {
-    fontSize: 14,
+    fontSize: 15,
     color: COLORS.textSecondary,
-    marginTop: 8,
+    marginTop: 4,
+    marginBottom: 12,
   },
   divider: {
     height: 1,
@@ -946,292 +1298,393 @@ const styles = StyleSheet.create({
     width: "100%",
     marginVertical: 12,
   },
-  subStatsRow: {
-    flexDirection: "row",
-    width: "100%",
-    justifyContent: "space-between",
-  },
-  subStat: {
-    flex: 1,
-  },
-  subStatLabel: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
-  subStatValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.primary,
-    marginTop: 4,
-  },
   progressWrapper: {
     width: "100%",
-    marginTop: 18,
+    marginTop: 20,
     alignItems: "center",
   },
   percentageCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "rgba(12, 196, 108, 0.1)",
-    borderWidth: 3,
-    borderColor: COLORS.accent,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
-    shadowColor: COLORS.accent,
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    marginBottom: 20,
     position: "relative",
+    overflow: 'visible',
+  },
+  circleGlow: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    top: -10,
+    left: -10,
+  },
+  circleGlowGradient: {
+    flex: 1,
+    borderRadius: 80,
+  },
+  percentageInner: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 3,
+    borderColor: COLORS.glowGreen,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: COLORS.glowGreen,
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
   },
   percentageText: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "700",
-    color: COLORS.primary,
-    textShadowColor: "rgba(0, 0, 0, 0.1)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    color: COLORS.textPrimary,
+    marginTop: 8,
   },
   progressTrack: {
     width: "100%",
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "rgba(29,33,68,0.1)",
+    height: 18,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
     overflow: "hidden",
-    marginBottom: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   progressFill: {
     height: "100%",
-    backgroundColor: COLORS.accent,
-    borderRadius: 8,
+    borderRadius: 12,
     position: "relative",
-    shadowColor: COLORS.accent,
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    overflow: 'hidden',
+  },
+  progressGradient: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
   },
   progressPulse: {
     position: "absolute",
     top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(255, 255, 255, 0.5)",
-    borderRadius: 8,
-    shadowColor: "rgba(255, 255, 255, 0.8)",
-    shadowOpacity: 0.6,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 0 },
+    width: 100,
+    height: '100%',
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
   },
   progressLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   illustrationCard: {
     marginTop: 24,
-    marginHorizontal: 8, // ลดระยะห่างจากขอบ
-    borderRadius: 20,
+    marginHorizontal: 0,
+    borderRadius: 24,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
+    shadowColor: COLORS.glowPurple,
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
   },
   illustrationGradient: {
     width: "100%",
-    maxHeight: 200,
-    aspectRatio: 2.2, // เพิ่มอัตราส่วนให้กว้างขึ้น
-    borderRadius: 20,
+    minHeight: 200,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    paddingVertical: 32,
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  rotatingRing: {
+    position: 'absolute',
+    width: '90%',
+    height: '90%',
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  rotatingRingGradient: {
+    flex: 1,
+    borderRadius: 999,
+  },
+  illustrationContent: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-evenly",
-    flexDirection: "row",
-    paddingHorizontal: 32, // เพิ่ม padding แนวนอน
-    paddingVertical: 24,
+    width: '100%',
+    zIndex: 1,
+  },
+  flashIcon: {
+    padding: 12,
+    borderRadius: 999,
+    backgroundColor: 'rgba(12, 196, 108, 0.2)',
   },
   chargingGlow: {
     position: "absolute",
     top: 0,
     bottom: 0,
-    width: 140,
-    opacity: 0.7,
+    width: 100,
+    opacity: 0.8,
   },
   chargingGlowGradient: {
     flex: 1,
   },
+  energySpark: {
+    position: 'absolute',
+    bottom: '30%',
+  },
   stationCard: {
     marginTop: 24,
-    borderRadius: 16,
-    backgroundColor: COLORS.card,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    borderRadius: 20,
     overflow: "hidden",
+    shadowColor: COLORS.glow,
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  stationCardGradient: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   stationHeader: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
     flexDirection: "row",
     alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
   },
   stationHeaderIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: 14,
+    shadowColor: COLORS.glow,
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  stationHeaderTextContainer: {
+    flex: 1,
   },
   stationHeaderTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#FFFFFF",
+    fontSize: 17,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
   },
   stationHeaderSubtitle: {
     fontSize: 13,
-    color: "rgba(255,255,255,0.75)",
-    marginTop: 2,
+    color: COLORS.textSecondary,
+    marginTop: 4,
   },
   statusBadge: {
-    marginLeft: "auto",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    marginLeft: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
   },
   badgeConnected: {
-    backgroundColor: "rgba(12,196,108,0.18)",
+    backgroundColor: "rgba(12,196,108,0.25)",
   },
   badgeConnecting: {
-    backgroundColor: "rgba(255,193,7,0.22)",
+    backgroundColor: "rgba(255,193,7,0.25)",
   },
   badgeDisconnected: {
-    backgroundColor: "rgba(220,53,69,0.18)",
+    backgroundColor: "rgba(220,53,69,0.25)",
   },
   statusBadgeText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "700",
     color: "#FFFFFF",
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   stationBody: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
   },
   stationRow: {
-    marginBottom: 12,
+    marginBottom: 16,
+    position: 'relative',
   },
   rowLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
+    marginBottom: 6,
   },
   rowValue: {
-    marginTop: 2,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
     color: COLORS.textPrimary,
   },
+  rowDivider: {
+    height: 1,
+    backgroundColor: COLORS.divider,
+    position: 'absolute',
+    bottom: -8,
+    left: 0,
+    right: 0,
+  },
   controlsCard: {
     marginTop: 24,
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: COLORS.glowPurple,
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  controlsCardGradient: {
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   controlsTitle: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 18,
+    fontWeight: "700",
     color: COLORS.textPrimary,
     marginBottom: 16,
   },
   helperBadge: {
     alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(29,33,68,0.06)",
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: "500",
-    marginBottom: 16,
+    backgroundColor: "rgba(0, 229, 255, 0.1)",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.2)',
+  },
+  helperBadgeText: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: "600",
   },
   inputLabel: {
     fontSize: 13,
     color: COLORS.textSecondary,
-    marginBottom: 6,
+    marginBottom: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  fieldSpacing: {
-    marginTop: 16,
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    marginBottom: 8,
   },
   textInput: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(29,33,68,0.1)",
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 14,
+    flex: 1,
     paddingVertical: 12,
-    fontSize: 14,
+    fontSize: 15,
     color: COLORS.textPrimary,
+    fontWeight: '500',
   },
   buttonsRow: {
     marginTop: 24,
   },
   primaryButtonWrapper: {
     width: "100%",
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: COLORS.glow,
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
   primaryButtonDisabledWrapper: {
     shadowOpacity: 0,
     elevation: 0,
   },
   primaryButton: {
-    height: 52,
-    borderRadius: 12,
+    height: 56,
+    borderRadius: 16,
+    flexDirection: 'row',
     alignItems: "center",
     justifyContent: "center",
+    gap: 10,
   },
   primaryButtonDisabled: {
-    backgroundColor: "rgba(29,33,68,0.15)",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
   },
   primaryButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
   secondaryButton: {
-    marginTop: 12,
-    height: 48,
-    borderRadius: 12,
+    marginTop: 14,
+    height: 56,
+    borderRadius: 16,
+    overflow: 'hidden',
     borderWidth: 1.5,
-    borderColor: COLORS.primary,
+    borderColor: "rgba(220, 53, 69, 0.5)",
+  },
+  secondaryButtonGradient: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: "center",
     justifyContent: "center",
+    gap: 10,
   },
   secondaryButtonText: {
-    color: COLORS.primary,
+    color: "#DC3545",
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  helperTextContainer: {
+    marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 229, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.15)',
   },
   helperText: {
-    marginTop: 16,
-    fontSize: 14,
+    flex: 1,
+    fontSize: 13,
     lineHeight: 20,
-    color: COLORS.primary,
+    color: COLORS.textPrimary,
   },
   heartbeatText: {
     marginTop: 12,

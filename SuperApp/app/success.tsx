@@ -134,15 +134,15 @@ export default function SuccessScreen() {
       console.log("✅ Registration successful:", responseData);
 
       // Store authentication tokens if provided
-      if (responseData.data?.token && responseData.data?.refreshToken) {
+      if (responseData.data?.accessToken && responseData.data?.refreshToken) {
         const tokensStored = await storeTokens({
-          accessToken: responseData.data.token,
+          accessToken: responseData.data.accessToken,
           refreshToken: responseData.data.refreshToken,
         });
         console.log("🎫 Tokens stored after registration:", tokensStored);
         console.log(
           "📦 Access Token:",
-          responseData.data.token.substring(0, 20) + "...",
+          responseData.data.accessToken.substring(0, 20) + "...",
         );
         console.log(
           "🔄 Refresh Token:",
