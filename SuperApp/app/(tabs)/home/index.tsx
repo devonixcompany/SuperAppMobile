@@ -266,49 +266,50 @@ export default function HomeScreen() {
 
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar, ตั้งพื้นหลังเป็นสีเทาอ่อน
-    <SafeAreaView className="flex-1 bg-[#F3F6FB]">
+    <SafeAreaView className="flex-1 bg-[#EEF0F6]">
       {/* ScrollView: ทำให้เนื้อหาสามารถเลื่อนได้, ซ่อน scrollbar */}
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         {/* ส่วนหลัก: padding ด้านข้าง 6, บนล่าง 4 และ 6 */}
         <View className="px-6 pt-4 pb-6">
           {/* === HEADER SECTION === */}
           <View className="flex-row items-center justify-between mb-6">
-            <TouchableOpacity className="items-center justify-center w-11 h-11 bg-white rounded-full shadow-sm border border-[#E2E8F0]">
-              <Text className="text-lg font-semibold text-[#1F2937]">P</Text>
+            <TouchableOpacity className="items-center justify-center w-11 h-11 bg-[#4EBB8E] rounded-full shadow-sm border border-[#EEF0F6]">
+              <Text className="text-lg font-semibold text-[#FFFFFF]">P</Text>
             </TouchableOpacity>
             <Text className="text-lg font-semibold text-[#1F2937]">หน้าหลัก</Text>
-            <TouchableOpacity className="items-center justify-center w-10 h-10 bg-white rounded-full shadow-sm">
-              <Ionicons name="notifications-outline" size={24} color="#1F2937" />
+            <TouchableOpacity className="items-center justify-center w-10 h-10 ">
+              <Ionicons name="notifications-outline" size={32} color="#4EBB8E" />
             </TouchableOpacity>
           </View>
 
           {/* === POINTS CARD SECTION === */}
           <View className="mb-10">
             <LinearGradient
-              colors={["#1B2344", "#2D9C8B"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+              colors={["#1F274B", "#395F85", "#589FAF", "#67C1A5", "#5EC1A0"]}
+              locations={[0, 0.25, 0.55, 0.75, 1]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
               className="px-10 pt-10 pb-0"
               style={{ borderRadius: 20 }}
             >
               <View className="flex-row items-center justify-between mb-5">
                 <View>
-                  <View className="flex-row items-center mb-2">
+                  <View className="flex-row items-center mt-5 mb-2">
                     <Image 
                       source={require("../../../assets/img/ponix-logo-06.png")}
-                      className="w-24 h-10 ml-1"
+                      className="w-24 h-10 ml-1 "
                       resizeMode="contain"
                     />
-                    <Text className="ml-0.5 text-xl font-semibold text-white">
+                    <Text className="ml-0.5 text-2xl font-semibold text-white">
                       Point
                     </Text>
                   </View>
-                  <Text className="mt-4 ml-5 text-base text-white/80">
+                  <Text className="mt-1 ml-5 text-2xl text-white/80"> 
                     คะแนนของฉัน
                   </Text>
                 </View>
                 <View
-                  className="p-5 px-2 py-2 mr-5 rounded-full bg-white/80"
+                  className="p-4 py-2 rounded-full px-7 mr-9 bg-white/80"
                   style={{
                     shadowColor: "#1B2344",
                     shadowOpacity: 0.2,
@@ -322,12 +323,12 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               </View>
-              <View className="flex-row items-center mb-6 ml-5">
+              <View className="flex-row items-center mb-4 ml-5">
                 <View className="items-center justify-center w-12 h-12 rounded-full bg-white/15">
                   <CoinIcon size={36} />
                 </View>
                 <View className="ml-5">
-                  <Text className="text-4xl font-extrabold text-white">
+                  <Text className="text-3xl font-extrabold text-white">
                     262 P
                   </Text>
                 </View>
