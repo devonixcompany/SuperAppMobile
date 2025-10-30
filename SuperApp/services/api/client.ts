@@ -34,7 +34,7 @@ export interface ApiRequestOptions extends RequestInit {
   headers?: Record<string, string>;
 }
 
-const PUBLIC_ENDPOINTS = new Set([
+const PUBLIC_ENDPOINTS = new Set<string>([
   API_CONFIG.ENDPOINTS.AUTH.LOGIN,
   API_CONFIG.ENDPOINTS.AUTH.REGISTER,
   API_CONFIG.ENDPOINTS.AUTH.REFRESH_TOKEN,

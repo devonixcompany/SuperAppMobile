@@ -2,13 +2,25 @@
 import { Ionicons } from "@expo/vector-icons";
 // นำเข้า LinearGradient สำหรับสร้างพื้นหลังแบบไล่สี
 import { LinearGradient } from "expo-linear-gradient";
-import React from "react";
+import React, { useRef, useState } from "react";
 // นำเข้า components พื้นฐานจาก React Native
-import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import {
+  Animated,
+  GestureResponderEvent, //*** การกดปุ่มแบบนี้เรียกว่า  Press Interaction หรือ Press Gesture Interaction
+  Image,
+  ImageSourcePropType,
+  Pressable,
+  PressableProps,
+  ScrollView,
+  Text,
+  View, 
+} from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
 import { useRouter, type Href } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { ClipPath, Defs, G, Path, Rect } from "react-native-svg";
+import MiniProfileModal, { DEFAULT_PROFILE_AVATAR } from "./miniprofile";
+import NotificationModal from "./notification";
 
 type NewsItem = {
   id: string;
@@ -33,6 +45,87 @@ type QuickAction = {
   labelEn: string;
   Icon: React.ComponentType<{ size?: number }>;
   route?: Href;
+};
+
+type TouchableScaleProps = PressableProps & {
+  className?: string;
+  androidRippleColor?: string;
+  children: React.ReactNode;
+  activeOpacity?: number;
+};
+
+const TouchableScale = ({
+  className,
+  children,
+  androidRippleColor,
+  onPressIn,
+  onPressOut,
+  android_ripple,
+  activeOpacity,
+  style,
+  ...restProps
+}: TouchableScaleProps) => {
+  const pressAnim = useRef(new Animated.Value(0)).current;
+
+  const handlePressIn = (event: GestureResponderEvent) => {
+    Animated.spring(pressAnim, {
+      toValue: 1,
+      speed: 20,
+      bounciness: 6,
+      useNativeDriver: true,
+    }).start();
+    onPressIn?.(event);
+  };
+
+  const handlePressOut = (event: GestureResponderEvent) => {
+    Animated.spring(pressAnim, {
+      toValue: 0,
+      speed: 18,
+      bounciness: 6,
+      useNativeDriver: true,
+    }).start();
+    onPressOut?.(event);
+  };
+
+  const scale = pressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.9],
+  });
+
+  const translateY = pressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 3],
+  });
+
+  const targetOpacity = activeOpacity ?? 0.85;
+  const contentOpacity = pressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, targetOpacity],
+  });
+
+  return (
+    <Pressable
+      {...restProps}
+      className={className}
+      style={style}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      android_ripple={
+        androidRippleColor
+          ? { color: androidRippleColor, borderless: false }
+          : android_ripple
+      }
+    >
+      <Animated.View
+        style={{
+          transform: [{ scale }, { translateY }],
+          opacity: contentOpacity,
+        }}
+      >
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
 };
 
 const newsUpdates: NewsItem[] = [
@@ -263,27 +356,45 @@ const quickActions: QuickAction[] = [
 // ฟังก์ชันหลักของหน้า Home
 export default function HomeScreen() {
   const router = useRouter();
+  const [isNotificationVisible, setNotificationVisible] = useState(false);
+  const [isProfileVisible, setProfileVisible] = useState(false);
+  const [profileName, setProfileName] = useState("PONIX Member");
+  const [profileAvatar, setProfileAvatar] =
+    useState<ImageSourcePropType>(DEFAULT_PROFILE_AVATAR);
 
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar, ตั้งพื้นหลังเป็นสีเทาอ่อน
-    <SafeAreaView className="flex-1 bg-[#EEF0F6]">
+    <SafeAreaView edges={["top"]} className="flex-1 bg-[#EEF0F6]">
       {/* ScrollView: ทำให้เนื้อหาสามารถเลื่อนได้, ซ่อน scrollbar */}
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 0 }}
+        showsVerticalScrollIndicator={false}
+      >
         {/* ส่วนหลัก: padding ด้านข้าง 6, บนล่าง 4 และ 6 */}
-        <View className="px-6 pt-4 pb-6">
+        <View className="px-6 pt-4 pb-0">
           {/* === HEADER SECTION === */}
-          <View className="flex-row items-center justify-between mb-6">
-            <TouchableOpacity className="items-center justify-center w-11 h-11 bg-[#4EBB8E] rounded-full shadow-sm border border-[#EEF0F6]">
-              <Text className="text-lg font-semibold text-[#FFFFFF]">P</Text>
-            </TouchableOpacity>
+          <View className="flex-row items-center justify-between mb-5">
+            <TouchableScale
+              className="w-11 h-11 rounded-full border border-[#EEF0F6] overflow-hidden bg-[#4EBB8E] shadow-sm"
+              onPress={() => setProfileVisible(true)}
+              androidRippleColor="rgba(255,255,255,0.25)"
+            >
+              <Image source={profileAvatar} className="w-full h-full" />
+            </TouchableScale>
             <Text className="text-lg font-semibold text-[#1F2937]">หน้าหลัก</Text>
-            <TouchableOpacity className="items-center justify-center w-10 h-10 ">
+            <TouchableScale
+              className="items-center justify-center w-10 h-10"
+              onPress={() => setNotificationVisible(true)}
+              hitSlop={8}
+              androidRippleColor="rgba(78,187,142,0.2)"
+            >
               <Ionicons name="notifications-outline" size={32} color="#4EBB8E" />
-            </TouchableOpacity>
+            </TouchableScale>
           </View>
 
           {/* === POINTS CARD SECTION === */}
-          <View className="mb-10">
+          <View className="mb-5">
             <LinearGradient
               colors={["#1F274B", "#395F85", "#589FAF", "#67C1A5", "#5EC1A0"]}
               locations={[0, 0.25, 0.55, 0.75, 1]}
@@ -294,7 +405,7 @@ export default function HomeScreen() {
             >
               <View className="flex-row items-center justify-between mb-5">
                 <View>
-                  <View className="flex-row items-center mt-5 mb-2">
+                  <View className="flex-row items-center mt-5 mb-1">
                     <Image 
                       source={require("../../../assets/img/ponix-logo-06.png")}
                       className="w-24 h-10 ml-1 "
@@ -323,7 +434,7 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               </View>
-              <View className="flex-row items-center mb-4 ml-5">
+              <View className="flex-row items-center mb-2 ml-5">
                 <View className="items-center justify-center w-12 h-12 rounded-full bg-white/15">
                   <CoinIcon size={36} />
                 </View>
@@ -339,18 +450,18 @@ export default function HomeScreen() {
           </View>
 
           {/* === QUICK ACCESS BUTTONS === */}
-          <View className="px-1 mb-8">
+          <View className="px-1 mb-2">
             <View className="flex-row justify-between p-3 rounded-3xl">
               {quickActions.map((action) => (
-                <TouchableOpacity
+                <TouchableScale
                   key={action.key}
                   className="flex-1 px-5 py-5 mx-2 bg-white shadow-sm rounded-2xl"
-                  activeOpacity={0.85}
                   onPress={() => {
                     if (action.route) {
                       router.push(action.route);
                     }
                   }}
+                  androidRippleColor="rgba(78,187,142,0.12)"
                 >
                   <View className="flex-row items-center justify-center">
                     <View className="mr-4">
@@ -365,21 +476,21 @@ export default function HomeScreen() {
                       </Text>
                     </View>
                   </View>
-                </TouchableOpacity>
+                </TouchableScale>
               ))}
             </View>
           </View>
 
           {/* === NEWS UPDATES SECTION === */}
-          <View className="mb-6">
-            <View className="flex-row items-center justify-between mb-3">
+          <View className="mb-2">
+            <View className="flex-row items-center justify-between mb-2">
               <View className="flex-row items-baseline">
                 <Text className="text-lg font-semibold text-[#1F2937]">
                   ข่าวสารอัพเดต
                 </Text>
                 <Text className="ml-2 text-sm text-[#3B82F6]">ใหม่</Text>
               </View>
-              <Text className="text-sm text-[#6B7280]">เลื่อนเพื่อดูเพิ่มเติม</Text>
+              <Text className="text-sm text-[#6B7280]">เลื่อนเพื่อดูเพิ่มเติม  </Text>
             </View>
             <ScrollView
               horizontal
@@ -387,9 +498,9 @@ export default function HomeScreen() {
               contentContainerStyle={{ paddingRight: 24 }}
             >
               {newsUpdates.map((item, index) => (
-                <TouchableOpacity
+                <TouchableScale
                   key={item.id}
-                  className="bg-white shadow-sm w-72 rounded-2xl"
+                  className="mt-2 mb-2 bg-white shadow-sm w-72 rounded-2xl" //ตั้งค่าระยะขอบกรอบ ให้รูปโดนไม่ทับ
                   style={{ marginRight: index === newsUpdates.length - 1 ? 0 : 16 }}
                   activeOpacity={0.9}
                 >
@@ -417,22 +528,22 @@ export default function HomeScreen() {
                       {item.subtitle}
                     </Text>
                   </View>
-                </TouchableOpacity>
+                </TouchableScale>
               ))}
             </ScrollView>
           </View>
 
           {/* === RECOMMENDED TOPICS SECTION === */}
-          <View className="mb-8">
+          <View className="mb-0">
             <View className="flex-row items-center justify-between mb-3">
               <Text className="text-lg font-semibold text-[#1F2937]">
                 หัวข้อแนะนำ
               </Text>
-              <TouchableOpacity activeOpacity={0.7}>
-                <Text className="text-sm font-medium text-[#3B82F6]">
+              <TouchableScale activeOpacity={0.7}>
+                <Text className="text-sm font-medium text-[#3B82F6] ">
                   ดูทั้งหมด
                 </Text>
-              </TouchableOpacity>
+              </TouchableScale>
             </View>
             <ScrollView
               horizontal
@@ -440,9 +551,9 @@ export default function HomeScreen() {
               contentContainerStyle={{ paddingRight: 24 }}
             >
               {recommendationTopics.map((topic, index) => (
-                <TouchableOpacity
+                <TouchableScale
                   key={topic.id}
-                  className="p-4 bg-white shadow-sm w-72 rounded-2xl"
+                  className="p-4 mb-2 bg-white shadow-sm w-72 rounded-2xl" //ตั้งค่าระยะขอบกรอบ ให้รูปโดนไม่ทับ
                   style={{
                     marginRight:
                       index === recommendationTopics.length - 1 ? 0 : 16,
@@ -473,7 +584,7 @@ export default function HomeScreen() {
                     </Text>
                     <Text className="text-xs text-[#9CA3AF]">{topic.date}</Text>
                   </View>
-                </TouchableOpacity>
+                </TouchableScale>
               ))}
             </ScrollView>
           </View>
@@ -481,6 +592,27 @@ export default function HomeScreen() {
           {/* ส่วนล่างถูกตัดออกตามคำขอ */}
         </View>
       </ScrollView>
+      <NotificationModal
+        visible={isNotificationVisible}
+        onClose={() => setNotificationVisible(false)}
+      />
+      <MiniProfileModal
+        visible={isProfileVisible}
+        onClose={() => setProfileVisible(false)}
+        name={profileName}
+        avatarSource={profileAvatar}
+        onChangeName={(newName) => {
+          const trimmed = newName.trim();
+          setProfileName(trimmed.length ? trimmed : "PONIX Member");
+        }}
+        onChangeAvatar={(source) => {
+          setProfileAvatar(source ?? DEFAULT_PROFILE_AVATAR);
+        }}
+        onSettings={() => {
+          setProfileVisible(false);
+          router.push("/(tabs)/settings");
+        }}
+      />
     </SafeAreaView>
   );
 }

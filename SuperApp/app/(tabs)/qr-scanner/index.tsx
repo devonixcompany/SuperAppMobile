@@ -25,6 +25,21 @@ type ResolvedPayload = {
   connectorId?: number;
 };
 
+type ChargePointDetails = {
+  name?: string;
+  stationName?: string;
+  location?: string;
+  powerRating?: number;
+  brand?: string;
+  protocol?: string;
+};
+
+type PricingTierInfo = {
+  baseRate?: number;
+  currency?: string;
+  name?: string;
+};
+
 export default function QRScannerScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [torchEnabled, setTorchEnabled] = useState(false);
@@ -282,8 +297,10 @@ export default function QRScannerScreen() {
         payload.chargePointIdentity;
       const connectorId =
         body?.data?.connector?.connectorId || payload.connectorId;
-      const chargePointData = body?.data?.chargePoint || body?.chargePoint || {};
-      const pricingTier = body?.data?.pricingTier || body?.pricingTier || null;
+      const chargePointData =
+        (body?.data?.chargePoint || body?.chargePoint || {}) as ChargePointDetails;
+      const pricingTier =
+        (body?.data?.pricingTier || body?.pricingTier || null) as PricingTierInfo | null;
       const chargePointName = chargePointData?.name;
 
       const params: Record<string, string> = {

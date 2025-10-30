@@ -277,16 +277,45 @@ export default function ChargeSessionScreen() {
         break;
       }
       case "connectorStatus": {
-        setStatus((prev) =>
-          prev
-            ? {
-                ...prev,
-                status: data?.status ?? prev.status,
-                message: data?.message ?? prev.message,
-              }
-            : data,
-        );
-        appendLog("info", `หัวชาร์จอยู่ในสถานะ ${data?.status ?? "-"}`);
+        const payload = (data ?? {}) as Partial<StatusMessagePayload>;
+        setStatus((prev) => {
+          if (prev) {
+            const statusValue =
+              typeof payload.status === "string"
+                ? payload.status
+                : prev.status;
+            const updated: StatusMessagePayload = {
+              ...prev,
+              status: statusValue,
+              message: payload.message ?? prev.message,
+              isOnline: payload.isOnline ?? prev.isOnline,
+            };
+            return updated;
+          }
+
+          if (typeof payload.status !== "string") {
+            return prev;
+          }
+
+          const resolvedConnectorId =
+            payload.connectorId ??
+            connectorId ??
+            (params.connectorId ? Number(params.connectorId) : 0);
+
+          const created: StatusMessagePayload = {
+            chargePointId:
+              payload.chargePointId ??
+              params.chargePointIdentity ??
+              "unknown-chargepoint",
+            connectorId: resolvedConnectorId,
+            status: payload.status,
+            isOnline: payload.isOnline ?? true,
+            message: payload.message,
+          };
+
+          return created;
+        });
+        appendLog("info", `หัวชาร์จอยู่ในสถานะ ${payload.status ?? "-"}`);
         break;
       }
       case "charging_data": {
@@ -298,14 +327,15 @@ export default function ChargeSessionScreen() {
         }
 
         if (payload.status) {
+          const statusValue = payload.status;
           setStatus((prev) =>
             prev
-              ? { ...prev, status: payload.status }
+              ? { ...prev, status: statusValue }
               : {
                   chargePointId:
                     params.chargePointIdentity ?? "unknown-chargepoint",
                   connectorId: payload.connectorId,
-                  status: payload.status,
+                  status: statusValue,
                   isOnline: true,
                 },
           );
