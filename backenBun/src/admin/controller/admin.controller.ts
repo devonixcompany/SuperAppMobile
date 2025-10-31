@@ -671,4 +671,333 @@ Generate a new admin access token using a valid refresh token.
           }
         }
       }
+    )
+
+    // Charge Point Management Endpoints
+    .post(
+      '/chargepoints',
+      async ({ body, set }) => {
+        try {
+          const chargePoint = await adminService.createChargePoint(body);
+          set.status = 201;
+          return {
+            success: true,
+            message: 'สร้างจุดชาร์จสำเร็จ',
+            data: chargePoint
+          };
+        } catch (error: any) {
+          console.error('Error creating chargepoint:', error);
+          set.status = 400;
+          return {
+            success: false,
+            message: error.message || 'เกิดข้อผิดพลาดในการสร้างจุดชาร์จ'
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['Admin - Charge Point Management'],
+          summary: '➕ Create Charge Point',
+          description: `
+Create a new charge point in the system.
+
+**Features:**
+- Automatic station creation if not exists
+- Connector management
+- Data validation and normalization
+- Comprehensive error handling
+
+**Admin Permissions Required:**
+- SUPERADMIN or STAFF role
+          `,
+          requestBody: {
+            description: 'Charge point creation data',
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    chargepointname: { type: 'string', example: 'CP-001' },
+                    location: { type: 'string', example: 'Central Plaza' },
+                    latitude: { type: 'number', example: 13.7563 },
+                    longitude: { type: 'number', example: 100.5018 },
+                    brand: { type: 'string', example: 'Tesla' },
+                    serialNumber: { type: 'string', example: 'SN123456' },
+                    powerRating: { type: 'number', example: 22 },
+                    connectorCount: { type: 'number', example: 2 },
+                    protocol: { type: 'string', example: 'OCPP16' },
+                    chargePointIdentity: { type: 'string', example: 'CP001' },
+                    isPublic: { type: 'boolean', example: true },
+                    stationId: { type: 'string', example: 'station-uuid' },
+                    connectors: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          connectorId: { type: 'number', example: 1 },
+                          type: { type: 'string', example: 'Type2' },
+                          maxPower: { type: 'number', example: 22 },
+                          maxCurrent: { type: 'number', example: 32 }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            201: {
+              description: 'Charge point created successfully',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      message: { type: 'string', example: 'สร้างจุดชาร์จสำเร็จ' },
+                      data: {
+                        type: 'object',
+                        description: 'Created charge point with relations'
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            400: {
+              description: 'Validation error or creation failed',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: false },
+                      message: { type: 'string', example: 'เกิดข้อผิดพลาดในการสร้างจุดชาร์จ' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        body: t.Any()
+      }
+    )
+
+    .put(
+      '/chargepoints/:id',
+      async ({ params, body, set }) => {
+        try {
+          const chargePoint = await adminService.updateChargePoint(params.id, body);
+          return {
+            success: true,
+            message: 'อัปเดตจุดชาร์จสำเร็จ',
+            data: chargePoint
+          };
+        } catch (error: any) {
+          console.error('Error updating chargepoint:', error);
+          set.status = 400;
+          return {
+            success: false,
+            message: error.message || 'เกิดข้อผิดพลาดในการอัปเดตจุดชาร์จ'
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['Admin - Charge Point Management'],
+          summary: '✏️ Update Charge Point',
+          description: `
+Update an existing charge point by ID.
+
+**Features:**
+- Partial updates supported
+- Data validation and normalization
+- Comprehensive error handling
+
+**Admin Permissions Required:**
+- SUPERADMIN or STAFF role
+          `,
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              description: 'Charge point ID',
+              schema: { type: 'string' }
+            }
+          ],
+          requestBody: {
+            description: 'Charge point update data',
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    chargepointname: { type: 'string', example: 'CP-001-Updated' },
+                    location: { type: 'string', example: 'Updated Location' },
+                    latitude: { type: 'number', example: 13.7563 },
+                    longitude: { type: 'number', example: 100.5018 },
+                    brand: { type: 'string', example: 'Tesla' },
+                    powerRating: { type: 'number', example: 22 },
+                    isPublic: { type: 'boolean', example: false }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Charge point updated successfully',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      message: { type: 'string', example: 'อัปเดตจุดชาร์จสำเร็จ' },
+                      data: {
+                        type: 'object',
+                        description: 'Updated charge point with relations'
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            400: {
+              description: 'Validation error or update failed',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: false },
+                      message: { type: 'string', example: 'เกิดข้อผิดพลาดในการอัปเดตจุดชาร์จ' }
+                    }
+                  }
+                }
+              }
+            },
+            404: {
+              description: 'Charge point not found',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: false },
+                      message: { type: 'string', example: 'ไม่พบจุดชาร์จที่ระบุ' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        params: t.Object({
+          id: t.String()
+        }),
+        body: t.Any()
+      }
+    )
+
+    .delete(
+      '/chargepoints/:id',
+      async ({ params, set }) => {
+        try {
+          await adminService.deleteChargePoint(params.id);
+          return {
+            success: true,
+            message: 'ลบจุดชาร์จสำเร็จ'
+          };
+        } catch (error: any) {
+          console.error('Error deleting chargepoint:', error);
+          set.status = 400;
+          return {
+            success: false,
+            message: error.message || 'เกิดข้อผิดพลาดในการลบจุดชาร์จ'
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['Admin - Charge Point Management'],
+          summary: '🗑️ Delete Charge Point',
+          description: `
+Delete a charge point by ID.
+
+**Features:**
+- Permanent deletion
+- Cascade deletion of related connectors
+- Comprehensive error handling
+
+**Admin Permissions Required:**
+- SUPERADMIN or STAFF role
+
+**Warning:**
+- This action cannot be undone
+- All related data will be permanently removed
+          `,
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              description: 'Charge point ID to delete',
+              schema: { type: 'string' }
+            }
+          ],
+          responses: {
+            200: {
+              description: 'Charge point deleted successfully',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      message: { type: 'string', example: 'ลบจุดชาร์จสำเร็จ' }
+                    }
+                  }
+                }
+              }
+            },
+            400: {
+              description: 'Deletion failed',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: false },
+                      message: { type: 'string', example: 'เกิดข้อผิดพลาดในการลบจุดชาร์จ' }
+                    }
+                  }
+                }
+              }
+            },
+            404: {
+              description: 'Charge point not found',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: false },
+                      message: { type: 'string', example: 'ไม่พบจุดชาร์จที่ระบุ' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        params: t.Object({
+          id: t.String()
+        })
+      }
     );

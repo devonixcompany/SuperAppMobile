@@ -2,6 +2,7 @@ import { JWTService } from "../../lib/jwt";
 import { logAuthEvent, logger } from "../../lib/logger";
 import { hashPassword, verifyPassword } from "../../lib/password";
 import { prisma } from "../../lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export interface RefreshTokenResponse {
   success: boolean;
@@ -353,4 +354,345 @@ export class AdminService {
       console.log(`🧹 [ADMIN] Cleaned up ${deletedTokens.count} expired/revoked refresh tokens`);
     }
   }
+
+  // Charge Point Management Methods
+  async createChargePoint(data: any) {
+    try {
+      const {
+        station: stationPayload,
+        stationId: stationIdRaw,
+        stationName,
+        stationname: stationNameLower,
+        connectors,
+        ...restBody
+      } = data;
+
+      const chargePointData = this.pickChargePointData(restBody) as Prisma.ChargePointUncheckedCreateInput;
+      const connectorPayload = this.buildConnectorPayload(connectors);
+      
+      if (connectorPayload.length > 0 && chargePointData.connectorCount === undefined) {
+        chargePointData.connectorCount = connectorPayload.length;
+      }
+
+      let resolvedStationId: string | undefined =
+        typeof stationIdRaw === "string" && stationIdRaw.trim()
+          ? stationIdRaw.trim()
+          : undefined;
+
+      if (resolvedStationId) {
+        const stationExists = await prisma.station.findUnique({
+          where: { id: resolvedStationId },
+          select: { id: true },
+        });
+        if (!stationExists) {
+          resolvedStationId = undefined;
+        }
+      }
+
+      const stationNameCandidates = new Set<string>();
+
+      if (typeof stationPayload === "object" && stationPayload !== null) {
+        const stationObj = stationPayload as Record<string, unknown>;
+        const idCandidate = stationObj.id;
+        if (
+          !resolvedStationId &&
+          typeof idCandidate === "string" &&
+          idCandidate.trim()
+        ) {
+          const existingById = await prisma.station.findUnique({
+            where: { id: idCandidate.trim() },
+            select: { id: true },
+          });
+          if (existingById) {
+            resolvedStationId = existingById.id;
+          }
+        }
+
+        const rawNameCandidates = [
+          stationObj["name"],
+          stationObj["stationName"],
+          stationObj["stationname"],
+          stationObj["title"],
+        ];
+        for (const rawName of rawNameCandidates) {
+          if (typeof rawName === "string" && rawName.trim()) {
+            stationNameCandidates.add(rawName.trim());
+          }
+        }
+      }
+
+      if (typeof stationName === "string" && stationName.trim()) {
+        stationNameCandidates.add(stationName.trim());
+      }
+
+      if (typeof stationNameLower === "string" && stationNameLower.trim()) {
+        stationNameCandidates.add(stationNameLower.trim());
+      }
+
+      if (!resolvedStationId) {
+        let stationRecord: { id: string } | null = null;
+
+        for (const candidate of stationNameCandidates) {
+          stationRecord = await prisma.station.findUnique({
+            where: { stationname: candidate },
+            select: { id: true },
+          });
+          if (stationRecord) break;
+        }
+
+        if (!stationRecord) {
+          const [firstCandidate] = Array.from(stationNameCandidates);
+          const nameForCreation =
+            firstCandidate ??
+            (typeof chargePointData.chargepointname === "string" &&
+            chargePointData.chargepointname.trim()
+              ? `${(chargePointData.chargepointname as string).trim()} Station`
+              : `Station-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+
+          stationRecord = await prisma.station.create({
+            data: { stationname: nameForCreation },
+            select: { id: true },
+          });
+        }
+
+        resolvedStationId = stationRecord.id;
+      }
+
+      const chargePoint = await prisma.chargePoint.create({
+        data: {
+          ...chargePointData,
+          ...(resolvedStationId ? { stationId: resolvedStationId } : {}),
+          connectors: connectorPayload.length
+            ? {
+                create: connectorPayload,
+              }
+            : undefined,
+        },
+        include: {
+          station: {
+            select: {
+              id: true,
+              stationname: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+          connectors: {
+            orderBy: { connectorId: "asc" },
+          },
+          owner: {
+            select: {
+              id: true,
+              email: true,
+              fullName: true,
+            },
+          },
+        },
+      });
+
+      return this.normalizeChargePoint(chargePoint);
+    } catch (error: any) {
+      console.error("Error creating chargepoint:", error);
+      throw error;
+    }
+  }
+
+  async updateChargePoint(id: string, data: any) {
+    try {
+      const chargePointData = this.pickChargePointData(data) as Prisma.ChargePointUncheckedUpdateInput;
+
+      if (Object.keys(chargePointData).length === 0) {
+        throw new Error("No updatable fields provided");
+      }
+
+      const chargePoint = await prisma.chargePoint.update({
+        where: { id },
+        data: chargePointData,
+        include: {
+          station: {
+            select: {
+              id: true,
+              stationname: true,
+            },
+          },
+          connectors: {
+            select: {
+              id: true,
+              connectorId: true,
+              type: true,
+              status: true,
+              maxPower: true,
+              maxCurrent: true,
+            },
+            orderBy: { connectorId: "asc" },
+          },
+        },
+      });
+
+      return this.normalizeChargePoint(chargePoint);
+    } catch (error: any) {
+      console.error("Error updating chargepoint:", error);
+      throw error;
+    }
+  }
+
+  async deleteChargePoint(id: string) {
+    try {
+      await prisma.chargePoint.delete({ where: { id } });
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error deleting chargepoint:", error);
+      throw error;
+    }
+  }
+
+  // Utility methods
+  private toNullableNumber = (value: unknown): number | null =>
+    value === null || value === undefined ? null : Number(value);
+
+  private normalizeChargePoint = <
+    T extends { latitude?: unknown; longitude?: unknown; connectors?: any[] },
+  >(
+    chargePoint: T,
+  ) => {
+    const normalized: any = {
+      ...chargePoint,
+      latitude: this.toNullableNumber(chargePoint.latitude),
+      longitude: this.toNullableNumber(chargePoint.longitude),
+    };
+
+    if (Array.isArray(chargePoint.connectors)) {
+      normalized.connectors = chargePoint.connectors.map((connector: any) => ({
+        ...connector,
+        maxPower: this.toNullableNumber(connector.maxPower),
+        maxCurrent: this.toNullableNumber(connector.maxCurrent),
+      }));
+    }
+
+    return normalized;
+  };
+
+  private ALLOWED_CHARGE_POINT_FIELDS = [
+    "chargepointname",
+    "location",
+    "latitude",
+    "longitude",
+    "openingHours",
+    "is24Hours",
+    "brand",
+    "serialNumber",
+    "powerRating",
+    "powerSystem",
+    "connectorCount",
+    "protocol",
+    "csmsUrl",
+    "chargePointIdentity",
+    "chargepointstatus",
+    "maxPower",
+    "lastSeen",
+    "heartbeatIntervalSec",
+    "vendor",
+    "model",
+    "firmwareVersion",
+    "ocppProtocolRaw",
+    "ocppSessionId",
+    "isWhitelisted",
+    "ownerId",
+    "ownershipType",
+    "isPublic",
+    "onPeakRate",
+    "onPeakStartTime",
+    "onPeakEndTime",
+    "offPeakRate",
+    "offPeakStartTime",
+    "offPeakEndTime",
+    "urlwebSocket",
+    "stationId",
+    "powerSystem",
+  ] as const satisfies readonly (keyof Prisma.ChargePointUncheckedCreateInput)[];
+
+  private NUMERIC_FIELDS = [
+    "latitude",
+    "longitude",
+    "powerRating",
+    "powerSystem",
+    "connectorCount",
+    "maxPower",
+    "onPeakRate",
+    "offPeakRate",
+    "heartbeatIntervalSec",
+  ] as const;
+
+  private numericFieldSet = new Set(this.NUMERIC_FIELDS);
+
+  private transformValue = <K extends keyof Prisma.ChargePointUncheckedCreateInput>(
+    field: K,
+    value: unknown,
+  ): Prisma.ChargePointUncheckedCreateInput[K] => {
+    if (this.numericFieldSet.has(field as any)) {
+      return (
+        value === null || value === undefined ? null : Number(value)
+      ) as Prisma.ChargePointUncheckedCreateInput[K];
+    }
+    return value as Prisma.ChargePointUncheckedCreateInput[K];
+  };
+
+  private pickChargePointData = (source: Record<string, unknown>) => {
+    const data: Partial<Record<keyof Prisma.ChargePointUncheckedCreateInput, any>> = {};
+    for (const field of this.ALLOWED_CHARGE_POINT_FIELDS) {
+      const value = source[field as string];
+      if (value !== undefined) {
+        data[field] = this.transformValue(field, value);
+      }
+    }
+    return data as Partial<Prisma.ChargePointUncheckedCreateInput>;
+  };
+
+  private buildConnectorPayload = (
+    connectors: unknown,
+  ): Array<Prisma.ConnectorCreateWithoutChargePointInput> => {
+    if (!Array.isArray(connectors)) return [];
+
+    const payload: Array<Prisma.ConnectorCreateWithoutChargePointInput> = [];
+
+    for (const entry of connectors) {
+      if (!entry || typeof entry !== "object") continue;
+      const connector = entry as Record<string, unknown>;
+
+      if (connector.connectorId === undefined) {
+        continue;
+      }
+
+      const record: Prisma.ConnectorCreateWithoutChargePointInput = {
+        connectorId: Number(connector.connectorId),
+      };
+
+      if (connector.type !== undefined) {
+        record.type =
+          connector.type as Prisma.ConnectorCreateWithoutChargePointInput["type"];
+      }
+      if (connector.status !== undefined) {
+        record.status =
+          connector.status as Prisma.ConnectorCreateWithoutChargePointInput["status"];
+      }
+      if (connector.maxPower !== undefined) {
+        record.maxPower =
+          connector.maxPower === null ? null : Number(connector.maxPower);
+      }
+      if (connector.maxCurrent !== undefined) {
+        record.maxCurrent =
+          connector.maxCurrent === null ? null : Number(connector.maxCurrent);
+      }
+      if (connector.typeDescription !== undefined) {
+        record.typeDescription = connector.typeDescription as
+          | string
+          | null
+          | undefined;
+      }
+
+      payload.push(record);
+    }
+
+    return payload;
+  };
 }

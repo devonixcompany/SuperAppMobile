@@ -237,6 +237,7 @@ export const app = new Elysia()
   .use(serviceContainer.getAuthController())
   .use(serviceContainer.getUserController())
   .use(serviceContainer.getChargePointController())
+  .use(serviceContainer.getAdminController())
   .use(serviceContainer.getTransactionController())
   .guard(
     ({ user }: any) => !!user,

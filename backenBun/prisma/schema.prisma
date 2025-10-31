@@ -103,7 +103,6 @@ model ChargePoint {
   updatedAt        DateTime          @updatedAt
 
   owner            User?             @relation("UserChargePoints", fields: [ownerId], references: [id])
-  sessions         ChargingSession[] // เซสชันการชาร์จทั้งหมด
   connectors       Connector[]       // หัวชาร์จทั้งหมดในจุดนี้
   transactions     Transaction[]     // ธุรกรรมทั้งหมดที่เกิดขึ้นในจุดนี้
   urlwebSocket     String?           // URL ของ WebSocket สำหรับเชื่อมต่อกับเซิร์ฟเวอร์ OCPP
@@ -123,7 +122,6 @@ model Connector {
   connectorstatus   ConnectorStatus   @default(AVAILABLE)
   maxPower          Float?
   maxCurrent        Float?
-  sessions          ChargingSession[]
   chargePoint       ChargePoint       @relation(fields: [chargePointId], references: [id], onDelete: Cascade)
   transactions      Transaction[]
 
@@ -181,32 +179,6 @@ model Notification {
   @@map("notifications")
 }
 
-model charging_sessions {
-  id            String        @id
-  sessionId     String        @unique
-  chargePointId String
-  connectorId   String
-  userId        String?
-  status        SessionStatus @default(ACTIVE)
-  startTime     DateTime      @default(now())
-  endTime       DateTime?
-  lastActivity  DateTime      @default(now())
-  charge_points ChargePoint   @relation(fields: [chargePointId], references: [id])
-  connectors    Connector     @relation(fields: [connectorId], references: [id])
-}
-
-
-model reservations {
-  id            String            @id
-  userId        String
-  chargePointId String
-  connectorId   String?
-  startTime     DateTime
-  endTime       DateTime
-  status        ReservationStatus @default(ACTIVE)
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime
-}
 
 enum UserStatus {
   ACTIVE

@@ -1734,4 +1734,141 @@ export const chargePointController = (
           ]
         }
       }
+    )
+
+    // New endpoints for viewing charge points (moved from index.ts)
+    .get(
+      '/list',
+      async ({ set }) => {
+        try {
+          const chargePoints = await chargePointService.findAllChargePoints();
+          
+          set.status = 200;
+          return {
+            success: true,
+            data: chargePoints
+          };
+        } catch (error) {
+          console.error('Error fetching charge points:', error);
+          set.status = 500;
+          return {
+            success: false,
+            message: 'เกิดข้อผิดพลาดในการดึงข้อมูลเครื่องชาร์จ'
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['Charge Points'],
+          summary: '📋 Get All Charge Points (Legacy API)',
+          description: 'ดึงข้อมูลเครื่องชาร์จทั้งหมด (API เดิมจาก index.ts)',
+          responses: {
+            200: {
+              description: 'ดึงข้อมูลเครื่องชาร์จสำเร็จ',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'string' },
+                            name: { type: 'string' },
+                            location: { type: 'string' },
+                            status: { type: 'string' },
+                            latitude: { type: 'number' },
+                            longitude: { type: 'number' }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    )
+
+    .get(
+      '/detail/:id',
+      async ({ params, set }) => {
+        try {
+          const chargePoint = await chargePointService.findByChargePointIdentity(params.id);
+          
+          if (!chargePoint) {
+            set.status = 404;
+            return {
+              success: false,
+              message: 'ไม่พบเครื่องชาร์จที่ระบุ'
+            };
+          }
+
+          set.status = 200;
+          return {
+            success: true,
+            data: chargePoint
+          };
+        } catch (error) {
+          console.error('Error fetching charge point:', error);
+          set.status = 500;
+          return {
+            success: false,
+            message: 'เกิดข้อผิดพลาดในการดึงข้อมูลเครื่องชาร์จ'
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['Charge Points'],
+          summary: '🔍 Get Charge Point by ID (Legacy API)',
+          description: 'ดึงข้อมูลเครื่องชาร์จตาม ID (API เดิมจาก index.ts)',
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              description: 'ID ของเครื่องชาร์จ',
+              schema: { type: 'string', example: 'CP_BKK_001' }
+            }
+          ],
+          responses: {
+            200: {
+              description: 'ดึงข้อมูลเครื่องชาร์จสำเร็จ',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string' },
+                          name: { type: 'string' },
+                          location: { type: 'string' },
+                          status: { type: 'string' },
+                          latitude: { type: 'number' },
+                          longitude: { type: 'number' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            404: {
+              description: 'ไม่พบเครื่องชาร์จ'
+            }
+          }
+        },
+        params: t.Object({
+          id: t.String()
+        })
+      }
     );
