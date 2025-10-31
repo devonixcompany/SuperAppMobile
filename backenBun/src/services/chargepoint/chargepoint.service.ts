@@ -69,7 +69,6 @@ export class ChargePointService {
         ownerId: true,
         ownershipType: true,
         isPublic: true,
-        defaultPricingTierId: true,
         urlwebSocket: true
       }
     });
@@ -152,12 +151,14 @@ export class ChargePointService {
     latitude?: number;
     longitude?: number;
     description?: string;
+    connectorCount?: number;
   }) {
     const protocol = this.convertProtocolToEnum(data.protocol);
     const chargePointId = data.id || randomUUID();
     const urlwebSocket = this.generateWebSocketUrl(data.chargePointIdentity, protocol);
+    const connectorCount = data.connectorCount || 2; // Default to 2 connectors for whitelist
 
-    return await this.prisma.chargePoint.create({
+    const newChargePoint = await this.prisma.chargePoint.create({
       data: {
         id: chargePointId,
         name: data.name,
@@ -169,8 +170,30 @@ export class ChargePointService {
         urlwebSocket,
         brand: data.brand,
         powerRating: data.powerRating,
+        connectorCount,
         ownershipType: OwnershipType.PRIVATE,
         isWhitelisted: true
+      }
+    });
+
+    // Create connectors for the charge point
+    await this.createConnectorsForChargePoint(
+      data.chargePointIdentity,
+      connectorCount
+    );
+
+    // Fetch the charge point with connectors
+    return await this.prisma.chargePoint.findUnique({
+      where: { id: chargePointId },
+      include: {
+        owner: true,
+        connectors: true,
+        _count: {
+          select: {
+            transactions: true,
+            sessions: true
+          }
+        }
       }
     });
   }
@@ -268,7 +291,6 @@ export class ChargePointService {
         data,
         include: {
           connectors: true,
-          pricingTiers: true,
           owner: true
         }
       });
@@ -707,8 +729,36 @@ export class ChargePointService {
    */
   async createChargePoint(data: any) {
     try {
+      // Work on a shallow copy so we can safely normalize incoming values
+      const sanitizedData: any = { ...data };
+
+      if (sanitizedData.ownerId !== undefined) {
+        const normalizedOwnerId =
+          typeof sanitizedData.ownerId === 'string'
+            ? sanitizedData.ownerId.trim()
+            : sanitizedData.ownerId;
+
+        if (!normalizedOwnerId) {
+          sanitizedData.ownerId = null;
+        } else {
+          const existingOwner = await this.prisma.user.findUnique({
+            where: { id: normalizedOwnerId }
+          });
+
+          if (!existingOwner) {
+            throw new Error(`Owner with id '${normalizedOwnerId}' was not found`);
+          }
+
+          sanitizedData.ownerId = normalizedOwnerId;
+        }
+      }
+
+      // Extract connectorCount from data if provided, default to 1
+      const connectorCount = sanitizedData.connectorCount || 1;
+
+      // Create the charge point first
       const newChargePoint = await this.prisma.chargePoint.create({
-        data,
+        data: sanitizedData,
         include: {
           owner: true,
           connectors: true,
@@ -721,7 +771,30 @@ export class ChargePointService {
         }
       });
 
-      return newChargePoint;
+      // Create connectors for the charge point
+      if (connectorCount > 0) {
+        await this.createConnectorsForChargePoint(
+          newChargePoint.chargePointIdentity,
+          connectorCount
+        );
+      }
+
+      // Fetch the charge point again with connectors included
+      const chargePointWithConnectors = await this.prisma.chargePoint.findUnique({
+        where: { id: newChargePoint.id },
+        include: {
+          owner: true,
+          connectors: true,
+          _count: {
+            select: {
+              transactions: true,
+              sessions: true
+            }
+          }
+        }
+      });
+
+      return chargePointWithConnectors;
     } catch (error: any) {
       console.error('Error creating charge point:', error);
       throw new Error(`Failed to create charge point: ${error.message}`);
@@ -792,6 +865,11 @@ export class ChargePointService {
         });
       }
 
+      // Ensure chargePoint is not null at this point
+      if (!chargePoint) {
+        throw new Error(`Failed to create or find charge point with identity ${chargePointIdentity}`);
+      }
+
       const detailMap = new Map<number, { type?: string; maxCurrent?: number }>();
 
       for (const detail of connectorDetails || []) {
@@ -849,7 +927,7 @@ export class ChargePointService {
           ? detail.type.trim()
           : undefined;
         const createData: any = {
-          chargePointId: chargePoint.id,
+          chargePointId: chargePoint!.id,
           connectorId: i,
           type: this.normalizeConnectorType(rawType),
           typeDescription: rawType,
@@ -876,7 +954,7 @@ export class ChargePointService {
         const connector = await this.prisma.connector.upsert({
           where: {
             chargePointId_connectorId: {
-              chargePointId: chargePoint.id,
+              chargePointId: chargePoint!.id,
               connectorId: i
             }
           },
@@ -887,9 +965,9 @@ export class ChargePointService {
         connectors.push(connector);
       }
 
-      if (chargePoint.connectorCount !== totalConnectorSlots) {
+      if (chargePoint!.connectorCount !== totalConnectorSlots) {
         await this.prisma.chargePoint.update({
-          where: { id: chargePoint.id },
+          where: { id: chargePoint!.id },
           data: { connectorCount: totalConnectorSlots }
         });
       }
@@ -927,12 +1005,7 @@ export class ChargePointService {
         throw new Error(`Connector ${connectorId} not found for ChargePoint '${chargePointIdentity}'`);
       }
 
-      let pricingTier = null;
-      if (chargePoint.defaultPricingTierId) {
-        pricingTier = await this.prisma.pricingTier.findUnique({
-          where: { id: chargePoint.defaultPricingTierId }
-        });
-      }
+      // Note: pricingTier functionality removed as it doesn't exist in schema
 
       // สร้าง WebSocket URL ตามรูปแบบที่กำหนด
       const websocketUrl = `ws://localhost:3000/user-cp/${chargePointIdentity}/${connectorId}`;
@@ -949,7 +1022,6 @@ export class ChargePointService {
           protocol: chargePoint.protocol,
           powerRating: chargePoint.powerRating,
           brand: chargePoint.brand,
-          defaultPricingTierId: chargePoint.defaultPricingTierId,
           status: chargePoint.status
         },
         connector: {
@@ -960,17 +1032,6 @@ export class ChargePointService {
           maxCurrent: connector.maxCurrent,
           maxPower: connector.maxPower
         },
-        pricingTier: pricingTier
-          ? {
-              id: pricingTier.id,
-              name: pricingTier.name,
-              baseRate: pricingTier.baseRate,
-              peakRate: pricingTier.peakRate,
-              offPeakRate: pricingTier.offPeakRate,
-              currency: pricingTier.currency,
-              tierType: pricingTier.tierType
-            }
-          : null,
         websocketUrl
       };
     } catch (error: any) {

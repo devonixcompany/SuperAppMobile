@@ -1,4 +1,4 @@
-import { PrismaClient, OCPPVersion, ConnectorType, UserType } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
@@ -60,16 +60,6 @@ async function main() {
       connectorCount: 2,
       protocol: 'OCPP16',
       chargePointIdentity: 'CP001',
-      connector1: 'TYPE_2',
-      serialNumber1: 'CONN-001-A',
-      connectorId1: 1,
-      powerRating1: 22.0,
-      connector2: 'TYPE_2',
-      serialNumber2: 'CONN-001-B',
-      connectorId2: 2,
-      powerRating2: 22.0,
-      powerRating3: 0,
-      powerRating4: 0,
       ownerId: user.id,
       ownershipType: 'PRIVATE',
       isPublic: true
@@ -94,7 +84,7 @@ async function main() {
 main()
   .catch((e) => {
     console.error(e)
-    process.exit(1)
+    throw new Error('Seed failed')
   })
   .finally(async () => {
     await prisma.$disconnect()

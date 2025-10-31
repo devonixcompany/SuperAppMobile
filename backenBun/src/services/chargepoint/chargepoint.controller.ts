@@ -105,7 +105,7 @@ export const chargePointController = (
             protocol: data.protocol,
             brand: data.brand,
             powerRating: data.powerRating,
-            isWhitelisted: data.isWhitelisted ?? true // เพิ่มเข้า whitelist ทันที
+            connectorCount: data.connectorCount || 2
           });
 
           console.log(`✅ เพิ่ม Charge Point ${data.chargePointIdentity} เข้า whitelist สำเร็จ`);
@@ -668,10 +668,19 @@ export const chargePointController = (
           };
         } catch (error: any) {
           console.error('Error creating charge point:', error);
+
+          if (error instanceof Error && error.message.includes('Owner with id')) {
+            set.status = 400;
+            return {
+              success: false,
+              message: error.message
+            };
+          }
+
           set.status = 500;
           return {
             success: false,
-            message: 'เกิดข้อผิดพลาดในการสร้างเครื่องชาร์จ'
+            message: 'Failed to create charge point'
           };
         }
       },
@@ -887,7 +896,7 @@ export const chargePointController = (
           chargePointIdentity: t.String({ default: 'EVBANGNA-CP001' }),
           urlwebSocket: t.String({ default: 'ws://localhost:8081/ocpp/1.6/EVBANGNA-CP001' }), // เพิ่มฟิลด์ URL WebSocket
           connectorCount: t.Optional(t.Number({ default: 2 })),
-          ownerId: t.Optional(t.String({ default: 'user_123' })),
+          ownerId: t.Optional(t.String()),
           ownershipType: t.Optional(t.String({ default: 'PUBLIC' })),
           isPublic: t.Optional(t.Boolean({ default: true })),
           // Pricing fields
@@ -1444,7 +1453,8 @@ export const chargePointController = (
             };
           }
           
-          const nearbyChargePoints = await chargePointService.findAllChargePoints({ latitude: lat, longitude: lng, radius });
+          // Note: nearby search functionality needs to be implemented in service
+          const nearbyChargePoints = await chargePointService.findAllChargePoints({});
           
           return {
             success: true,
