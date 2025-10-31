@@ -1,5 +1,4 @@
 // Legacy exports (to be deprecated)
-export { adminController } from './controller/admin.controller';
 export { adminRoutes } from './routes/admin.routes';
 export { AdminService, type AdminLoginData, type AdminRegistrationData } from './service/admin.service';
 
@@ -9,7 +8,8 @@ export { AdminAuthService } from './auth/auth.service';
 export { adminChargePointController } from './chargepoint/chargepoint.controller';
 export { AdminChargePointService } from './chargepoint/chargepoint.service';
 
-// Import services for the container
+// Import services and controllers
+import { JWTService } from '../lib/jwt';
 import { AdminAuthService } from './auth/auth.service';
 import { AdminChargePointService } from './chargepoint/chargepoint.service';
 import { adminAuthController } from './auth/auth.controller';
@@ -23,7 +23,8 @@ export class AdminServiceContainer {
   public readonly adminChargePointService: AdminChargePointService;
 
   private constructor() {
-    this.adminAuthService = new AdminAuthService();
+    const jwtService = new JWTService(process.env.JWT_SECRET || 'default-secret');
+    this.adminAuthService = new AdminAuthService(jwtService);
     this.adminChargePointService = new AdminChargePointService();
   }
 

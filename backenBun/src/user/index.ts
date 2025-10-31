@@ -1,4 +1,3 @@
-import { adminController } from '../admin/controller/admin.controller';
 import { AdminService } from '../admin/service/admin.service';
 import { JWTService } from '../lib/jwt';
 import { authController } from './auth/auth.controller';
@@ -57,10 +56,6 @@ export class ServiceContainer {
 
   public getChargePointController() {
     return chargePointController(this.chargePointService, this.validationService);
-  }
-
-  public getAdminController() {
-    return adminController(this.adminService);
   }
 
   public getTransactionController() {
