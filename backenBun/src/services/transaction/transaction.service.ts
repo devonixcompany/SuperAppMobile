@@ -190,12 +190,18 @@ export class TransactionService {
 
     const startTime = timestamp ? new Date(timestamp) : new Date();
 
+    const scale = this.inferScaleFromRawValue(meterStart);
+    const normalizedStart = this.normalizeMeterReading(
+      meterStart ?? transaction.startMeterValue ?? null,
+      scale
+    );
+
     return await this.prisma.transaction.update({
       where: { id: transaction.id },
       data: {
         ocppTransactionId: String(ocppTransactionId),
         startTime,
-        startMeterValue: meterStart ?? transaction.startMeterValue ?? 0,
+        startMeterValue: normalizedStart ?? transaction.startMeterValue ?? 0,
         status: TransactionStatus.ACTIVE,
       },
     });
@@ -228,15 +234,37 @@ export class TransactionService {
 
     const stopTime = new Date(timestamp);
 
-    const totalEnergy =
-      typeof meterStop === 'number' && Number.isFinite(meterStop)
-        ? this.calculateEnergyDelta(transaction.startMeterValue ?? 0, meterStop)
-        : undefined;
-
     const meterValueRecords = this.extractMeterValueRecords(
       transaction.id,
       transactionData
     );
+
+    const energyExtremes = this.extractEnergyExtremes(transactionData);
+
+    const scaleFromStop = this.determineScale(meterStop, energyExtremes.end);
+    const scaleFromStart = this.determineScale(transaction.startMeterValue, energyExtremes.start);
+    const scale =
+      scaleFromStop ??
+      scaleFromStart ??
+      this.inferScaleFromRawValue(meterStop) ??
+      this.inferScaleFromRawValue(transaction.startMeterValue);
+
+    const normalizedStart = energyExtremes.start ?? this.normalizeMeterReading(transaction.startMeterValue, scale);
+    const normalizedEnd = energyExtremes.end ?? this.normalizeMeterReading(meterStop, scale);
+
+    let totalEnergy: number | null = null;
+    if (normalizedStart != null && normalizedEnd != null) {
+      totalEnergy = Math.max(normalizedEnd - normalizedStart, 0);
+    } else if (
+      typeof meterStop === 'number' &&
+      typeof transaction.startMeterValue === 'number'
+    ) {
+      const rawDelta = meterStop - transaction.startMeterValue;
+      const normalizedDelta = this.normalizeMeterReading(rawDelta, scale);
+      if (normalizedDelta != null) {
+        totalEnergy = Math.max(normalizedDelta, 0);
+      }
+    }
 
     const updatedTransaction = await this.prisma.$transaction(async (tx) => {
       if (meterValueRecords.length > 0) {
@@ -253,7 +281,8 @@ export class TransactionService {
         where: { id: transaction!.id },
         data: {
           endTime: stopTime,
-          endMeterValue: meterStop,
+          startMeterValue: normalizedStart ?? transaction.startMeterValue,
+          endMeterValue: normalizedEnd ?? meterStop,
           totalEnergy: totalEnergy ?? transaction.totalEnergy,
           stopReason: reason ?? transaction.stopReason,
           status: TransactionStatus.COMPLETED,
@@ -262,15 +291,6 @@ export class TransactionService {
     });
 
     return updatedTransaction;
-  }
-
-  private calculateEnergyDelta(startMeter: number, endMeter: number): number | undefined {
-    if (!Number.isFinite(startMeter) || !Number.isFinite(endMeter)) {
-      return undefined;
-    }
-
-    const delta = endMeter - startMeter;
-    return delta >= 0 ? delta : undefined;
   }
 
   private extractMeterValueRecords(
@@ -345,6 +365,214 @@ export class TransactionService {
     }
 
     return records;
+  }
+
+  private extractEnergyExtremes(transactionData?: any[]): { start: number | null; end: number | null } {
+    if (!Array.isArray(transactionData) || transactionData.length === 0) {
+      return { start: null, end: null };
+    }
+
+    let startValue: number | null = null;
+    let endValue: number | null = null;
+    const encounteredValues: number[] = [];
+
+    for (const entry of transactionData) {
+      if (!entry || !Array.isArray(entry.sampledValue)) {
+        continue;
+      }
+
+      const entryContext = typeof entry.context === 'string' ? entry.context.toLowerCase() : '';
+
+      for (const sample of entry.sampledValue) {
+        if (!sample) {
+          continue;
+        }
+
+        const measurand = typeof sample.measurand === 'string' ? sample.measurand.toLowerCase() : '';
+        if (!measurand.includes('energy.active.import')) {
+          continue;
+        }
+
+        const numericValue = Number(sample.value);
+        if (!Number.isFinite(numericValue)) {
+          continue;
+        }
+
+        const sampleContext = typeof sample.context === 'string' ? sample.context.toLowerCase() : entryContext;
+
+        if (sampleContext === 'transaction.begin') {
+          startValue = numericValue;
+        }
+
+        if (sampleContext === 'transaction.end') {
+          endValue = numericValue;
+        }
+
+        encounteredValues.push(numericValue);
+      }
+    }
+
+    if (startValue == null && encounteredValues.length > 0) {
+      startValue = encounteredValues[0];
+    }
+
+    if (endValue == null && encounteredValues.length > 0) {
+      endValue = encounteredValues[encounteredValues.length - 1];
+    }
+
+    return { start: startValue, end: endValue };
+  }
+
+  private determineScale(rawValue?: number | null, derivedValue?: number | null): number | null {
+    if (
+      rawValue === undefined ||
+      rawValue === null ||
+      derivedValue === undefined ||
+      derivedValue === null
+    ) {
+      return null;
+    }
+
+    if (!Number.isFinite(rawValue) || !Number.isFinite(derivedValue) || derivedValue === 0) {
+      return null;
+    }
+
+    const ratio = rawValue / derivedValue;
+    if (!Number.isFinite(ratio) || ratio <= 0) {
+      return null;
+    }
+
+    const candidates: Array<{ value: number; tolerance: number }> = [
+      { value: 1, tolerance: 0.01 },
+      { value: 10, tolerance: 0.02 },
+      { value: 100, tolerance: 0.05 },
+      { value: 1000, tolerance: 0.1 },
+      { value: 10000, tolerance: 0.15 },
+      { value: 100000, tolerance: 0.2 }
+    ];
+
+    for (const candidate of candidates) {
+      const diffRatio = Math.abs(ratio - candidate.value) / candidate.value;
+      if (diffRatio <= candidate.tolerance) {
+        return candidate.value;
+      }
+    }
+
+    const fallback = this.inferScaleFromRawValue(rawValue);
+    return fallback;
+  }
+
+  private normalizeMeterReading(value?: number | null, scale?: number | null): number | null {
+    if (value === undefined || value === null) {
+      return null;
+    }
+
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+
+    if (scale && scale > 0 && scale !== 1) {
+      const absValue = Math.abs(value);
+      if (absValue < 100 && scale >= 100) {
+        return value;
+      }
+      return value / scale;
+    }
+
+    return value;
+  }
+
+  private inferScaleFromRawValue(raw?: number | null): number | null {
+    if (raw === undefined || raw === null || !Number.isFinite(raw)) {
+      return null;
+    }
+
+    const absRaw = Math.abs(raw);
+    if (absRaw < 50) {
+      return null;
+    }
+
+    const digits = Math.floor(Math.log10(absRaw)) + 1;
+
+    if (digits >= 6) {
+      return 1000;
+    }
+
+    if (digits === 5) {
+      return 1000;
+    }
+
+    if (digits === 4) {
+      return 100;
+    }
+
+    if (digits === 3) {
+      return 100;
+    }
+
+    return null;
+  }
+
+  /**
+   * Get all transactions for a specific user with charge point information
+   */
+  async getTransactionsByUserId(userId: string) {
+    const transactions = await this.prisma.transaction.findMany({
+      where: { userId },
+      include: {
+        chargePoint: {
+          select: {
+            id: true,
+            name: true,
+            stationName: true,
+            location: true,
+            latitude: true,
+            longitude: true,
+            brand: true,
+            serialNumber: true,
+            powerRating: true,
+            chargePointIdentity: true,
+            status: true,
+            maxPower: true,
+            onPeakRate: true,
+            offPeakRate: true,
+            onPeakStartTime: true,
+            onPeakEndTime: true,
+            offPeakStartTime: true,
+            offPeakEndTime: true,
+            openingHours: true,
+            is24Hours: true,
+            isPublic: true,
+            ownershipType: true
+          }
+        },
+        connector: {
+          select: {
+            id: true,
+            connectorId: true,
+            type: true,
+            typeDescription: true,
+            status: true,
+            maxPower: true,
+            maxCurrent: true
+          }
+        },
+        vehicle: {
+          select: {
+            id: true,
+            licensePlate: true,
+            make: true,
+            model: true,
+            type: true
+          }
+        }
+      },
+      orderBy: {
+        startTime: 'desc'
+      }
+    });
+
+    return transactions;
   }
 
   async getTransactionSummary(transactionId: string, userId: string): Promise<TransactionSummary | null> {

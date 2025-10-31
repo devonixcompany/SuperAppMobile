@@ -129,6 +129,92 @@ export const transactionController = (transactionService: TransactionService) =>
       }
     )
     .get(
+      '/user/:userId',
+      async ({ params, user, set }: any) => {
+        try {
+          if (!user?.id) {
+            set.status = 401;
+            return {
+              success: false,
+              message: 'Unauthorized',
+            };
+          }
+
+          const { userId } = params;
+
+          // Users can only access their own transactions unless they have admin privileges
+          if (userId !== user.id) {
+            set.status = 403;
+            return {
+              success: false,
+              message: 'Access denied. You can only view your own transactions.',
+            };
+          }
+
+          const transactions = await transactionService.getTransactionsByUserId(userId);
+
+          return {
+            success: true,
+            data: transactions,
+          };
+        } catch (error) {
+          console.error('Error fetching user transactions:', error);
+          set.status = 500;
+          return {
+            success: false,
+            message: 'Internal server error',
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['Transactions'],
+          summary: 'Get user transactions with charge point data',
+          description: 'Retrieve all transactions for a specific user including related charge point and connector information.',
+          security: [{ bearerAuth: [] }],
+        },
+        params: t.Object({
+          userId: t.String(),
+        }),
+      }
+    )
+    .get(
+      '/me',
+      async ({ user, set }: any) => {
+        try {
+          if (!user?.id) {
+            set.status = 401;
+            return {
+              success: false,
+              message: 'Unauthorized',
+            };
+          }
+
+          const transactions = await transactionService.getTransactionsByUserId(user.id);
+
+          return {
+            success: true,
+            data: transactions,
+          };
+        } catch (error) {
+          console.error('Error fetching user transactions:', error);
+          set.status = 500;
+          return {
+            success: false,
+            message: 'Internal server error',
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['Transactions'],
+          summary: 'Get current user transactions',
+          description: 'Retrieve all transactions for the authenticated user including related charge point and connector information.',
+          security: [{ bearerAuth: [] }],
+        },
+      }
+    )
+    .get(
       '/:transactionId/summary',
       async ({ params, user, set }: any) => {
         if (!user?.id) {
