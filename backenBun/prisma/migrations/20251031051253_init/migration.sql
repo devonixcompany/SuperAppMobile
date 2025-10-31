@@ -1,4 +1,7 @@
 -- CreateEnum
+CREATE TYPE "AdminRole" AS ENUM ('SUPERADMIN', 'STAFF');
+
+-- CreateEnum
 CREATE TYPE "UserStatus" AS ENUM ('ACTIVE', 'BLOCKED', 'EXPIRED');
 
 -- CreateEnum
@@ -17,7 +20,7 @@ CREATE TYPE "ChargePointStatus" AS ENUM ('AVAILABLE', 'OCCUPIED', 'UNAVAILABLE',
 CREATE TYPE "ConnectorType" AS ENUM ('TYPE_1', 'TYPE_2', 'CHADEMO', 'CCS_COMBO_1', 'CCS_COMBO_2', 'TESLA', 'GB_T');
 
 -- CreateEnum
-CREATE TYPE "ConnectorStatus" AS ENUM ('AVAILABLE', 'PREPARUNG', 'CHARGING', 'SUSPENDEDEV', 'SUSPENDEDEVSE', 'RESERVED', 'UNAVAILABLE', 'FAULTED');
+CREATE TYPE "ConnectorStatus" AS ENUM ('AVAILABLE', 'PREPARING', 'CHARGING', 'SUSPENDED_EV', 'SUSPENDED_EVSE', 'RESERVED', 'UNAVAILABLE', 'FAULTED');
 
 -- CreateEnum
 CREATE TYPE "TransactionStatus" AS ENUM ('ACTIVE', 'COMPLETED', 'FAILED', 'CANCELED');
@@ -41,10 +44,13 @@ CREATE TYPE "NotificationType" AS ENUM ('CHARGING_STARTEDChargePoint', 'CHARGING
 CREATE TYPE "UserType" AS ENUM ('NORMAL', 'BUSINESS');
 
 -- CreateEnum
-CREATE TYPE "PricingPeriod" AS ENUM ('ON_PEAK', 'OFF_PEAK');
+CREATE TYPE "PricingTierType" AS ENUM ('STANDARD', 'PEAK_OFF_PEAK', 'TIME_OF_USE', 'DYNAMIC');
 
 -- CreateEnum
-CREATE TYPE "AdminRole" AS ENUM ('SUPERADMIN', 'STAFF');
+CREATE TYPE "TaxpayerType" AS ENUM ('PERSONAL', 'JURISTIC');
+
+-- CreateEnum
+CREATE TYPE "BranchType" AS ENUM ('HEAD_OFFICE', 'BRANCH');
 
 -- CreateTable
 CREATE TABLE "User" (
@@ -75,6 +81,29 @@ CREATE TABLE "user_vehicles" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "user_vehicles_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "SsTaxInvoiceProfile" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "taxpayerType" "TaxpayerType" NOT NULL,
+    "fullName" TEXT,
+    "companyName" TEXT,
+    "taxId" VARCHAR(20) NOT NULL,
+    "branchType" "BranchType",
+    "branchCode" VARCHAR(5),
+    "addressLine1" TEXT NOT NULL,
+    "addressLine2" TEXT,
+    "provinceId" TEXT NOT NULL,
+    "districtId" TEXT NOT NULL,
+    "subdistrictId" TEXT NOT NULL,
+    "postalCode" VARCHAR(10) NOT NULL,
+    "isDefault" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "SsTaxInvoiceProfile_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -146,9 +175,38 @@ CREATE TABLE "connectors" (
 );
 
 -- CreateTable
+CREATE TABLE "Admin" (
+    "id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "password" TEXT NOT NULL,
+    "role" "AdminRole" NOT NULL DEFAULT 'STAFF',
+    "firstName" TEXT,
+    "lastName" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Admin_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "admin_refresh_tokens" (
+    "id" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "adminId" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "isRevoked" BOOLEAN NOT NULL DEFAULT false,
+    "revokedAt" TIMESTAMP(3),
+
+    CONSTRAINT "admin_refresh_tokens_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "transactions" (
     "id" TEXT NOT NULL,
     "transactionId" TEXT NOT NULL,
+    "ocppTransactionId" TEXT,
     "userId" TEXT NOT NULL,
     "vehicleId" TEXT,
     "chargePointId" TEXT NOT NULL,
@@ -160,54 +218,10 @@ CREATE TABLE "transactions" (
     "totalEnergy" DOUBLE PRECISION,
     "totalCost" DOUBLE PRECISION,
     "appliedRate" DOUBLE PRECISION,
-    "pricingPeriod" "PricingPeriod",
     "status" "TransactionStatus" NOT NULL DEFAULT 'ACTIVE',
     "stopReason" TEXT,
 
     CONSTRAINT "transactions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "meter_values" (
-    "id" TEXT NOT NULL,
-    "transactionId" TEXT NOT NULL,
-    "timestamp" TIMESTAMP(3) NOT NULL,
-    "value" DOUBLE PRECISION NOT NULL,
-    "power" DOUBLE PRECISION,
-    "current" DOUBLE PRECISION,
-    "voltage" DOUBLE PRECISION,
-
-    CONSTRAINT "meter_values_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "charging_sessions" (
-    "id" TEXT NOT NULL,
-    "sessionId" TEXT NOT NULL,
-    "chargePointId" TEXT NOT NULL,
-    "connectorId" TEXT NOT NULL,
-    "userId" TEXT,
-    "status" "SessionStatus" NOT NULL DEFAULT 'ACTIVE',
-    "startTime" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "endTime" TIMESTAMP(3),
-    "lastActivity" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "charging_sessions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "reservations" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "chargePointId" TEXT NOT NULL,
-    "connectorId" TEXT,
-    "startTime" TIMESTAMP(3) NOT NULL,
-    "endTime" TIMESTAMP(3) NOT NULL,
-    "status" "ReservationStatus" NOT NULL DEFAULT 'ACTIVE',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "reservations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -236,34 +250,6 @@ CREATE TABLE "notifications" (
     CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "Admin" (
-    "id" TEXT NOT NULL,
-    "email" TEXT NOT NULL,
-    "password" TEXT NOT NULL,
-    "role" "AdminRole" NOT NULL DEFAULT 'STAFF',
-    "firstName" TEXT,
-    "lastName" TEXT,
-    "isActive" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "Admin_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "admin_refresh_tokens" (
-    "id" TEXT NOT NULL,
-    "token" TEXT NOT NULL,
-    "adminId" TEXT NOT NULL,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "isRevoked" BOOLEAN NOT NULL DEFAULT false,
-    "revokedAt" TIMESTAMP(3),
-
-    CONSTRAINT "admin_refresh_tokens_pkey" PRIMARY KEY ("id")
-);
-
 -- CreateIndex
 CREATE UNIQUE INDEX "User_firebaseUid_key" ON "User"("firebaseUid");
 
@@ -275,6 +261,12 @@ CREATE UNIQUE INDEX "User_phoneNumber_key" ON "User"("phoneNumber");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "user_vehicles_licensePlate_key" ON "user_vehicles"("licensePlate");
+
+-- CreateIndex
+CREATE INDEX "SsTaxInvoiceProfile_userId_idx" ON "SsTaxInvoiceProfile"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "SsTaxInvoiceProfile_userId_taxId_branchCode_key" ON "SsTaxInvoiceProfile"("userId", "taxId", "branchCode");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Station_stationname_key" ON "Station"("stationname");
@@ -289,16 +281,16 @@ CREATE UNIQUE INDEX "charge_points_chargePointIdentity_key" ON "charge_points"("
 CREATE UNIQUE INDEX "connectors_chargePointId_connectorId_key" ON "connectors"("chargePointId", "connectorId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "transactions_transactionId_key" ON "transactions"("transactionId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "charging_sessions_sessionId_key" ON "charging_sessions"("sessionId");
-
--- CreateIndex
 CREATE UNIQUE INDEX "Admin_email_key" ON "Admin"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "admin_refresh_tokens_token_key" ON "admin_refresh_tokens"("token");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "transactions_transactionId_key" ON "transactions"("transactionId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "transactions_ocppTransactionId_key" ON "transactions"("ocppTransactionId");
 
 -- AddForeignKey
 ALTER TABLE "user_vehicles" ADD CONSTRAINT "user_vehicles_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -313,6 +305,9 @@ ALTER TABLE "charge_points" ADD CONSTRAINT "charge_points_stationId_fkey" FOREIG
 ALTER TABLE "connectors" ADD CONSTRAINT "connectors_chargePointId_fkey" FOREIGN KEY ("chargePointId") REFERENCES "charge_points"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "admin_refresh_tokens" ADD CONSTRAINT "admin_refresh_tokens_adminId_fkey" FOREIGN KEY ("adminId") REFERENCES "Admin"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "transactions" ADD CONSTRAINT "transactions_chargePointId_fkey" FOREIGN KEY ("chargePointId") REFERENCES "charge_points"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -323,15 +318,3 @@ ALTER TABLE "transactions" ADD CONSTRAINT "transactions_userId_fkey" FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE "transactions" ADD CONSTRAINT "transactions_vehicleId_fkey" FOREIGN KEY ("vehicleId") REFERENCES "user_vehicles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "meter_values" ADD CONSTRAINT "meter_values_transactionId_fkey" FOREIGN KEY ("transactionId") REFERENCES "transactions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "charging_sessions" ADD CONSTRAINT "charging_sessions_chargePointId_fkey" FOREIGN KEY ("chargePointId") REFERENCES "charge_points"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "charging_sessions" ADD CONSTRAINT "charging_sessions_connectorId_fkey" FOREIGN KEY ("connectorId") REFERENCES "connectors"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "admin_refresh_tokens" ADD CONSTRAINT "admin_refresh_tokens_adminId_fkey" FOREIGN KEY ("adminId") REFERENCES "Admin"("id") ON DELETE CASCADE ON UPDATE CASCADE;

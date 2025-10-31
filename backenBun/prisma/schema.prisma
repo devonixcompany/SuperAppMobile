@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-}AA
+}
 
 datasource db {
   provider = "postgresql"
@@ -38,7 +38,31 @@ model UserVehicle {
 
   @@map("user_vehicles")
 }
+model SsTaxInvoiceProfile {
+  id             String        @id @default(uuid())
+  userId         String                               //ผูกกับเจ้าของโปรไฟล์
+  taxpayerType   TaxpayerType                         //(enum: PERSONAL | JURISTIC) — บุคคลธรรมดา/นิติบุคคล
+  fullName       String?                              //ชื่อ-นามสกุล (บุคคลธรรมดา)
+  companyName    String?                              //ชื่อบริษัท (นิติบุคคล)
+  taxId          String        @db.VarChar(20)        //เลขประจำตัวผู้เสียภาษี (บุคคลธรรมดา 13 หลัก / นิติบุคคล 10 หลัก)
+  branchType     BranchType?                          //(enum: HEAD_OFFICE | BRANCH) — สำนักงานใหญ่/สาขา (นิติบุคคล) 
+  branchCode     String?       @db.VarChar(5)         //รหัสสาขา (นิติบุคคล) เช่น "00000" = สำนักงานใหญ่, "00001" = สาขา 1
 
+  addressLine1   String                               //ที่อยู่บรรทัดที่ 1 
+  addressLine2   String?                              //ที่อยู่บรรทัดที่ 2
+  provinceId   String                                  //จังหวัด
+  districtId   String                                  //อำเภอ
+  subdistrictId String                                 //ตำบล
+  postalCode   String        @db.VarChar(10)
+
+  isDefault    Boolean       @default(false)          //ตั้งเป็นค่าเริ่มต้น
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([userId])
+  // กันซ้ำต่อผู้ใช้: taxId + branchCode (นิติบุคคล) หรือ taxId (บุคคล)
+  @@unique([userId, taxId, branchCode])
+}
 model Station {
   id               String            @id @default(uuid())
   stationname      String            @unique
@@ -46,6 +70,8 @@ model Station {
   updatedAt        DateTime          @updatedAt
   chargePoints ChargePoint[]  @relation("StationChargePoints")
 }
+
+
 
 model ChargePoint {
   id               String            @id @default(cuid()) // รหัสจุดชาร์จ เช่น "CP_BKK_001", "CP_CNX_002"
@@ -129,6 +155,37 @@ model Connector {
   @@map("connectors")
 }
 
+model Admin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  password     String
+  role         AdminRole @default(STAFF)
+  firstName    String?
+  lastName     String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  refreshTokens AdminRefreshToken[]
+}
+
+model AdminRefreshToken {
+  id           String   @id @default(cuid())
+  token        String   @unique
+  adminId      String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  isRevoked    Boolean  @default(false)
+  revokedAt    DateTime?
+  admin        Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@map("admin_refresh_tokens")
+}
+
+enum AdminRole {
+  SUPERADMIN
+  STAFF
+}
+
 model Transaction {
   id              String            @id @default(cuid())
   transactionId   String            @unique
@@ -144,7 +201,6 @@ model Transaction {
   totalEnergy     Float?
   totalCost       Float?
   appliedRate     Float?
-  pricingPeriod   PricingPeriod?
   status          TransactionStatus @default(ACTIVE)
   stopReason      String?
   chargePoint     ChargePoint       @relation(fields: [chargePointId], references: [id])
@@ -279,56 +335,22 @@ enum UserType {
   BUSINESS
 }
 
-enum PricingPeriod {
-  STANDARD
-  PEAK
-  OFF_PEAK
-}
 
-model Admin {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  password     String
-  role         AdminRole @default(STAFF)
-  firstName    String?
-  lastName     String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  refreshTokens AdminRefreshToken[]
-}
 
-model AdminRefreshToken {
-  id           String   @id @default(cuid())
-  token        String   @unique
-  adminId      String
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
-  isRevoked    Boolean  @default(false)
-  revokedAt    DateTime?
-  admin        Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
-  @@map("admin_refresh_tokens")
-}
-
-enum AdminRole {
-  SUPERADMIN
-  STAFF
-}
-
-enum DayOfWeek {
-  MONDAY
-  TUESDAY
-  WEDNESDAY
-  THURSDAY
-  FRIDAY
-  SATURDAY
-  SUNDAY
-}
 
 enum PricingTierType {
   STANDARD
   PEAK_OFF_PEAK
   TIME_OF_USE
   DYNAMIC
+}
+enum TaxpayerType {
+  PERSONAL
+  JURISTIC
+}
+
+enum BranchType {
+  HEAD_OFFICE
+  BRANCH
 }

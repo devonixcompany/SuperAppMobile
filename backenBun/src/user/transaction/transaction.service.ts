@@ -1,6 +1,6 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { TransactionStatus } from '@prisma/client';
-import { randomInt, randomUUID } from 'crypto';
+import { randomInt } from 'crypto';
 import { prisma } from '../../lib/prisma';
 
 export interface CreateTransactionParams {
@@ -234,11 +234,6 @@ export class TransactionService {
 
     const stopTime = new Date(timestamp);
 
-    const meterValueRecords = this.extractMeterValueRecords(
-      transaction.id,
-      transactionData
-    );
-
     const energyExtremes = this.extractEnergyExtremes(transactionData);
 
     const scaleFromStop = this.determineScale(meterStop, energyExtremes.end);
@@ -266,105 +261,19 @@ export class TransactionService {
       }
     }
 
-    const updatedTransaction = await this.prisma.$transaction(async (tx) => {
-      if (meterValueRecords.length > 0) {
-        await tx.meter_values.deleteMany({
-          where: { transactionId: transaction!.id },
-        });
-
-        await tx.meter_values.createMany({
-          data: meterValueRecords,
-        });
-      }
-
-      return await tx.transaction.update({
-        where: { id: transaction!.id },
-        data: {
-          endTime: stopTime,
-          startMeterValue: normalizedStart ?? transaction.startMeterValue,
-          endMeterValue: normalizedEnd ?? meterStop,
-          totalEnergy: totalEnergy ?? transaction.totalEnergy,
-          stopReason: reason ?? transaction.stopReason,
-          status: TransactionStatus.COMPLETED,
-        },
-      });
+    const updatedTransaction = await this.prisma.transaction.update({
+      where: { id: transaction.id },
+      data: {
+        endTime: stopTime,
+        startMeterValue: normalizedStart ?? transaction.startMeterValue,
+        endMeterValue: normalizedEnd ?? meterStop,
+        totalEnergy: totalEnergy ?? transaction.totalEnergy,
+        stopReason: reason ?? transaction.stopReason,
+        status: TransactionStatus.COMPLETED,
+      },
     });
 
     return updatedTransaction;
-  }
-
-  private extractMeterValueRecords(
-    transactionId: string,
-    transactionData?: any[]
-  ): Prisma.meter_valuesCreateManyInput[] {
-    if (!Array.isArray(transactionData)) {
-      return [];
-    }
-
-    const records: Prisma.meter_valuesCreateManyInput[] = [];
-
-    for (const entry of transactionData) {
-      if (!entry || !Array.isArray(entry.sampledValue)) {
-        continue;
-      }
-
-      let energyValue: number | null = null;
-      let power: number | undefined;
-      let current: number | undefined;
-      let voltage: number | undefined;
-
-      for (const sample of entry.sampledValue) {
-        if (!sample || sample.value === undefined || sample.value === null) {
-          continue;
-        }
-
-        const numericValue = Number(sample.value);
-        if (!Number.isFinite(numericValue)) {
-          continue;
-        }
-
-        const measurand = (sample.measurand || '').toLowerCase();
-
-        if (measurand.includes('energy.active.import')) {
-          energyValue = numericValue;
-        } else if (measurand.includes('power') && power === undefined) {
-          power = numericValue;
-        } else if (measurand.includes('current') && current === undefined) {
-          current = numericValue;
-        } else if (measurand.includes('voltage') && voltage === undefined) {
-          voltage = numericValue;
-        }
-      }
-
-      if (energyValue === null) {
-        const fallback = entry.sampledValue
-          .map((sample: any) => Number(sample?.value))
-          .find((value: number) => Number.isFinite(value));
-
-        if (fallback === undefined) {
-          continue;
-        }
-
-        energyValue = fallback;
-      }
-
-      const timestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
-      if (Number.isNaN(timestamp.getTime())) {
-        continue;
-      }
-
-      records.push({
-        id: randomUUID(),
-        transactionId,
-        timestamp,
-        value: energyValue,
-        power,
-        current,
-        voltage,
-      });
-    }
-
-    return records;
   }
 
   private extractEnergyExtremes(transactionData?: any[]): { start: number | null; end: number | null } {
