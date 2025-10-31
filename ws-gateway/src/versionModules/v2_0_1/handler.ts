@@ -1,6 +1,13 @@
 // OCPP 2.0.1 message handler
 // Implements version-specific logic for OCPP 2.0.1 messages
 
+import { BACKEND_URL, WS_GATEWAY_API_KEY } from '../../config/env';
+
+const withGatewayHeaders = (headers: Record<string, string> = {}) => ({
+  'X-Api-Key': WS_GATEWAY_API_KEY,
+  ...headers
+});
+
 export interface OCPP201BootNotificationRequest {
   chargingStation: {
     model: string;
@@ -138,7 +145,6 @@ export async function handleHeartbeat(
 
   // Try to update backend if available (optional operation)
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
     const skipBackendUpdate = process.env.SKIP_BACKEND_UPDATE === 'true';
     
     if (skipBackendUpdate) {
@@ -150,11 +156,11 @@ export async function handleHeartbeat(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
     
-    const heartbeatResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/heartbeat`, {
+    const heartbeatResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/heartbeat`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         timestamp: new Date().toISOString()
       }),

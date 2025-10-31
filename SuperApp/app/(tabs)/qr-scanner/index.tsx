@@ -1,4 +1,5 @@
 import env from "@/config/env";
+import { getCredentials, getTokens } from "@/utils/keychain";
 import {
   normalizeUrlToDevice,
   normalizeWebSocketUrlToDevice,
@@ -16,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { chargepointService } from "@/services/api";
 
 type ResolvedPayload = {
   requestUrl: string;
@@ -48,9 +50,12 @@ export default function QRScannerScreen() {
 
   const resolveScannedPayload = (raw: string): ResolvedPayload => {
     const value = raw.trim();
+    console.log('QR Scanner Debug - Raw input to resolveScannedPayload:', value);
 
     try {
       const parsed = JSON.parse(value);
+      console.log('QR Scanner Debug - Parsed JSON:', parsed);
+      
       const identity =
         parsed.chargePointIdentity ||
         parsed.charge_point_identity ||
@@ -74,6 +79,7 @@ export default function QRScannerScreen() {
           identity,
         )}/${connectorId}/websocket-url`;
 
+        console.log('QR Scanner Debug - Direct identity/connector found:', { identity, connectorId });
         return {
           requestUrl: normalizeUrlToDevice(requestUrl, env.apiUrl),
           chargePointIdentity: identity,
@@ -81,7 +87,58 @@ export default function QRScannerScreen() {
         };
       }
 
+      // Handle requestUrl field - extract chargePointIdentity and connectorId from URL
+      if (parsed.requestUrl) {
+        let urlString = parsed.requestUrl;
+        
+        // Clean up the URL string - remove spaces and backticks
+        urlString = urlString.trim();
+        urlString = urlString.replace(/^`+|`+$/g, ''); // Remove backticks from start and end
+        urlString = urlString.trim(); // Trim again after removing backticks
+        
+        console.log('QR Scanner Debug - Cleaned URL:', urlString);
+        
+        try {
+          const url = new URL(urlString);
+          // Extract from path: /api/chargepoints/{identity}/{connectorId}/websocket-url
+          const pathParts = url.pathname.split('/');
+          const chargepointsIndex = pathParts.indexOf('chargepoints');
+          
+          console.log('QR Scanner Debug - Path parts:', pathParts);
+          console.log('QR Scanner Debug - Chargepoints index:', chargepointsIndex);
+          
+          if (chargepointsIndex !== -1 && pathParts.length > chargepointsIndex + 2) {
+            const extractedIdentity = decodeURIComponent(pathParts[chargepointsIndex + 1]);
+            const extractedConnectorId = Number(pathParts[chargepointsIndex + 2]);
+            
+            console.log('QR Scanner Debug - Extracted Identity:', extractedIdentity);
+            console.log('QR Scanner Debug - Extracted Connector ID:', extractedConnectorId);
+            
+            if (extractedIdentity && Number.isFinite(extractedConnectorId)) {
+              const result = {
+                requestUrl: normalizeUrlToDevice(urlString, env.apiUrl),
+                chargePointIdentity: extractedIdentity,
+                connectorId: extractedConnectorId,
+              };
+              
+              console.log('QR Scanner Debug - Final parsed result:', result);
+              return result;
+            }
+          }
+        } catch (urlError) {
+          console.warn('QR Scanner Debug - Failed to parse requestUrl as URL:', urlError);
+          console.warn('QR Scanner Debug - URL string was:', urlString);
+        }
+        
+        // Fallback: return just the requestUrl
+        console.log('QR Scanner Debug - Using fallback, returning requestUrl only');
+        return {
+          requestUrl: normalizeUrlToDevice(urlString, env.apiUrl),
+        };
+      }
+
       if (parsed.endpoint || parsed.apiUrl) {
+        console.log('QR Scanner Debug - Using endpoint/apiUrl fallback');
         return {
           requestUrl: normalizeUrlToDevice(
             (parsed.endpoint || parsed.apiUrl) as string,
@@ -89,23 +146,60 @@ export default function QRScannerScreen() {
           ),
         };
       }
-    } catch {
+    } catch (parseError) {
+      console.log('QR Scanner Debug - JSON parse failed:', parseError);
       // continue to handle as URL/path
     }
 
     try {
-      const fullUrl = new URL(value);
+      // Clean up the value - remove backticks and trim spaces
+      let cleanedValue = value.trim();
+      cleanedValue = cleanedValue.replace(/^`+|`+$/g, ''); // Remove backticks from start and end
+      cleanedValue = cleanedValue.trim(); // Trim again after removing backticks
+      
+      console.log('QR Scanner Debug - Cleaned direct URL:', cleanedValue);
+      
+      const fullUrl = new URL(cleanedValue);
+      console.log('QR Scanner Debug - Treating as direct URL');
+      
+      // Try to extract chargePointIdentity and connectorId from the URL path
+      const pathParts = fullUrl.pathname.split('/');
+      const chargepointsIndex = pathParts.indexOf('chargepoints');
+      
+      console.log('QR Scanner Debug - Direct URL path parts:', pathParts);
+      console.log('QR Scanner Debug - Direct URL chargepoints index:', chargepointsIndex);
+      
+      if (chargepointsIndex !== -1 && pathParts.length > chargepointsIndex + 2) {
+        const extractedIdentity = decodeURIComponent(pathParts[chargepointsIndex + 1]);
+        const extractedConnectorId = Number(pathParts[chargepointsIndex + 2]);
+        
+        console.log('QR Scanner Debug - Direct URL extracted Identity:', extractedIdentity);
+        console.log('QR Scanner Debug - Direct URL extracted Connector ID:', extractedConnectorId);
+        
+        if (extractedIdentity && Number.isFinite(extractedConnectorId)) {
+          const result = {
+            requestUrl: normalizeUrlToDevice(cleanedValue, env.apiUrl),
+            chargePointIdentity: extractedIdentity,
+            connectorId: extractedConnectorId,
+          };
+          
+          console.log('QR Scanner Debug - Direct URL final result:', result);
+          return result;
+        }
+      }
+      
       return {
-        requestUrl: normalizeUrlToDevice(fullUrl.toString(), env.apiUrl),
+        requestUrl: normalizeUrlToDevice(cleanedValue, env.apiUrl),
       };
     } catch {
-      // not an absolute URL
+      // continue to handle as path
     }
 
     if (!value) {
       throw new Error("QR Code ไม่มีข้อมูลสำหรับเรียก API");
     }
 
+    console.log('QR Scanner Debug - Treating as path');
     const path = value.startsWith("/") ? value : `/${value}`;
     const requestUrl = `${env.apiUrl.replace(/\/$/, "")}${path}`;
 
@@ -125,19 +219,48 @@ export default function QRScannerScreen() {
     setIsProcessing(true);
 
     try {
-      const payload = resolveScannedPayload(String(data));
-      const response = await fetch(payload.requestUrl);
-
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => null);
-        const message =
-          errorBody?.message ||
-          errorBody?.error ||
-          `เรียก API ไม่สำเร็จ (${response.status})`;
-        throw new Error(message);
+      // ดึง user credentials เพื่อเอา user ID
+      const credentials = await getCredentials();
+      if (!credentials?.id) {
+        throw new Error("ไม่พบข้อมูลผู้ใช้ กรุณาเข้าสู่ระบบใหม่");
       }
 
-      const body = await response.json().catch(() => null);
+      // ดึง authentication tokens
+      const tokens = await getTokens();
+      if (!tokens?.accessToken) {
+        throw new Error("ไม่พบ access token กรุณาเข้าสู่ระบบใหม่");
+      }
+
+      console.log('QR Scanner Debug - Raw data:', String(data));
+      
+      const payload = resolveScannedPayload(String(data));
+      
+      console.log('QR Scanner Debug - Payload:', payload);
+      console.log('QR Scanner Debug - User ID:', credentials.id);
+      console.log('QR Scanner Debug - Access Token:', tokens.accessToken ? 'Present' : 'Missing');
+      
+      // Extract chargePointIdentity and connectorId from payload
+      if (!payload.chargePointIdentity || !payload.connectorId) {
+        throw new Error("QR Code ไม่มีข้อมูลเครื่องชาร์จหรือหัวชาร์จที่ถูกต้อง");
+      }
+      
+      // Use chargepoint service to get WebSocket URL
+      const response = await chargepointService.getWebSocketUrl(
+        payload.chargePointIdentity,
+        payload.connectorId,
+        {
+          userId: credentials.id,
+          accessToken: tokens.accessToken
+        }
+      );
+
+      console.log('QR Scanner Debug - Service Response:', response);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error || "ไม่สามารถเรียก API ได้");
+      }
+
+      const body = response.data;
 
       const websocketUrl =
         body?.data?.websocketUrl ||
@@ -159,8 +282,8 @@ export default function QRScannerScreen() {
         payload.chargePointIdentity;
       const connectorId =
         body?.data?.connector?.connectorId || payload.connectorId;
-      const chargePointData = body?.data?.chargePoint ?? {};
-      const pricingTier = body?.data?.pricingTier ?? null;
+      const chargePointData = body?.data?.chargePoint || body?.chargePoint || {};
+      const pricingTier = body?.data?.pricingTier || body?.pricingTier || null;
       const chargePointName = chargePointData?.name;
 
       const params: Record<string, string> = {
@@ -221,7 +344,7 @@ export default function QRScannerScreen() {
   if (hasPermission === false) {
     return (
       <SafeAreaView className="flex-1 bg-black items-center justify-center px-6">
-        <Ionicons name="camera-off" size={64} color="white" />
+        <Ionicons name="camera-outline" size={64} color="white" />
         <Text className="text-white text-xl font-semibold mt-4 text-center">
           ไม่สามารถเข้าถึงกล้องได้
         </Text>
@@ -271,24 +394,52 @@ export default function QRScannerScreen() {
           }}
           enableTorch={torchEnabled}
         >
-          <View className="flex-1 items-center justify-center">
-            <View className="relative">
-              <View className="w-64 h-64 border-2 border-white/50 rounded-2xl">
-                <View className="absolute -top-1 -left-1 w-6 h-6 border-l-4 border-t-4 border-[#51BC8E] rounded-tl-lg" />
-                <View className="absolute -top-1 -right-1 w-6 h-6 border-r-4 border-t-4 border-[#51BC8E] rounded-tr-lg" />
-                <View className="absolute -bottom-1 -left-1 w-6 h-6 border-l-4 border-b-4 border-[#51BC8E] rounded-bl-lg" />
-                <View className="absolute -bottom-1 -right-1 w-6 h-6 border-r-4 border-b-4 border-[#51BC8E] rounded-br-lg" />
+          {/* Camera Overlay Content */}
+          <View style={StyleSheet.absoluteFillObject} className="flex-1">
+            {/* Top Status Bar */}
+            <View className="absolute top-0 left-0 right-0 bg-black/30 p-4 z-20">
+              <Text className="text-white text-center text-sm">
+                📱 กำลังสแกน QR Code...
+              </Text>
+            </View>
+
+            {/* Center Scanning Frame */}
+            <View className="flex-1 items-center justify-center">
+              <View className="relative">
+                <View className="w-64 h-64 border-2 border-white/50 rounded-2xl">
+                  <View className="absolute -top-1 -left-1 w-6 h-6 border-l-4 border-t-4 border-[#51BC8E] rounded-tl-lg" />
+                  <View className="absolute -top-1 -right-1 w-6 h-6 border-r-4 border-t-4 border-[#51BC8E] rounded-tr-lg" />
+                  <View className="absolute -bottom-1 -left-1 w-6 h-6 border-l-4 border-b-4 border-[#51BC8E] rounded-bl-lg" />
+                  <View className="absolute -bottom-1 -right-1 w-6 h-6 border-r-4 border-b-4 border-[#51BC8E] rounded-br-lg" />
+                </View>
+              </View>
+
+              <View className="mt-8 items-center bg-black/50 px-6 py-4 rounded-2xl">
+                <Text className="text-white text-lg font-semibold mb-2">
+                  วาง QR Code ในกรอบ
+                </Text>
+                <Text className="text-white/90 text-center leading-6">
+                  สแกน QR Code เพื่อเริ่มชาร์จ EV{"\n"}
+                  หรือทำธุรกรรมอื่นๆ
+                </Text>
               </View>
             </View>
 
-            <View className="mt-8 items-center bg-black/50 px-6 py-4 rounded-2xl">
-              <Text className="text-white text-lg font-semibold mb-2">
-                วาง QR Code ในกรอบ
+            {/* Bottom Info Panel */}
+            <View className="absolute bottom-0 left-0 right-0 bg-black/40 p-4 z-20">
+              <Text className="text-white/80 text-center text-xs mb-2">
+                💡 เคล็ดลับ: ใช้ไฟฉายหากแสงไม่เพียงพอ
               </Text>
-              <Text className="text-white/90 text-center leading-6">
-                สแกน QR Code เพื่อเริ่มชาร์จ EV{"\n"}
-                หรือทำธุรกรรมอื่นๆ
-              </Text>
+              <View className="flex-row justify-center space-x-4">
+                <View className="flex-row items-center">
+                  <View className="w-2 h-2 bg-green-500 rounded-full mr-2" />
+                  <Text className="text-white text-xs">พร้อมสแกน</Text>
+                </View>
+                <View className="flex-row items-center">
+                  <Ionicons name="shield-checkmark" size={12} color="#51BC8E" />
+                  <Text className="text-white text-xs ml-1">ปลอดภัย</Text>
+                </View>
+              </View>
             </View>
           </View>
         </CameraView>

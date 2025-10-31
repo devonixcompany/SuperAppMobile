@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
-import { View, Image } from 'react-native';
+import { Image, View } from 'react-native';
 
 export default function InitialScreen() {
   const router = useRouter();

@@ -7,6 +7,8 @@ import { chargePointController } from './chargepoint/chargepoint.controller';
 import { ChargePointService } from './chargepoint/chargepoint.service';
 import { userController } from './user/user.controller';
 import { UserService } from './user/user.service';
+import { transactionController } from './transaction/transaction.controller';
+import { TransactionService } from './transaction/transaction.service';
 import { ValidationService } from './validation/validation.service';
 
 // Service instances
@@ -19,6 +21,7 @@ export class ServiceContainer {
   public readonly authService: AuthService;
   public readonly chargePointService: ChargePointService;
   public readonly adminService: AdminService;
+  public readonly transactionService: TransactionService;
 
   private constructor() {
     // Initialize services in dependency order
@@ -28,6 +31,7 @@ export class ServiceContainer {
     this.validationService = new ValidationService();
     this.chargePointService = new ChargePointService();
     this.adminService = new AdminService(this.jwtService);
+    this.transactionService = new TransactionService();
     this.authService = new AuthService(
       this.jwtService,
       this.userService,
@@ -58,6 +62,10 @@ export class ServiceContainer {
   public getAdminController() {
     return adminController(this.adminService);
   }
+
+  public getTransactionController() {
+    return transactionController(this.transactionService);
+  }
 }
 
 // Export singleton instance
@@ -70,5 +78,6 @@ export const {
   validationService,
   authService,
   chargePointService,
-  adminService
+  adminService,
+  transactionService
 } = serviceContainer;

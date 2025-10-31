@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-}AA
+}
 
 datasource db {
   provider = "postgresql"
@@ -38,7 +38,31 @@ model UserVehicle {
 
   @@map("user_vehicles")
 }
+model SsTaxInvoiceProfile {
+  id             String        @id @default(uuid())
+  userId         String                               //ผูกกับเจ้าของโปรไฟล์
+  taxpayerType   TaxpayerType                         //(enum: PERSONAL | JURISTIC) — บุคคลธรรมดา/นิติบุคคล
+  fullName       String?                              //ชื่อ-นามสกุล (บุคคลธรรมดา)
+  companyName    String?                              //ชื่อบริษัท (นิติบุคคล)
+  taxId          String        @db.VarChar(20)        //เลขประจำตัวผู้เสียภาษี (บุคคลธรรมดา 13 หลัก / นิติบุคคล 10 หลัก)
+  branchType     BranchType?                          //(enum: HEAD_OFFICE | BRANCH) — สำนักงานใหญ่/สาขา (นิติบุคคล) 
+  branchCode     String?       @db.VarChar(5)         //รหัสสาขา (นิติบุคคล) เช่น "00000" = สำนักงานใหญ่, "00001" = สาขา 1
 
+  addressLine1   String                               //ที่อยู่บรรทัดที่ 1 
+  addressLine2   String?                              //ที่อยู่บรรทัดที่ 2
+  provinceId   String                                  //จังหวัด
+  districtId   String                                  //อำเภอ
+  subdistrictId String                                 //ตำบล
+  postalCode   String        @db.VarChar(10)
+
+  isDefault    Boolean       @default(false)          //ตั้งเป็นค่าเริ่มต้น
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([userId])
+  // กันซ้ำต่อผู้ใช้: taxId + branchCode (นิติบุคคล) หรือ taxId (บุคคล)
+  @@unique([userId, taxId, branchCode])
+}
 model Station {
   id               String            @id @default(uuid())
   stationname      String            @unique
@@ -46,6 +70,8 @@ model Station {
   updatedAt        DateTime          @updatedAt
   chargePoints ChargePoint[]  @relation("StationChargePoints")
 }
+
+
 
 model ChargePoint {
   id               String            @id @default(cuid()) // รหัสจุดชาร์จ เช่น "CP_BKK_001", "CP_CNX_002"
@@ -103,7 +129,6 @@ model ChargePoint {
   updatedAt        DateTime          @updatedAt
 
   owner            User?             @relation("UserChargePoints", fields: [ownerId], references: [id])
-  sessions         ChargingSession[] // เซสชันการชาร์จทั้งหมด
   connectors       Connector[]       // หัวชาร์จทั้งหมดในจุดนี้
   transactions     Transaction[]     // ธุรกรรมทั้งหมดที่เกิดขึ้นในจุดนี้
   urlwebSocket     String?           // URL ของ WebSocket สำหรับเชื่อมต่อกับเซิร์ฟเวอร์ OCPP
@@ -123,7 +148,6 @@ model Connector {
   connectorstatus   ConnectorStatus   @default(AVAILABLE)
   maxPower          Float?
   maxCurrent        Float?
-  sessions          ChargingSession[]
   chargePoint       ChargePoint       @relation(fields: [chargePointId], references: [id], onDelete: Cascade)
   transactions      Transaction[]
 
@@ -131,73 +155,60 @@ model Connector {
   @@map("connectors")
 }
 
+model Admin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  password     String
+  role         AdminRole @default(STAFF)
+  firstName    String?
+  lastName     String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  refreshTokens AdminRefreshToken[]
+}
+
+model AdminRefreshToken {
+  id           String   @id @default(cuid())
+  token        String   @unique
+  adminId      String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  isRevoked    Boolean  @default(false)
+  revokedAt    DateTime?
+  admin        Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@map("admin_refresh_tokens")
+}
+
+enum AdminRole {
+  SUPERADMIN
+  STAFF
+}
+
 model Transaction {
   id              String            @id @default(cuid())
-  transactionId   String            @unique // รหัสธุรกรรมเฉพาะ เช่น "TXN_20240115_001"
-  userId          String            // ID ของผู้ใช้ที่ทำธุรกรรม
-  vehicleId       String?           // ID ของรถที่ใช้ชาร์จ (optional)
-  chargePointId   String            // ID ของจุดชาร์จที่ใช้
-  connectorId     String            // ID ของหัวชาร์จที่ใช้
-  startTime       DateTime          // เวลาเริ่มชาร์จ เช่น 2024-01-15T14:30:00Z
-  endTime         DateTime?         // เวลาสิ้นสุดชาร์จ เช่น 2024-01-15T16:45:00Z
-  startMeterValue Float             @default(0) // ค่ามิเตอร์เริ่มต้น เช่น 1250.5 kWh
-  endMeterValue   Float?            // ค่ามิเตอร์สิ้นสุด เช่น 1275.8 kWh
-  totalEnergy     Float?            // พลังงานรวมที่ใช้ เช่น 25.3 kWh
-  totalCost       Float?            // ค่าใช้จ่ายรวม เช่น 126.50 บาท
-  appliedRate     Float?            // อัตราที่ใช้จริงในการคิดค่าบริการ เช่น 5.00 บาท/kWh
-  pricingPeriod   PricingPeriod?    // ช่วงเวลาที่ใช้ในการคิดราคา เช่น ON_PEAK, OFF_PEAK
-  status          TransactionStatus @default(ACTIVE) // สถานะธุรกรรม: ACTIVE, COMPLETED, FAILED, CANCELED
-  stopReason      String?           // เหตุผลที่หยุดชาร์จ เช่น "User stopped", "Full battery"
-  meterValues     MeterValue[]      // ค่ามิเตอร์ตลอดการชาร์จ
+  transactionId   String            @unique
+  ocppTransactionId String?         @unique
+  userId          String
+  vehicleId       String?
+  chargePointId   String
+  connectorId     String
+  startTime       DateTime
+  endTime         DateTime?
+  startMeterValue Float             @default(0)
+  endMeterValue   Float?
+  totalEnergy     Float?
+  totalCost       Float?
+  appliedRate     Float?
+  status          TransactionStatus @default(ACTIVE)
+  stopReason      String?
   chargePoint     ChargePoint       @relation(fields: [chargePointId], references: [id])
   connector       Connector         @relation(fields: [connectorId], references: [id])
   user            User              @relation(fields: [userId], references: [id])
   vehicle         UserVehicle?      @relation(fields: [vehicleId], references: [id])
 
   @@map("transactions")
-}
-
-model MeterValue {
-  id            String      @id @default(cuid())
-  transactionId String
-  timestamp     DateTime
-  value         Float
-  power         Float?
-  current       Float?
-  voltage       Float?
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-
-  @@map("meter_values")
-}
-
-model ChargingSession {
-  id            String        @id @default(cuid())
-  sessionId     String        @unique
-  chargePointId String
-  connectorId   String
-  userId        String?
-  status        SessionStatus @default(ACTIVE)
-  startTime     DateTime      @default(now())
-  endTime       DateTime?
-  lastActivity  DateTime      @default(now())
-  chargePoint   ChargePoint   @relation(fields: [chargePointId], references: [id])
-  connector     Connector     @relation(fields: [connectorId], references: [id])
-
-  @@map("charging_sessions")
-}
-
-model Reservation {
-  id            String            @id @default(cuid())
-  userId        String
-  chargePointId String
-  connectorId   String?
-  startTime     DateTime
-  endTime       DateTime
-  status        ReservationStatus @default(ACTIVE)
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-
-  @@map("reservations")
 }
 
 model OCPPMessage {
@@ -223,6 +234,7 @@ model Notification {
 
   @@map("notifications")
 }
+
 
 enum UserStatus {
   ACTIVE
@@ -268,10 +280,10 @@ enum ConnectorType {
 
 enum ConnectorStatus {
   AVAILABLE
-  PREPARUNG
+  PREPARING
   CHARGING
-  SUSPENDEDEV
-  SUSPENDEDEVSE
+  SUSPENDED_EV
+  SUSPENDED_EVSE
   RESERVED
   UNAVAILABLE
   FAULTED
@@ -323,38 +335,22 @@ enum UserType {
   BUSINESS
 }
 
-enum PricingPeriod {
-  ON_PEAK
-  OFF_PEAK
+
+
+
+
+enum PricingTierType {
+  STANDARD
+  PEAK_OFF_PEAK
+  TIME_OF_USE
+  DYNAMIC
+}
+enum TaxpayerType {
+  PERSONAL
+  JURISTIC
 }
 
-model Admin {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  password     String
-  role         AdminRole @default(STAFF)
-  firstName    String?
-  lastName     String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  refreshTokens AdminRefreshToken[]
-}
-
-model AdminRefreshToken {
-  id           String   @id @default(cuid())
-  token        String   @unique
-  adminId      String
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
-  isRevoked    Boolean  @default(false)
-  revokedAt    DateTime?
-  admin        Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
-
-  @@map("admin_refresh_tokens")
-}
-
-enum AdminRole {
-  SUPERADMIN
-  STAFF
+enum BranchType {
+  HEAD_OFFICE
+  BRANCH
 }

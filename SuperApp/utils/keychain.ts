@@ -4,8 +4,11 @@ import * as SecureStore from "expo-secure-store";
 const SERVICE_NAME = "SuperApp";
 
 export interface LoginCredentials {
+  id?: string; // เพิ่ม user id (optional)
   phoneNumber: string;
   password: string;
+  firebaseUid?: string; // เพิ่ม firebaseUid (optional)
+  fullName?: string; // เพิ่ม fullName (optional)
 }
 
 export interface AuthTokens {
@@ -61,6 +64,19 @@ export const storeTokens = async (tokens: AuthTokens): Promise<boolean> => {
     return true;
   } catch (error) {
     console.error("Error storing tokens:", error);
+    return false;
+  }
+};
+
+/**
+ * Clear stored authentication tokens
+ */
+export const clearTokens = async (): Promise<boolean> => {
+  try {
+    await SecureStore.deleteItemAsync(`${SERVICE_NAME}_tokens`);
+    return true;
+  } catch (error) {
+    console.error("Error clearing tokens:", error);
     return false;
   }
 };

@@ -2,8 +2,11 @@ import { cors } from '@elysiajs/cors';
 import { jwt } from '@elysiajs/jwt';
 import { fromTypes, openapi } from '@elysiajs/openapi';
 import { Elysia, t } from 'elysia';
+import { logger, requestLogger } from './lib/logger';
 import { prisma } from './lib/prisma';
-import { serviceContainer } from './services';
+import { serviceContainer } from './user';
+import { adminServiceContainer } from './admin';
+import { authMiddleware } from './middleware/auth';
 
 // Get services from container
 const { jwtService } = serviceContainer;
@@ -36,7 +39,70 @@ const authenticatedProfileResponseModel = t.Object({
   })
 }, { description: 'Authenticated user profile response payload' });
 
+const PUBLIC_ROUTES = [
+  '/health',
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/refresh'
+];
+
+const GATEWAY_API_KEY = process.env.WS_GATEWAY_API_KEY || 'your-api-key';
+
+const extractGatewayKey = (request: Request) => {
+  const headerValue =
+    request.headers.get('x-api-key') ||
+    request.headers.get('authorization') ||
+    '';
+
+  if (!headerValue) {
+    return null;
+  }
+
+  return headerValue.startsWith('Bearer ')
+    ? headerValue.substring(7).trim()
+    : headerValue.trim();
+};
+
+type GatewayRouteRule = {
+  methods: string[];
+  pattern: RegExp;
+};
+
+const GATEWAY_ROUTE_RULES: GatewayRouteRule[] = [
+  { methods: ['GET'], pattern: /^\/api\/chargepoints\/ws-gateway\/chargepoints$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/validate-whitelist$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/validate-ocpp$/ },
+  { methods: ['PUT'], pattern: /^\/api\/chargepoints\/[^/]+\/connection-status$/ },
+  { methods: ['GET'], pattern: /^\/api\/chargepoints\/[^/]+$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/status$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/update-from-boot$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/heartbeat$/ },
+  { methods: ['GET'], pattern: /^\/api\/chargepoints\/check-connectors\/[^/]+$/ },
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/create-connectors$/ },
+  { methods: ['POST'], pattern: /^\/api\/transactions\/authorize$/ },
+  { methods: ['POST'], pattern: /^\/api\/transactions\/[^/]+\/start$/ },
+  { methods: ['POST'], pattern: /^\/api\/transactions\/ocpp\/[^/]+\/stop$/ }
+];
+
+const isGatewayRoute = (method: string, path: string) =>
+  GATEWAY_ROUTE_RULES.some(
+    (rule) =>
+      rule.methods.includes(method.toUpperCase()) && rule.pattern.test(path)
+  );
+
+const isPublicRoute = (path: string) => {
+  if (path.startsWith('/openapi')) {
+    return true;
+  }
+
+  return PUBLIC_ROUTES.some(
+    (route) => path === route || path.startsWith(`${route}/`)
+  );
+};
+
 export const app = new Elysia()
+  .use(requestLogger)
   .use(cors())
   .model({
     User: userModel,
@@ -79,57 +145,89 @@ export const app = new Elysia()
     name: 'jwt',
     secret: process.env.JWT_SECRET || 'your-secret-key'
   }))
+  .use(authMiddleware(jwtService))
+  // Global guard: block non-public routes when JWT is missing or invalid
+  .onBeforeHandle(({ request, user, set }: any) => {
+    if (request.method === 'OPTIONS') {
+      return;
+    }
+
+    const path = new URL(request.url).pathname;
+    const method = request.method.toUpperCase();
+
+    if (isPublicRoute(path)) {
+      return;
+    }
+
+    if (isGatewayRoute(method, path)) {
+      const gatewayKey = extractGatewayKey(request);
+      if (gatewayKey && gatewayKey === GATEWAY_API_KEY) {
+        return;
+      }
+
+      logger.warn('Unauthorized gateway access attempt', {
+        path,
+        method,
+        status: 401
+      });
+      set.status = 401;
+      return {
+        success: false,
+        message: 'Unauthorized: invalid gateway key'
+      };
+    }
+
+    if (!user) {
+      // ตรวจสอบว่าอยู่ใน development mode หรือไม่
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      const bypassAuth = process.env.DEV_BYPASS_AUTH === 'true';
+      
+      if (isDevelopment && bypassAuth) {
+        console.log('🔓 Development mode: Allowing access without authentication for', path);
+        return; // อนุญาตให้เข้าถึงได้
+      }
+      
+      logger.warn('Unauthorized API access blocked', {
+        path,
+        method,
+        status: 401
+      });
+      set.status = 401;
+      return {
+        success: false,
+        message: 'Unauthorized: missing or invalid token'
+      };
+    }
+  })
   .use(serviceContainer.getAuthController())
   .use(serviceContainer.getUserController())
   .use(serviceContainer.getChargePointController())
-  .derive(async ({ request, set }: { request: Request; set: any }) => {
-    const authHeader = request.headers.get('authorization');
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return {
-        user: null
-      };
-    }
-
-    const token = authHeader.substring(7);
-    const payload = await jwtService.verifyToken(token);
-
-    if (!payload) {
-      return {
-        user: null
-      };
-    }
-
-    // Fetch user from database to ensure they still exist and are active
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: {
-        id: true,
-        phoneNumber: true,
-        status: true,
-        typeUser: true,
-        createdAt: true
-      }
-    });
-
-    if (!user || user.status !== 'ACTIVE') {
-      return {
-        user: null
-      };
-    }
-
-    return {
-      user
-    };
-  })
+  .use(adminServiceContainer.getAuthController())
+  .use(adminServiceContainer.getChargePointController())
+  .use(serviceContainer.getTransactionController())
   .guard(
-    ({ user }: any) => !!user,
+    ({ user }: any) => {
+      // Allow access in development mode even without user
+      if (process.env.NODE_ENV === 'development' && process.env.DEV_BYPASS_AUTH === 'true') {
+        return true;
+      }
+      return !!user;
+    },
     (app: any) =>
       app.get('/api/profile', ({ user }: any) => {
+        // In development mode, provide mock user if no user is available
+        const profileUser = user || (process.env.NODE_ENV === 'development' && process.env.DEV_BYPASS_AUTH === 'true' ? {
+          id: 'dev-user-123',
+          phoneNumber: '+66999999999',
+          status: 'ACTIVE',
+          typeUser: 'USER',
+          createdAt: new Date().toISOString()
+        } : null);
+
         return {
           success: true,
           data: {
-            user
+            user: profileUser
           }
         };
       }, {

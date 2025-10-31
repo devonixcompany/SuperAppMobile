@@ -6,6 +6,7 @@ import { gatewaySessionManager } from './handlers/gatewaySessionManager';
 import { sessionMonitor } from './handlers/sessionMonitor';
 import { subprotocolToVersion } from './handlers/versionNegotiation';
 import { UserConnectionManager } from './services/UserConnectionManager';
+import { BACKEND_BASE_URL, WS_GATEWAY_API_KEY } from './config/env';
 
 // ฟังก์ชันจัดการ RemoteStartTransaction
 async function handleRemoteStartTransaction(chargePoint: any, data: any, userWs: WebSocket) {
@@ -214,8 +215,9 @@ const userConnectionManager = new UserConnectionManager();
 
 // กำหนดค่าการตรวจสอบ heartbeat ของเครื่องชาร์จหลังจากโหลดข้อมูลจากฐานข้อมูล
 const HEARTBEAT_CHECK_INITIAL_DELAY_MS = 5000;   // หน่วงเวลา 5 วินาทีหลังเริ่มระบบก่อนเช็กครั้งแรก
-const HEARTBEAT_CHECK_INTERVAL_MS = 60000;       // ตรวจสอบทุก ๆ 60 วินาที
-const SINGLE_CHARGE_POINT_CHECK_DELAY_MS = 3000; // เวลารอหลังจากมีเครื่องชาร์จเชื่อมต่อใหม่
+const HEARTBEAT_CHECK_INTERVAL_MS = 30000;       // ตรวจสอบทุก ๆ 30 วินาที (เร็วขึ้นจากเดิม 60 วินาที)
+const SINGLE_CHARGE_POINT_CHECK_DELAY_MS = 2000; // เวลารอหลังจากมีเครื่องชาร์จเชื่อมต่อใหม่ (เร็วขึ้นจากเดิม 3 วินาที)
+const RECONNECTION_HEARTBEAT_DELAY_MS = 1000;    // เวลารอก่อนส่ง heartbeat หลังจากเชื่อมต่อใหม่
 
 let heartbeatCheckInitialTimeout: NodeJS.Timeout | null = null;
 let heartbeatCheckInterval: NodeJS.Timeout | null = null;
@@ -236,6 +238,7 @@ function cancelPendingChargePointHeartbeatCheck(chargePointId: string): void {
  * ตรวจสอบการตอบสนองของเครื่องชาร์จที่เชื่อมต่ออยู่
  * - ส่ง WebSocket ping frame เพื่อให้เครื่องชาร์จตอบ pong
  * - ส่ง TriggerMessage (Heartbeat) เพื่อกระตุ้นให้เครื่องชาร์จส่ง Heartbeat ตามมาตรฐาน OCPP
+ * Enhanced: เพิ่มการตรวจสอบสถานะการเชื่อมต่อและการจัดการ reconnection
  */
 function performChargePointHeartbeatCheck(reason: string, targetChargePointIds?: string[]): void {
   const allChargePoints = gatewaySessionManager.getAllChargePoints();
@@ -256,6 +259,7 @@ function performChargePointHeartbeatCheck(reason: string, targetChargePointIds?:
 
   let pingSentCount = 0;
   let triggerSentCount = 0;
+  let reconnectionDetected = 0;
 
   targetChargePoints.forEach((chargePoint) => {
     if (!chargePoint.ws || chargePoint.ws.readyState !== WebSocket.OPEN) {
@@ -265,13 +269,32 @@ function performChargePointHeartbeatCheck(reason: string, targetChargePointIds?:
       return;
     }
 
+    // ตรวจสอบว่าเป็นการเชื่อมต่อใหม่หรือไม่ (เชื่อมต่อมาใน 10 วินาทีที่ผ่านมา)
+    const connectionTime = chargePoint.connectedAt ? new Date(chargePoint.connectedAt).getTime() : 0;
+    const now = Date.now();
+    const isRecentConnection = (now - connectionTime) < 10000; // 10 วินาที
+
+    if (isRecentConnection) {
+      reconnectionDetected++;
+      console.log(`🔄 ตรวจพบการเชื่อมต่อใหม่: ${chargePoint.chargePointId} (เชื่อมต่อเมื่อ ${Math.round((now - connectionTime) / 1000)} วินาทีที่แล้ว)`);
+    }
+
     try {
+      // ส่ง WebSocket ping
       chargePoint.ws.ping();
       pingSentCount++;
+
+      // สำหรับการเชื่อมต่อใหม่ ส่ง heartbeat ทันที
+      if (isRecentConnection) {
+        setTimeout(() => {
+          sendImmediateHeartbeat(chargePoint);
+        }, RECONNECTION_HEARTBEAT_DELAY_MS);
+      }
     } catch (error) {
       console.error(`❌ ส่ง ping ไปยัง ${chargePoint.chargePointId} ไม่สำเร็จ:`, error);
     }
 
+    // ส่ง TriggerMessage สำหรับ Heartbeat
     const messageId = `trigger-heartbeat-${chargePoint.chargePointId}-${Date.now()}-${Math.random()
       .toString(36)
       .slice(2, 6)}`;
@@ -291,9 +314,38 @@ function performChargePointHeartbeatCheck(reason: string, targetChargePointIds?:
     }
   });
 
-  console.log(
-    `📡 ตรวจสอบ heartbeat (${reason}) เสร็จสิ้น: ping=${pingSentCount}/${targetChargePoints.length}, TriggerMessage=${triggerSentCount}`
-  );
+  const statusMessage = reconnectionDetected > 0 
+    ? `📡 ตรวจสอบ heartbeat (${reason}) เสร็จสิ้น: ping=${pingSentCount}/${targetChargePoints.length}, TriggerMessage=${triggerSentCount}, การเชื่อมต่อใหม่=${reconnectionDetected}`
+    : `📡 ตรวจสอบ heartbeat (${reason}) เสร็จสิ้น: ping=${pingSentCount}/${targetChargePoints.length}, TriggerMessage=${triggerSentCount}`;
+  
+  console.log(statusMessage);
+}
+
+/**
+ * ส่ง heartbeat ทันทีสำหรับเครื่องชาร์จที่เชื่อมต่อใหม่
+ * Send immediate heartbeat for newly connected charge points
+ */
+function sendImmediateHeartbeat(chargePoint: any): void {
+  if (!chargePoint.ws || chargePoint.ws.readyState !== WebSocket.OPEN) {
+    return;
+  }
+
+  try {
+    const messageId = `immediate-heartbeat-${chargePoint.chargePointId}-${Date.now()}`;
+    const heartbeatMessage = [
+      2, // CALL message type
+      messageId,
+      'TriggerMessage',
+      {
+        requestedMessage: 'Heartbeat'
+      }
+    ];
+
+    chargePoint.ws.send(JSON.stringify(heartbeatMessage));
+    console.log(`💓 ส่ง immediate heartbeat ไปยัง ${chargePoint.chargePointId} สำหรับการเชื่อมต่อใหม่`);
+  } catch (error) {
+    console.error(`❌ ส่ง immediate heartbeat ไปยัง ${chargePoint.chargePointId} ไม่สำเร็จ:`, error);
+  }
 }
 
 /**
@@ -393,17 +445,27 @@ export function getAllCacheData(): Map<string, any> {
 async function initializeCache() {
   try {
     console.log('Initializing charge point cache...');
-    
     // Step 1: เรียก API เพื่อดึงข้อมูล charge points
-    const response = await fetch('http://localhost:8080/api/chargepoints/ws-gateway/chargepoints');
+    const response = await fetch(`${BACKEND_BASE_URL}/api/chargepoints/ws-gateway/chargepoints`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Api-Key': WS_GATEWAY_API_KEY
+      }
+    });
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const result = await response.json() as { success: boolean; data: any[] };
-    const chargePoints = result.data as any[];
-        // Step 2: เก็บข้อมูล charge point ลงในแคชโดยใช้ chargePointIdentity เป็นคีย์หลัก
+    const result = await response.json() as { success: boolean; data?: any };
+    const chargePoints = Array.isArray(result?.data) ? result.data as any[] : null;
+
+    if (!chargePoints) {
+      console.error('⚠️ Charge point payload is invalid:', result);
+      throw new Error('Charge point API response does not contain a valid data array');
+    }
+
+    // Step 2: เก็บข้อมูล charge point ลงในแคชโดยใช้ chargePointIdentity เป็นคีย์หลัก
     chargePoints.forEach(cp => {
       chargePointCache.set(cp.chargePointIdentity, cp);
       console.log(`Cached charge point: ${cp.chargePointIdentity} (Serial: ${cp.serialNumber})`);
@@ -443,21 +505,22 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
   console.log('มีการพยายามเชื่อมต่อ User WebSocket ใหม่');
   
   try {
-    // แยก charge point ID และ connector ID จาก URL path
+    // แยก charge point ID, connector ID และ user ID จาก URL path
     const url = new URL(request.url || '', `http://${request.headers.host}`);
     const pathParts = url.pathname.split('/').filter(part => part !== '');
     
-    // ตรวจสอบรูปแบบ URL: /user-cp/{chargePointId}/{connectorId}
-    if (pathParts.length !== 3 || pathParts[0] !== 'user-cp') {
-      console.error('รูปแบบ URL ของผู้ใช้ไม่ถูกต้อง ต้องเป็น /user-cp/{chargePointId}/{connectorId}');
+    // ตรวจสอบรูปแบบ URL: /user-cp/{chargePointId}/{connectorId}/{userId}
+    if (pathParts.length !== 4 || pathParts[0] !== 'user-cp') {
+      console.error('รูปแบบ URL ของผู้ใช้ไม่ถูกต้อง ต้องเป็น /user-cp/{chargePointId}/{connectorId}/{userId}');
       ws.close(1008, 'Invalid URL format');
       return;
     }
     
     const chargePointId = pathParts[1];
     const connectorId = pathParts[2];
+    const userId = pathParts[3];
     
-    console.log(`เชื่อมต่อผู้ใช้สำหรับ Charge Point: ${chargePointId} หัวชาร์จ: ${connectorId}`);
+    console.log(`เชื่อมต่อผู้ใช้สำหรับ Charge Point: ${chargePointId} หัวชาร์จ: ${connectorId} ผู้ใช้: ${userId}`);
     
     // ตรวจสอบว่า charge point มีอยู่ในระบบหรือไม่
     // ตรวจสอบทั้งใน gatewaySessionManager และ cache
@@ -470,8 +533,8 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
       return;
     }
     
-    // เพิ่ม connection ลงใน UserConnectionManager
-    userConnectionManager.addConnection(ws, chargePointId, connectorId);
+    // เพิ่ม connection ลงใน UserConnectionManager พร้อม userId
+    userConnectionManager.addConnection(ws, chargePointId, connectorId, userId);
     console.log('สถานะ Charge Point ปัจจุบัน:', chargePoint);
     
     // จัดการข้อความที่เข้ามาจาก user WebSocket
@@ -556,6 +619,9 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
     
   } catch (error) {
     console.error('❌ Failed to initialize cache:', error);
+    if (error instanceof Error && error.stack) {
+      console.error('Stack trace:', error.stack);
+    }
     console.log('⚠️ เซิร์ฟเวอร์จะทำงานต่อโดยไม่มีข้อมูลแคช');
   }
 }
@@ -937,30 +1003,198 @@ setInterval(() => {
 }, 5 * 60 * 1000); // Every 5 minutes
 
 /**
+ * ส่งข้อความแจ้งเตือนการเริ่มต้น server ไปยังเครื่องชาร์จที่เชื่อมต่อใหม่
+ * Send server startup notification to newly connected charge points
+ */
+async function notifyChargePointsServerStartup(): Promise<void> {
+  // รอให้ charge points เชื่อมต่อเข้ามาก่อน
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  const activeChargePoints = gatewaySessionManager.getAllChargePoints();
+  
+  if (activeChargePoints.length === 0) {
+    console.log('📡 ยังไม่มีเครื่องชาร์จเชื่อมต่อ ข้ามการแจ้งเตือนการเริ่มต้น server');
+    return;
+  }
+
+  console.log(`📡 กำลังส่งข้อความแจ้งเตือนการเริ่มต้น server ไปยังเครื่องชาร์จ ${activeChargePoints.length} เครื่อง...`);
+  
+  const notifications = activeChargePoints.map(async (chargePoint) => {
+    if (!chargePoint.ws || chargePoint.ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    try {
+      // ส่ง DataTransfer message เพื่อแจ้งเตือนการเริ่มต้น server
+      const messageId = `startup-notify-${chargePoint.chargePointId}-${Date.now()}`;
+      const startupNotification = [
+        2, // CALL message type
+        messageId,
+        'DataTransfer',
+        {
+          vendorId: 'SuperApp',
+          messageId: 'ServerStartup',
+          data: JSON.stringify({
+            message: 'Server has started successfully',
+            timestamp: new Date().toISOString(),
+            serverVersion: '1.0.0'
+          })
+        }
+      ];
+
+      chargePoint.ws.send(JSON.stringify(startupNotification));
+      console.log(`✅ ส่งข้อความแจ้งเตือนการเริ่มต้นไปยัง ${chargePoint.chargePointId} แล้ว`);
+      
+    } catch (error) {
+      console.error(`❌ ไม่สามารถส่งข้อความแจ้งเตือนการเริ่มต้นไปยัง ${chargePoint.chargePointId}:`, error);
+    }
+  });
+
+  await Promise.all(notifications);
+  console.log('📡 ส่งข้อความแจ้งเตือนการเริ่มต้น server เสร็จสิ้น');
+}
+
+/**
+ * ส่ง TriggerMessage เพื่อขอสถานะปัจจุบันจากเครื่องชาร์จ
+ * Send TriggerMessage to request current status from charge points
+ */
+async function requestChargePointsStatus(): Promise<void> {
+  // รอให้ charge points เชื่อมต่อเข้ามาก่อน
+  await new Promise(resolve => setTimeout(resolve, 3000));
+  
+  const activeChargePoints = gatewaySessionManager.getAllChargePoints();
+  
+  if (activeChargePoints.length === 0) {
+    console.log('📊 ยังไม่มีเครื่องชาร์จเชื่อมต่อ ข้ามการขอสถานะ');
+    return;
+  }
+
+  console.log(`📊 กำลังขอสถานะปัจจุบันจากเครื่องชาร์จ ${activeChargePoints.length} เครื่อง...`);
+  
+  const statusRequests = activeChargePoints.map(async (chargePoint) => {
+    if (!chargePoint.ws || chargePoint.ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    try {
+      // ส่ง TriggerMessage เพื่อขอ StatusNotification
+      const messageId = `trigger-status-${chargePoint.chargePointId}-${Date.now()}`;
+      const triggerStatusMessage = [
+        2, // CALL message type
+        messageId,
+        'TriggerMessage',
+        {
+          requestedMessage: 'StatusNotification'
+        }
+      ];
+
+      chargePoint.ws.send(JSON.stringify(triggerStatusMessage));
+      console.log(`📊 ขอสถานะจาก ${chargePoint.chargePointId} แล้ว`);
+      
+      // ส่ง TriggerMessage เพื่อขอ MeterValues ด้วย
+      const meterMessageId = `trigger-meter-${chargePoint.chargePointId}-${Date.now()}`;
+      const triggerMeterMessage = [
+        2, // CALL message type
+        meterMessageId,
+        'TriggerMessage',
+        {
+          requestedMessage: 'MeterValues'
+        }
+      ];
+
+      // รอสักครู่ก่อนส่งคำขอถัดไป
+      await new Promise(resolve => setTimeout(resolve, 200));
+      chargePoint.ws.send(JSON.stringify(triggerMeterMessage));
+      console.log(`📊 ขอค่ามิเตอร์จาก ${chargePoint.chargePointId} แล้ว`);
+      
+    } catch (error) {
+      console.error(`❌ ไม่สามารถขอสถานะจาก ${chargePoint.chargePointId}:`, error);
+    }
+  });
+
+  await Promise.all(statusRequests);
+  console.log('📊 ขอสถานะจากเครื่องชาร์จเสร็จสิ้น');
+}
+async function notifyChargePointsBeforeShutdown(): Promise<void> {
+  const activeChargePoints = gatewaySessionManager.getAllChargePoints();
+  
+  if (activeChargePoints.length === 0) {
+    console.log('ไม่มีเครื่องชาร์จที่เชื่อมต่ออยู่ ข้ามการแจ้งเตือน');
+    return;
+  }
+
+  console.log(`กำลังส่งข้อความแจ้งเตือนไปยังเครื่องชาร์จ ${activeChargePoints.length} เครื่อง...`);
+  
+  const notifications = activeChargePoints.map(async (chargePoint) => {
+    if (!chargePoint.ws || chargePoint.ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    try {
+      // ส่ง DataTransfer message เพื่อแจ้งเตือนการปิด server
+      const messageId = `shutdown-notify-${chargePoint.chargePointId}-${Date.now()}`;
+      const shutdownNotification = [
+        2, // CALL message type
+        messageId,
+        'DataTransfer',
+        {
+          vendorId: 'SuperApp',
+          messageId: 'ServerShutdown',
+          data: JSON.stringify({
+            message: 'Server is shutting down gracefully',
+            timestamp: new Date().toISOString(),
+            reconnectExpected: true
+          })
+        }
+      ];
+
+      chargePoint.ws.send(JSON.stringify(shutdownNotification));
+      console.log(`✅ ส่งข้อความแจ้งเตือนไปยัง ${chargePoint.chargePointId} แล้ว`);
+      
+      // รอสักครู่เพื่อให้ข้อความถูกส่งไป
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+    } catch (error) {
+      console.error(`❌ ไม่สามารถส่งข้อความแจ้งเตือนไปยัง ${chargePoint.chargePointId}:`, error);
+    }
+  });
+
+  await Promise.all(notifications);
+  
+  // รอเพิ่มเติมเพื่อให้แน่ใจว่าข้อความถูกส่งไปแล้ว
+  await new Promise(resolve => setTimeout(resolve, 500));
+  console.log('ส่งข้อความแจ้งเตือนเสร็จสิ้น');
+}
+
+/**
  * จัดการการปิดโปรแกรมอย่างสุภาพเมื่อได้รับสัญญาณ SIGTERM
  * Graceful shutdown on SIGTERM signal
- * Step 1: หยุดการตรวจสอบ session
- * Step 2: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
- * Step 3: ปิด WebSocket server
+ * Step 1: แจ้งเตือนเครื่องชาร์จก่อนปิด server
+ * Step 2: หยุดการตรวจสอบ session
+ * Step 3: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
+ * Step 4: ปิด WebSocket server
  */
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('ได้รับสัญญาณ SIGTERM กำลังปิดระบบอย่างปลอดภัย...');
   
-  // Step 1: หยุดการตรวจสอบ session
+  // Step 1: แจ้งเตือนเครื่องชาร์จก่อนปิด server
+  await notifyChargePointsBeforeShutdown();
+  
+  // Step 2: หยุดการตรวจสอบ session
   stopChargePointHeartbeatChecks();
   sessionMonitor.stopMonitoring();
   
-  // Step 2: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
+  // Step 3: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
   const activeChargePoints = gatewaySessionManager.getAllChargePoints();
   activeChargePoints.forEach(chargePoint => {
     gatewaySessionManager.removeChargePoint(chargePoint.chargePointId);
   });
   
-  // Step 3: ปิด WebSocket server
+  // Step 4: ปิด WebSocket server
   wss.close(() => {
     console.log('ปิด WebSocket server เรียบร้อย');
     
-    // Step 4: ปิด HTTP server
+    // Step 5: ปิด HTTP server
     server.close(() => {
       console.log('ปิด HTTP server เรียบร้อย');
       process.exit(0);
@@ -971,28 +1205,32 @@ process.on('SIGTERM', () => {
 /**
  * จัดการการปิดโปรแกรมอย่างสุภาพเมื่อได้รับสัญญาณ SIGINT (Ctrl+C)
  * Graceful shutdown on SIGINT signal (Ctrl+C)
- * Step 1: หยุดการตรวจสอบ session
- * Step 2: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
- * Step 3: ปิด WebSocket server
+ * Step 1: แจ้งเตือนเครื่องชาร์จก่อนปิด server
+ * Step 2: หยุดการตรวจสอบ session
+ * Step 3: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
+ * Step 4: ปิด WebSocket server
  */
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('ได้รับสัญญาณ SIGINT กำลังปิดระบบอย่างปลอดภัย...');
   
-  // Step 1: หยุดการตรวจสอบ session
+  // Step 1: แจ้งเตือนเครื่องชาร์จก่อนปิด server
+  await notifyChargePointsBeforeShutdown();
+  
+  // Step 2: หยุดการตรวจสอบ session
   stopChargePointHeartbeatChecks();
   sessionMonitor.stopMonitoring();
   
-  // Step 2: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
+  // Step 3: ปิด charge points ที่ยังใช้งานอยู่ทั้งหมด
   const activeChargePoints = gatewaySessionManager.getAllChargePoints();
   activeChargePoints.forEach(chargePoint => {
     gatewaySessionManager.removeChargePoint(chargePoint.chargePointId);
   });
   
-  // Step 3: ปิด WebSocket server
+  // Step 4: ปิด WebSocket server
   wss.close(() => {
     console.log('ปิด WebSocket server เรียบร้อย');
     
-    // Step 4: ปิด HTTP server
+    // Step 5: ปิด HTTP server
     server.close(() => {
       console.log('ปิด HTTP server เรียบร้อย');
       process.exit(0);
@@ -1029,6 +1267,15 @@ server.listen(Number(PORT), HOST, async () => {
     const stats = gatewaySessionManager.getStats();
     console.log('สถิติเบื้องต้นของ gateway session:', stats);
   }, 1000);
+
+  // Step 5: ส่งข้อความแจ้งเตือนการเริ่มต้น server และขอสถานะจากเครื่องชาร์จ
+  notifyChargePointsServerStartup().catch(error => {
+    console.error('❌ เกิดข้อผิดพลาดในการส่งข้อความแจ้งเตือนการเริ่มต้น server:', error);
+  });
+
+  requestChargePointsStatus().catch(error => {
+    console.error('❌ เกิดข้อผิดพลาดในการขอสถานะจากเครื่องชาร์จ:', error);
+  });
 });
 
 // ส่งออก server สำหรับการทดสอบ

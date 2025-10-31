@@ -1,9 +1,20 @@
 import { Elysia } from 'elysia';
 import { JWTService } from '../lib/jwt';
 import { prisma } from '../lib/prisma';
+import { devAuthMiddleware } from './dev-auth';
 
-export const authMiddleware = (jwtService: JWTService) =>
-  new Elysia({ name: 'auth' })
+export const authMiddleware = (jwtService: JWTService) => {
+  // ตรวจสอบว่าอยู่ใน development mode หรือไม่
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const bypassAuth = process.env.DEV_BYPASS_AUTH === 'true';
+  
+  if (isDevelopment && bypassAuth) {
+    console.log('🔓 Using development auth middleware (bypassing authentication)');
+    return devAuthMiddleware();
+  }
+
+  console.log('🔒 Using production auth middleware');
+  return new Elysia({ name: 'auth' })
     .derive(async ({ request, set }) => {
       const authHeader = request.headers.get('authorization');
       
@@ -60,3 +71,4 @@ export const authMiddleware = (jwtService: JWTService) =>
         };
       }
     });
+};

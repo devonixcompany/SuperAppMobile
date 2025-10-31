@@ -32,7 +32,9 @@ export interface User {
   phoneNumber: string;
   firstName?: string;
   lastName?: string;
+  fullName?: string;
   email?: string;
+  firebaseUid?: string;
   createdAt?: string;
   updatedAt?: string;
 }

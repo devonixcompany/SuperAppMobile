@@ -1,81 +1,116 @@
-ขั้นตอน 1: กำหนดบทบาทและโฟลว์
+# Charge Session Implementation Plan
 
-เครื่องชาร์จ (Charge Point) เชื่อม WebSocket มาหา CSMS → ใช้ OCPP messages เช่น BootNotification, Heartbeat, MeterValues, StatusNotification
+This document outlines the steps required to implement the charge session flow, integrating the mobile application (SuperApp), backend service (backendBun), and WebSocket gateway (ws-gateway) with the charging station.
 
-CSMS รับข้อความจากเครื่องชาร์จ → ตีความ / อัปเดตฐานข้อมูล (สถานะ, มิเตอร์, หัวชาร์จ)
+## 1. Initiate Charge Session from SuperApp
 
-CSMS ส่งเหตุการณ์ (event) แบบเรียลไทม์ไปให้ผู้ใช้ที่สนใจ (User UI) ผ่านช่องทาง WebSocket (หรือ SSE/MQTT)
+**File:** `/Users/admin/Documents/GitHub/SuperAppMobile/SuperApp/app/charge-session/index.tsx`
 
-ผู้ใช้ (ผ่าน Web/Mobile) เชื่อม WebSocket กับ CSMS UI endpoint → สมัคร (subscribe) เครื่องชาร์จที่ตนสนใจ → รับการอัปเดตแบบเรียลไทม์
+**Action:**
+*   When a user initiates a charge, send a `RemoteStartTransaction` message to the WebSocket.
+*   **Crucially, before sending `RemoteStartTransaction`:**
+    *   Retrieve the `userId` from the device's keychain.
+    *   Call the `backendBun` API to create a new `Transaction` record in the database. This API call should return a unique `transactionId`.
+    *   Use this `transactionId` as the `idTag` in the `RemoteStartTransaction` message sent to the charging station.
 
-ขั้นตอน 2: กำหนด API & WebSocket Endpoint ที่ต้องทำ
+**Example WebSocket Message (with dynamic idTag):**
+```json
+{
+  "type": "RemoteStartTransaction",
+  "data": {
+    "connectorId": 1,
+    "idTag": "[TRANSACTION_ID_FROM_BACKEND]",
+    "timestamp": "YYYY-MM-DDTHH:mm:ss.SSSZ"
+  }
+}
+```
 
-REST API สำหรับผู้ใช้:
+## 2. Handle Authorization from Charging Station
 
-สมัครเครื่องชาร์จที่ตนสนใจ (subscribe)
+**File:** `/Users/admin/Documents/GitHub/SuperAppMobile/ws-gateway/src/versionModules/v1_6/handler.ts` (specifically around line 508)
 
-ดึงสถานะปัจจุบันของเครื่อง เช่น จำนวนหัว, กำลังชาร์จ, พลังงานที่ใช้
+**Action:**
+*   When the WebSocket gateway receives an `Authorize` message from the charging station (e.g., `[2,"20","Authorize",{"idTag":"EV-USER-001"}]`), it must:
+    *   Extract the `idTag` from the message.
+    *   Query the `Transaction` table in the database (via `backendBun` or directly if `ws-gateway` has database access) using the `idTag` to verify the transaction.
+    *   Based on the verification, send an appropriate authorization response back to the charging station.
 
-WebSocket endpoint สำหรับผู้ใช้:
+## 3. Handle Status Notifications and Initiate Stop Charge
 
-URL เช่น wss://api.yourdomain.com/ws/users
+**Action:**
+*   When the charging station sends a `StatusNotification` message indicating the charge is complete (e.g., `{"connectorId":1,"errorCode":"NoError","status":"SuspendedEV"}`), the system should:
+    *   Initiate a `RemoteStopTransaction` command to the charging station. This command should be sent from the `SuperApp` via the WebSocket.
 
-เมื่อเชื่อมต่อ → ตรวจสิทธิผู้ใช้ (token) → ส่งคำสั่ง subscribe เช่น { action: "subscribe", chargePointId: "CP_BKK_001" }
+## 4. Initiate Stop Charge from SuperApp
 
-เมื่อมีเหตุการณ์จากเครื่องที่ผู้ใช้สมัครไว้ → ส่งข้อมูลไปให้ทันที
+**File:** `/Users/admin/Documents/GitHub/SuperAppMobile/SuperApp/app/charge-session/index.tsx`
 
-ขั้นตอน 3: โฟลว์ของ WebSocket ระหว่าง CSMS ↔ผู้ใช้
+**Action:**
+*   When a user or the system (e.g., in response to a `StatusNotification`) initiates a stop charge, send a `RemoteStopTransaction` message to the WebSocket.
 
-เมื่อเครื่องชาร์จส่งข้อความ เช่น MeterValues / StatusNotification → CSMS รับและบันทึก
+**Example WebSocket Message (RemoteStopTransaction):**
+```json
+{
+  "type": "RemoteStopTransaction",
+  "data": {
+    "connectorId": 1,
+    "transactionId": 473792, // This should be the transactionId obtained during RemoteStartTransaction
+    "timestamp": "YYYY-MM-DDTHH:mm:ss.SSSZ"
+  }
+}
+```
 
-CSMS ตรวจว่าเครื่องใดที่เชื่อมอยู่ และมีผู้ใช้ (UI) สมัครอยู่ว่า “สนใจเครื่องนี้” หรือไม่
+## 5. Process StopTransaction Data
 
-CSMS ส่งเหตุการณ์ (event payload) ไปยังผู้ใช้ที่สมัคร ผ่าน WebSocket UI
+**Action:**
+*   Upon receiving a `StopTransaction` message from the charging station, which includes meter readings and timestamps (e.g., `meterStop`, `timestamp`, `transactionData`):
+    *   Extract the relevant data: `idTag`, `meterStop`, `timestamp`, `reason`, `transactionId`, and `transactionData` (including `sampledValue` for energy consumption).
+    *   Store this information in the database, updating the corresponding `Transaction` record.
 
-ผู้ใช้ได้รับและอัปเดต UI แบบทันที
-
-ขั้นตอน 4: กำหนดชนิดของ “เหตุการณ์” (Events) ที่ผู้ใช้ควรได้
-
-เริ่ม/หยุดการชาร์จ (StartTransaction / StopTransaction)
-
-พลังงานที่ชาร์จ (MeterValues) ทุก n วินาที
-
-สถานะหัวชาร์จ/สถานี (StatusNotification) เช่น Available, Occupied, Faulted
-
-จำนวนหัวชาร์จ, กำลังที่ใช้, ชนิดหัว (ตอนเชื่อมเครื่อง+config)
-
-เครื่องออฟไลน์ / reconnect
-
-ขั้นตอน 5: ตรวจสอบสิทธิ &การสมัคร
-
-เมื่อผู้ใช้สมัครเครื่อง (subscribe) → ตรวจว่า user มีสิทธิ ดูเครื่องนั้น (owner หรือได้รับสิทธิ)
-
-บันทึก mapping user ↔ chargePointId ↔ WebSocket session
-
-เมื่อมี session UI หลุด/disconnect → clean up subscription
-
-ขั้นตอน 6: เก็บสถานะทันที (Snapshot) +แสดงเมื่อผู้ใช้เข้ามา
-
-เมื่อผู้ใช้เปิดหน้า UI → ดึงสถานะล่าสุดของเครื่องก่อน (ผ่าน REST) เช่น กำลังชาร์จอยู่ไหม, จำนวนหัว, กำลังไฟ, มิเตอร์ล่าสุด
-
-จากนั้นเปิด WebSocket เพื่อรับอัปเดตเรียลไทม์
-
-ขั้นตอน 7: ตั้งระบบ WebSocket/Message Broker เพื่อรองรับหลายผู้ใช้
-
-ใช้ Pub/Sub (เช่น Redis, Kafka) เพื่อกระจายเหตุการณ์จาก CSMS → UI sessions
-
-WebSocket server สำหรับผู้ใช้ต้องสามารถรับและส่งข้อความจำนวนมากพร้อมกัน → ต้องวาง architecture รองรับ scale 
-Medium
-+1
-
-ตั้ง policy เช่น timeout, disconnect idle users, throttle ข้อความ (ถ้าข้อมูลเยอะ)
-
-ขั้นตอน 8: เชื่อมโยงกับฐานข้อมูลและโมเดลที่มีอยู่
-
-ในฐานข้อมูล ChargePoint มี field connectorCount → ใช้แสดงจำนวนหัว
-
-ตาราง Connector เก็บหัวแยกแต่ละอัน → ดึงชนิด (type) และ maxCurrent หรือ maxPower
-
-เมื่อผู้ใช้สมัครเครื่อง → UI จะเห็นจำนวนหัว + ชนิดหัว จากฐานข้อมูลก่อน
-
-จากนั้นรับเหตุการณ์ real-time เช่น “หัว 2 กำลังชาร์จ” จาก WebSocket
+**Example StopTransaction Data:**
+```json
+{
+  "method": "StopTransaction",
+  "params": {
+    "idTag": "FF88888801",
+    "meterStop": 12563,
+    "timestamp": "2025-10-29T09:02:44.206Z",
+    "reason": "EVDisconnected",
+    "transactionId": 528106,
+    "transactionData": [
+      {
+        "timestamp": "2025-10-29T08:52:11.706Z",
+        "sampledValue": [
+          {
+            "value": "0",
+            "context": "Transaction.Begin",
+            "format": "Raw",
+            "measurand": "Energy.Active.Import.Register",
+            "location": "Outlet",
+            "unit": "kWh"
+          }
+        ]
+      },
+      {
+        "timestamp": "2025-10-29T09:02:44.206Z",
+        "sampledValue": [
+          {
+            "value": "12.562500000000007",
+            "context": "Transaction.End",
+            "format": "Raw",
+            "measurand": "Energy.Active.Import.Register",
+            "location": "Outlet",
+            "unit": "kWh"
+          },
+          {
+            "value": "100",
+            "context": "Transaction.End",
+            "location": "EV",
+            "unit": "Percent",
+            "measurand": "SoC"
+          }
+        ]
+      }
+    ]
+  }
+}
