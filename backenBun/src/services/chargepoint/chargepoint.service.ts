@@ -151,12 +151,14 @@ export class ChargePointService {
     latitude?: number;
     longitude?: number;
     description?: string;
+    connectorCount?: number;
   }) {
     const protocol = this.convertProtocolToEnum(data.protocol);
     const chargePointId = data.id || randomUUID();
     const urlwebSocket = this.generateWebSocketUrl(data.chargePointIdentity, protocol);
+    const connectorCount = data.connectorCount || 2; // Default to 2 connectors for whitelist
 
-    return await this.prisma.chargePoint.create({
+    const newChargePoint = await this.prisma.chargePoint.create({
       data: {
         id: chargePointId,
         name: data.name,
@@ -168,8 +170,30 @@ export class ChargePointService {
         urlwebSocket,
         brand: data.brand,
         powerRating: data.powerRating,
+        connectorCount,
         ownershipType: OwnershipType.PRIVATE,
         isWhitelisted: true
+      }
+    });
+
+    // Create connectors for the charge point
+    await this.createConnectorsForChargePoint(
+      data.chargePointIdentity,
+      connectorCount
+    );
+
+    // Fetch the charge point with connectors
+    return await this.prisma.chargePoint.findUnique({
+      where: { id: chargePointId },
+      include: {
+        owner: true,
+        connectors: true,
+        _count: {
+          select: {
+            transactions: true,
+            sessions: true
+          }
+        }
       }
     });
   }
@@ -766,7 +790,30 @@ export class ChargePointService {
         }
       });
 
-      return newChargePoint;
+      // Create connectors for the charge point
+      if (connectorCount > 0) {
+        await this.createConnectorsForChargePoint(
+          newChargePoint.chargePointIdentity,
+          connectorCount
+        );
+      }
+
+      // Fetch the charge point again with connectors included
+      const chargePointWithConnectors = await this.prisma.chargePoint.findUnique({
+        where: { id: newChargePoint.id },
+        include: {
+          owner: true,
+          connectors: true,
+          _count: {
+            select: {
+              transactions: true,
+              sessions: true
+            }
+          }
+        }
+      });
+
+      return chargePointWithConnectors;
     } catch (error: any) {
       console.error('Error creating charge point:', error);
       throw new Error(`Failed to create charge point: ${error.message}`);
@@ -837,6 +884,11 @@ export class ChargePointService {
         });
       }
 
+      // Ensure chargePoint is not null at this point
+      if (!chargePoint) {
+        throw new Error(`Failed to create or find charge point with identity ${chargePointIdentity}`);
+      }
+
       const detailMap = new Map<number, { type?: string; maxCurrent?: number }>();
 
       for (const detail of connectorDetails || []) {
@@ -894,7 +946,7 @@ export class ChargePointService {
           ? detail.type.trim()
           : undefined;
         const createData: any = {
-          chargePointId: chargePoint.id,
+          chargePointId: chargePoint!.id,
           connectorId: i,
           type: this.normalizeConnectorType(rawType),
           typeDescription: rawType,
@@ -921,7 +973,7 @@ export class ChargePointService {
         const connector = await this.prisma.connector.upsert({
           where: {
             chargePointId_connectorId: {
-              chargePointId: chargePoint.id,
+              chargePointId: chargePoint!.id,
               connectorId: i
             }
           },
@@ -932,9 +984,9 @@ export class ChargePointService {
         connectors.push(connector);
       }
 
-      if (chargePoint.connectorCount !== totalConnectorSlots) {
+      if (chargePoint!.connectorCount !== totalConnectorSlots) {
         await this.prisma.chargePoint.update({
-          where: { id: chargePoint.id },
+          where: { id: chargePoint!.id },
           data: { connectorCount: totalConnectorSlots }
         });
       }

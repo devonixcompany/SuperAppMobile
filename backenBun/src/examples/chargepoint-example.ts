@@ -27,21 +27,6 @@ async function chargePointExamples() {
         protocol: "OCPP16",
         chargePointIdentity: "CP001",
         
-        // ข้อมูลหัวชาร์จที่ 1
-        connector1: "TYPE_2",
-        serialNumber1: "CONN-001-A",
-        connectorId1: 1,
-        powerRating1: 22.0,
-        
-        // ข้อมูลหัวชาร์จที่ 2
-        connector2: "TYPE_2",
-        serialNumber2: "CONN-001-B",
-        connectorId2: 2,
-        powerRating2: 22.0,
-
-        // ข้อมูลหัวชาร์จที่ 3-4 (required fields)
-        powerRating3: 0,
-        powerRating4: 0,
         
         // ราคา
         onPeakRate: 8.5,
