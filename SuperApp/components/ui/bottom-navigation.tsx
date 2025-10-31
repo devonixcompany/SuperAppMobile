@@ -48,7 +48,7 @@ export default function BottomNavigation({
       return (
         <View
           key={tab.id}
-          className="flex-1 items-center justify-center relative"
+          className="relative items-center justify-center flex-1"
         >
           {/* ปุ่ม QR แบบลอย */}
           <TouchableOpacity
@@ -62,7 +62,7 @@ export default function BottomNavigation({
               colors={["#1F274B", "#5EC1A0"]} // สีไล่จากซ้ายไปขวา
               start={{ x: 0, y: 0 }} // จุดเริ่มต้น
               end={{ x: 1, y: 0 }} // จุดสิ้นสุด
-              className="w-16 h-16 rounded-full items-center justify-center" // วงกลมขนาด 64x64px
+              className="items-center justify-center w-16 h-16 rounded-full" // วงกลมขนาด 64x64px
               style={{
                 // เงาโค้งมน
                 shadowColor: "#000",
@@ -85,7 +85,7 @@ export default function BottomNavigation({
       <TouchableOpacity
         key={tab.id}
         onPress={() => onTabPress(tab.id)} // เรียกฟังก์ชันพร้อมส่ง id ของ tab
-        className="flex-1 items-center justify-center py-2"
+        className="items-center justify-center flex-1 py-2"
       >
         {/* ไอคอน: ถ้าเป็น active ใช้ไอคอนแบบเต็ม ถ้าไม่ใช้แบบ outline */}
         <Ionicons
@@ -111,7 +111,7 @@ export default function BottomNavigation({
     // border-t: เส้นขอบด้านบน
     // px-4: padding ซ้าย-ขวา
     // pb-2 pt-2: padding บน-ล่าง
-    <View className="bg-white border-t border-gray-200 px-4 pb-2 pt-2">
+    <View className="px-4 pt-2 pb-2 bg-white border-t border-gray-200">
       {/* แถวของ tabs */}
       <View className="flex-row items-center justify-around">
         {/* วนลูปสร้างปุ่มแต่ละ tab */}
