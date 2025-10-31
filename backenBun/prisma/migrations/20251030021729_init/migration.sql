@@ -17,7 +17,7 @@ CREATE TYPE "ChargePointStatus" AS ENUM ('AVAILABLE', 'OCCUPIED', 'UNAVAILABLE',
 CREATE TYPE "ConnectorType" AS ENUM ('TYPE_1', 'TYPE_2', 'CHADEMO', 'CCS_COMBO_1', 'CCS_COMBO_2', 'TESLA', 'GB_T');
 
 -- CreateEnum
-CREATE TYPE "ConnectorStatus" AS ENUM ('AVAILABLE', 'PREPARUNG', 'CHARGING', 'SUSPENDEDEV', 'SUSPENDEDEVSE', 'RESERVED', 'UNAVAILABLE', 'FAULTED');
+CREATE TYPE "ConnectorStatus" AS ENUM ('AVAILABLE', 'PREPARING', 'CHARGING', 'SUSPENDEDEV', 'SUSPENDEDEVSE', 'RESERVED', 'UNAVAILABLE', 'FAULTED');
 
 -- CreateEnum
 CREATE TYPE "TransactionStatus" AS ENUM ('ACTIVE', 'COMPLETED', 'FAILED', 'CANCELED');
@@ -145,6 +145,7 @@ CREATE TABLE "connectors" (
 CREATE TABLE "transactions" (
     "id" TEXT NOT NULL,
     "transactionId" TEXT NOT NULL,
+    "ocppTransactionId" TEXT,
     "userId" TEXT NOT NULL,
     "vehicleId" TEXT,
     "chargePointId" TEXT NOT NULL,
@@ -161,49 +162,6 @@ CREATE TABLE "transactions" (
     "stopReason" TEXT,
 
     CONSTRAINT "transactions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "meter_values" (
-    "id" TEXT NOT NULL,
-    "transactionId" TEXT NOT NULL,
-    "timestamp" TIMESTAMP(3) NOT NULL,
-    "value" DOUBLE PRECISION NOT NULL,
-    "power" DOUBLE PRECISION,
-    "current" DOUBLE PRECISION,
-    "voltage" DOUBLE PRECISION,
-
-    CONSTRAINT "meter_values_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "charging_sessions" (
-    "id" TEXT NOT NULL,
-    "sessionId" TEXT NOT NULL,
-    "chargePointId" TEXT NOT NULL,
-    "connectorId" TEXT NOT NULL,
-    "userId" TEXT,
-    "status" "SessionStatus" NOT NULL DEFAULT 'ACTIVE',
-    "startTime" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "endTime" TIMESTAMP(3),
-    "lastActivity" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "charging_sessions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "reservations" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "chargePointId" TEXT NOT NULL,
-    "connectorId" TEXT,
-    "startTime" TIMESTAMP(3) NOT NULL,
-    "endTime" TIMESTAMP(3) NOT NULL,
-    "status" "ReservationStatus" NOT NULL DEFAULT 'ACTIVE',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "reservations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -232,6 +190,49 @@ CREATE TABLE "notifications" (
     CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "charging_sessions" (
+    "id" TEXT NOT NULL,
+    "sessionId" TEXT NOT NULL,
+    "chargePointId" TEXT NOT NULL,
+    "connectorId" TEXT NOT NULL,
+    "userId" TEXT,
+    "status" "SessionStatus" NOT NULL DEFAULT 'ACTIVE',
+    "startTime" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "endTime" TIMESTAMP(3),
+    "lastActivity" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "charging_sessions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "meter_values" (
+    "id" TEXT NOT NULL,
+    "transactionId" TEXT NOT NULL,
+    "timestamp" TIMESTAMP(3) NOT NULL,
+    "value" DOUBLE PRECISION NOT NULL,
+    "power" DOUBLE PRECISION,
+    "current" DOUBLE PRECISION,
+    "voltage" DOUBLE PRECISION,
+
+    CONSTRAINT "meter_values_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "reservations" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "chargePointId" TEXT NOT NULL,
+    "connectorId" TEXT,
+    "startTime" TIMESTAMP(3) NOT NULL,
+    "endTime" TIMESTAMP(3) NOT NULL,
+    "status" "ReservationStatus" NOT NULL DEFAULT 'ACTIVE',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "reservations_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_firebaseUid_key" ON "User"("firebaseUid");
 
@@ -255,6 +256,9 @@ CREATE UNIQUE INDEX "connectors_chargePointId_connectorId_key" ON "connectors"("
 
 -- CreateIndex
 CREATE UNIQUE INDEX "transactions_transactionId_key" ON "transactions"("transactionId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "transactions_ocppTransactionId_key" ON "transactions"("ocppTransactionId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "charging_sessions_sessionId_key" ON "charging_sessions"("sessionId");
@@ -281,10 +285,10 @@ ALTER TABLE "transactions" ADD CONSTRAINT "transactions_userId_fkey" FOREIGN KEY
 ALTER TABLE "transactions" ADD CONSTRAINT "transactions_vehicleId_fkey" FOREIGN KEY ("vehicleId") REFERENCES "user_vehicles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "meter_values" ADD CONSTRAINT "meter_values_transactionId_fkey" FOREIGN KEY ("transactionId") REFERENCES "transactions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "charging_sessions" ADD CONSTRAINT "charging_sessions_chargePointId_fkey" FOREIGN KEY ("chargePointId") REFERENCES "charge_points"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "charging_sessions" ADD CONSTRAINT "charging_sessions_connectorId_fkey" FOREIGN KEY ("connectorId") REFERENCES "connectors"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "meter_values" ADD CONSTRAINT "meter_values_transactionId_fkey" FOREIGN KEY ("transactionId") REFERENCES "transactions"("id") ON DELETE CASCADE ON UPDATE CASCADE;

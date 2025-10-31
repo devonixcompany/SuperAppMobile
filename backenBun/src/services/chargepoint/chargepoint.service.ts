@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import { ChargePointStatus, ConnectorType, OCPPVersion, OwnershipType } from '@prisma/client';
+import { ChargePointStatus, ConnectorStatus, ConnectorType, OCPPVersion, OwnershipType } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { prisma } from '../../lib/prisma';
 
@@ -408,14 +408,14 @@ export class ChargePointService {
   /**
    * แปลงสถานะ OCPP ให้ตรงกับ ConnectorStatus ของระบบ
    */
-  private mapOcppStatusToConnectorStatus(ocppStatus: string): any {
-    const statusMap: { [key: string]: string } = {
+  private mapOcppStatusToConnectorStatus(ocppStatus: string): ConnectorStatus {
+    const statusMap: { [key: string]: ConnectorStatus } = {
       'Available': 'AVAILABLE',
       'Preparing': 'PREPARING',
       'Charging': 'CHARGING',
       'Occupied': 'CHARGING',  // OCPP 'Occupied' maps to 'CHARGING'
-      'SuspendedEV': 'SUSPENDEDEV',
-      'SuspendedEVSE': 'SUSPENDEDEVSE',
+      'SuspendedEV': 'SUSPENDED_EV',
+      'SuspendedEVSE': 'SUSPENDED_EVSE',
       'Reserved': 'RESERVED',
       'Unavailable': 'UNAVAILABLE',
       'Faulted': 'FAULTED'
@@ -493,7 +493,7 @@ export class ChargePointService {
           _count: {
             select: {
               transactions: true,
-              sessions: true
+              charging_sessions: true
             }
           }
         },
@@ -615,11 +615,11 @@ export class ChargePointService {
           owner: true,
           connectors: true,
           _count: {
-            select: {
-              transactions: true,
-              sessions: true
-            }
+          select: {
+            transactions: true,
+            charging_sessions: true
           }
+        }
         }
       });
 
@@ -709,15 +709,58 @@ export class ChargePointService {
    */
   async createChargePoint(data: any) {
     try {
+      // Ensure all required fields are present with appropriate defaults
+      // Only include valid fields that exist in the Prisma schema
+      const chargePointData = {
+        name: data.name || `Auto-created: ${data.chargePointIdentity || 'Unknown'}`,
+        stationName: data.stationName || data.name || `Station: ${data.chargePointIdentity || 'Unknown'}`,
+        location: data.location || 'Unknown Location',
+        brand: data.brand || 'Unknown Brand',
+        serialNumber: data.serialNumber || `SN-${Date.now()}`,
+        powerRating: data.powerRating || 22,
+        protocol: data.protocol || 'OCPP16',
+        chargePointIdentity: data.chargePointIdentity,
+        // Optional fields - only include if provided and valid
+        ...(data.latitude !== undefined && { latitude: data.latitude }),
+        ...(data.longitude !== undefined && { longitude: data.longitude }),
+        ...(data.openingHours !== undefined && { openingHours: data.openingHours }),
+        ...(data.is24Hours !== undefined && { is24Hours: data.is24Hours }),
+        ...(data.powerSystem !== undefined && { powerSystem: data.powerSystem }),
+        ...(data.connectorCount !== undefined && { connectorCount: data.connectorCount }),
+        ...(data.csmsUrl !== undefined && { csmsUrl: data.csmsUrl }),
+        ...(data.status !== undefined && { status: data.status }),
+        ...(data.maxPower !== undefined && { maxPower: data.maxPower }),
+        ...(data.lastSeen !== undefined && { lastSeen: data.lastSeen }),
+        ...(data.heartbeatIntervalSec !== undefined && { heartbeatIntervalSec: data.heartbeatIntervalSec }),
+        ...(data.vendor !== undefined && { vendor: data.vendor }),
+        ...(data.model !== undefined && { model: data.model }),
+        ...(data.firmwareVersion !== undefined && { firmwareVersion: data.firmwareVersion }),
+        // Map ocppProtocol to ocppProtocolRaw if provided
+        ...(data.ocppProtocol !== undefined && { ocppProtocolRaw: data.ocppProtocol }),
+        ...(data.ocppProtocolRaw !== undefined && { ocppProtocolRaw: data.ocppProtocolRaw }),
+        ...(data.ocppSessionId !== undefined && { ocppSessionId: data.ocppSessionId }),
+        ...(data.isWhitelisted !== undefined && { isWhitelisted: data.isWhitelisted }),
+        ...(data.ownerId !== undefined && { ownerId: data.ownerId }),
+        ...(data.ownershipType !== undefined && { ownershipType: data.ownershipType }),
+        ...(data.isPublic !== undefined && { isPublic: data.isPublic }),
+        ...(data.onPeakRate !== undefined && { onPeakRate: data.onPeakRate }),
+        ...(data.onPeakStartTime !== undefined && { onPeakStartTime: data.onPeakStartTime }),
+        ...(data.onPeakEndTime !== undefined && { onPeakEndTime: data.onPeakEndTime }),
+        ...(data.offPeakRate !== undefined && { offPeakRate: data.offPeakRate }),
+        ...(data.offPeakStartTime !== undefined && { offPeakStartTime: data.offPeakStartTime }),
+        ...(data.offPeakEndTime !== undefined && { offPeakEndTime: data.offPeakEndTime }),
+        ...(data.urlwebSocket !== undefined && { urlwebSocket: data.urlwebSocket }),
+      };
+
       const newChargePoint = await this.prisma.chargePoint.create({
-        data,
+        data: chargePointData,
         include: {
           owner: true,
           connectors: true,
           _count: {
             select: {
               transactions: true,
-              sessions: true
+              charging_sessions: true
             }
           }
         }

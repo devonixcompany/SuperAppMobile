@@ -7,8 +7,8 @@
 export { authService } from './auth.service';
 export { chargepointService } from './chargepoint.service';
 export { userService } from './user.service';
+export { transactionService } from './transaction.service';
 
 // Export API client and utilities
 export { apiClient, http } from './client';
 export type { ApiError, ApiResponse } from './client';
-

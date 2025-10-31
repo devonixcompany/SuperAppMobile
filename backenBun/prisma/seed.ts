@@ -5,9 +5,11 @@ const prisma = new PrismaClient()
 async function main() {
   console.log('Start seeding...')
 
-  // สร้าง User
-  const user = await prisma.user.create({
-    data: {
+  // สร้าง User (upsert เพื่อหลีกเลี่ยงข้อมูลซ้ำ)
+  const user = await prisma.user.upsert({
+    where: { firebaseUid: 'firebase123' },
+    update: {},
+    create: {
       email: 'user@example.com',
       phoneNumber: '+66812345678',
       password: 'user123', // ในการใช้งานจริงควรเข้ารหัสก่อน
@@ -19,9 +21,11 @@ async function main() {
   })
   console.log('Created user:', user)
 
-  // สร้าง UserVehicle
-  const vehicle = await prisma.userVehicle.create({
-    data: {
+  // สร้าง UserVehicle (upsert เพื่อหลีกเลี่ยงข้อมูลซ้ำ)
+  const vehicle = await prisma.userVehicle.upsert({
+    where: { licensePlate: 'กข 1234 กรุงเทพ' },
+    update: {},
+    create: {
       userId: user.id,
       licensePlate: 'กข 1234 กรุงเทพ',
       make: 'Tesla',
@@ -31,9 +35,11 @@ async function main() {
   })
   console.log('Created vehicle:', vehicle)
 
-  // สร้าง ChargePoint
-  const chargePoint1 = await prisma.chargePoint.create({
-    data: {
+  // สร้าง ChargePoint (upsert เพื่อหลีกเลี่ยงข้อมูลซ้ำ)
+  const chargePoint1 = await prisma.chargePoint.upsert({
+    where: { chargePointIdentity: "CPID-CENWORLD-001" },
+    update: {},
+    create: {
       name: "Central World Charging Station",
       stationName: "EV Central World",
       location: "999/9 Rama I Rd, Pathum Wan, Pathum Wan District, Bangkok 10330",
@@ -54,8 +60,10 @@ async function main() {
   });
   console.log('Created charge point:', chargePoint1)
 
-  const chargePoint2 = await prisma.chargePoint.create({
-    data: {
+  const chargePoint2 = await prisma.chargePoint.upsert({
+    where: { chargePointIdentity: "CPID-BIGCLAD-002" },
+    update: {},
+    create: {
       name: "Big C Ladprao Charging Station", 
       stationName: "EV Big C Ladprao",
       location: "97/11 Phahon Yothin Rd, Chatuchak, Bangkok 10900",
@@ -76,9 +84,16 @@ async function main() {
   });
   console.log('Created charge point:', chargePoint2)
 
-  // สร้าง Connector สำหรับ ChargePoint แรก
-  const connector1 = await prisma.connector.create({
-    data: {
+  // สร้าง Connector สำหรับ ChargePoint แรก (upsert เพื่อหลีกเลี่ยงข้อมูลซ้ำ)
+  const connector1 = await prisma.connector.upsert({
+    where: {
+      chargePointId_connectorId: {
+        chargePointId: chargePoint1.id,
+        connectorId: 1
+      }
+    },
+    update: {},
+    create: {
       chargePointId: chargePoint1.id,
       connectorId: 1,
       type: 'TYPE_2',
@@ -89,9 +104,16 @@ async function main() {
   })
   console.log('Created connector:', connector1)
 
-  // สร้าง Connector สำหรับ ChargePoint ที่สอง
-  const connector2 = await prisma.connector.create({
-    data: {
+  // สร้าง Connector สำหรับ ChargePoint ที่สอง (upsert เพื่อหลีกเลี่ยงข้อมูลซ้ำ)
+  const connector2 = await prisma.connector.upsert({
+    where: {
+      chargePointId_connectorId: {
+        chargePointId: chargePoint2.id,
+        connectorId: 1
+      }
+    },
+    update: {},
+    create: {
       chargePointId: chargePoint2.id,
       connectorId: 1,
       type: 'TYPE_2',

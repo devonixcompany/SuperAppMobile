@@ -1,4 +1,6 @@
 import env from "@/config/env";
+import { transactionService } from "@/services/api";
+import { getCredentials } from "@/utils/keychain";
 import { normalizeWebSocketUrlToDevice } from "@/utils/network";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -7,6 +9,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Alert,
   Animated,
+  Dimensions,
   Easing,
   ScrollView,
   StyleSheet,
@@ -14,10 +17,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BlurView } from "expo-blur";
 
 type ConnectionState = "connecting" | "connected" | "error" | "closed";
 
@@ -49,6 +50,21 @@ type ChargingDataPayload = {
   cost?: number;
 };
 
+type TransactionSummaryPayload = {
+  transactionId: string;
+  chargePointIdentity?: string | null;
+  connectorNumber?: number | null;
+  startTime: string;
+  endTime: string | null;
+  durationSeconds: number | null;
+  totalEnergy: number | null;
+  meterStart: number | null;
+  meterStop: number | null;
+  totalCost: number | null;
+  appliedRate: number | null;
+  stopReason?: string | null;
+};
+
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const COLORS = {
@@ -67,8 +83,8 @@ const COLORS = {
 
 const CONNECTOR_READY_STATUSES = new Set([
   "preparing",
-  "suspendedev",
-  "suspendedevse",
+  "suspended_ev",
+  "suspended_evse",
   "occupied",
   "finishing",
 ]);
@@ -78,6 +94,8 @@ const CONNECTOR_AVAILABLE_STATUSES = new Set(["available"]);
 const STATUS_TEXT_MAP: Record<string, string> = {
   available: "พร้อมใช้งาน",
   preparing: "กำลังเตรียม",
+  suspended_ev: "ชาร์จเต็มเเล้ว",
+  suspended_evse: "พักจากสถานี",
   suspendedev: "ชาร์จเต็มเเล้ว",
   suspendedevse: "พักจากสถานี",
   occupied: "มีรถเสียบอยู่",
@@ -186,16 +204,44 @@ export default function ChargeSessionScreen() {
   );
   const [lastHeartbeat, setLastHeartbeat] = useState<string | null>(null);
   const [sessionStartTime, setSessionStartTime] = useState<string | null>(null);
-  const [activeTransactionId, setActiveTransactionId] = useState<
-    number | null
-  >(null);
-  const [idTag, setIdTag] = useState("EV-USER-001");
+  const [activeTransactionId, setActiveTransactionId] = useState<number | null>(
+    null,
+  );
+  const [idTag, setIdTag] = useState("");
+  const [backendTransactionId, setBackendTransactionId] = useState<string | null>(null);
+  const [isCreatingTransaction, setIsCreatingTransaction] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [transactionSummary, setTransactionSummary] = useState<TransactionSummaryPayload | null>(null);
+  const [isFetchingSummary, setIsFetchingSummary] = useState(false);
+  const [hasFetchedSummary, setHasFetchedSummary] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [hasNavigatedToSummary, setHasNavigatedToSummary] = useState(false);
 
   const appendLog = useCallback((level: LogLevel, message: string) => {
     const prefix =
       level === "error" ? "[ERROR]" : level === "success" ? "[OK]" : "[INFO]";
     console.log(`${prefix} ${message}`);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadUser = async () => {
+      try {
+        const credentials = await getCredentials();
+        if (isMounted && credentials?.id) {
+          setUserId(credentials.id);
+        }
+      } catch (error) {
+        console.error("ไม่สามารถดึงข้อมูลผู้ใช้จาก Keychain:", error);
+      }
+    };
+
+    loadUser();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -232,6 +278,15 @@ export default function ChargeSessionScreen() {
       wsRef.current = null;
       setConnectionState((prev) => (prev === "error" ? prev : "closed"));
       appendLog("info", "การเชื่อมต่อถูกปิด");
+      setActiveTransactionId(null);
+      setBackendTransactionId(null);
+      setIdTag("");
+      setSessionStartTime(null);
+      setIsCreatingTransaction(false);
+      setTransactionSummary(null);
+      setHasFetchedSummary(false);
+      setIsFetchingSummary(false);
+      setHasNavigatedToSummary(false);
     };
 
     return () => {
@@ -262,6 +317,78 @@ export default function ChargeSessionScreen() {
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, [sessionStartTime, chargingData?.startTime]);
+
+  const fetchTransactionSummary = useCallback(
+    async (transactionId: string | null | undefined, force: boolean = false) => {
+      if (!transactionId || (!force && (hasFetchedSummary || isFetchingSummary))) {
+        return;
+      }
+
+      try {
+        setIsFetchingSummary(true);
+        appendLog("info", `กำลังดึงสรุปธุรกรรม ${transactionId}`);
+
+        const response = await transactionService.getTransactionSummary(transactionId);
+
+        if (!response.success || !response.data) {
+          appendLog("error", "ไม่สามารถดึงข้อมูลสรุปธุรกรรมได้");
+          return;
+        }
+
+        const summary = response.data;
+        setTransactionSummary(summary);
+        setHasFetchedSummary(true);
+        appendLog("success", "ดึงข้อมูลสรุปธุรกรรมสำเร็จ");
+
+        setChargingData((previous) => {
+          const energy = summary.totalEnergy ?? previous?.energyDelivered ?? null;
+
+          let computedCost: number | undefined | null = summary.totalCost ?? null;
+          if (computedCost == null) {
+            if (previous?.cost != null) {
+              computedCost = previous.cost;
+            } else if (energy != null && baseRate !== undefined) {
+              computedCost = energy * baseRate;
+            }
+          }
+
+          const parsedTransactionIdCandidate = Number(summary.transactionId);
+          const parsedTransactionId = Number.isFinite(parsedTransactionIdCandidate)
+            ? parsedTransactionIdCandidate
+            : previous?.transactionId;
+
+          if (!previous) {
+            return {
+              connectorId: connectorId ?? summary.connectorNumber ?? 1,
+              status: 'Finishing',
+              energyDelivered: energy ?? undefined,
+              cost: computedCost ?? undefined,
+              transactionId: parsedTransactionId ?? undefined,
+            };
+          }
+
+          return {
+            ...previous,
+            energyDelivered: energy ?? previous.energyDelivered,
+            cost: computedCost ?? previous.cost,
+            transactionId: parsedTransactionId ?? previous.transactionId,
+            status: previous.status ?? 'Finishing',
+          };
+        });
+      } catch (error: any) {
+        console.error("ไม่สามารถดึงสรุปธุรกรรมได้:", error);
+        appendLog(
+          "error",
+          error?.message ?? "ไม่สามารถดึงข้อมูลสรุปธุรกรรมได้ กรุณาลองอีกครั้ง",
+        );
+        setHasFetchedSummary(false);
+        setHasNavigatedToSummary(false);
+      } finally {
+        setIsFetchingSummary(false);
+      }
+    },
+    [appendLog, baseRate, connectorId, hasFetchedSummary, isFetchingSummary],
+  );
 
   const handleIncomingMessage = (message: any) => {
     if (!message || typeof message !== "object") {
@@ -349,6 +476,15 @@ export default function ChargeSessionScreen() {
             `เริ่มธุรกรรมการชาร์จ Transaction ${data.transactionId}`,
           );
         }
+        if (data?.idTag) {
+          const idTagValue = String(data.idTag);
+          setBackendTransactionId(idTagValue);
+          setIdTag(idTagValue);
+        }
+        setTransactionSummary(null);
+        setHasFetchedSummary(false);
+        setIsFetchingSummary(false);
+        setIsCreatingTransaction(false);
         break;
       }
       case "StopTransaction": {
@@ -365,10 +501,46 @@ export default function ChargeSessionScreen() {
             ? {
                 ...prev,
                 currentPower: 0,
-                status: "Available",
+                status: "Finishing",
               }
-            : prev,
+            : {
+                connectorId:
+                  typeof data?.connectorId === "number"
+                    ? data.connectorId
+                    : connectorId ?? 1,
+                status: "Finishing",
+                currentPower: 0,
+              },
         );
+        setStatus((previous) =>
+          previous
+            ? { ...previous, status: "Finishing" }
+            : {
+                chargePointId: params.chargePointIdentity ?? "unknown-chargepoint",
+                connectorId:
+                  typeof data?.connectorId === "number"
+                    ? data.connectorId
+                    : connectorId ?? 1,
+                status: "Finishing",
+                isOnline: true,
+              },
+        );
+        const stopIdTag = data?.idTag
+          ? String(data.idTag)
+          : backendTransactionId ?? (data?.transactionId ? String(data.transactionId) : null);
+
+        if (stopIdTag) {
+          setBackendTransactionId(stopIdTag);
+          setIdTag(stopIdTag);
+          setHasFetchedSummary(false);
+          setTransactionSummary(null);
+          setHasNavigatedToSummary(false);
+          void fetchTransactionSummary(stopIdTag, true);
+        } else {
+          setHasFetchedSummary(false);
+          setHasNavigatedToSummary(false);
+        }
+        setIsCreatingTransaction(false);
         break;
       }
       case "error": {
@@ -399,7 +571,12 @@ export default function ChargeSessionScreen() {
     }
   };
 
-  const handleStartCharging = () => {
+  const handleStartCharging = async () => {
+    if (isCreatingTransaction) {
+      appendLog("info", "ระบบกำลังเตรียมคำสั่งเริ่มชาร์จอยู่แล้ว");
+      return;
+    }
+
     if (!connectorId && !chargingData?.connectorId) {
       Alert.alert("ไม่พบหัวชาร์จ", "ไม่สามารถระบุหัวชาร์จได้");
       return;
@@ -414,31 +591,112 @@ export default function ChargeSessionScreen() {
       return;
     }
 
-    if (!idTag.trim()) {
-      Alert.alert("กรุณาระบุ ID Tag", "ต้องระบุ ID Tag เพื่อเริ่มชาร์จ");
+    const chargePointIdentity = params.chargePointIdentity;
+    if (!chargePointIdentity) {
+      Alert.alert(
+        "ข้อมูลไม่ครบ",
+        "ไม่สามารถระบุรหัสเครื่องชาร์จได้ กรุณากลับไปหน้าเดิมแล้วลองใหม่",
+      );
       return;
     }
 
-    const payload = {
-      type: "RemoteStartTransaction",
-      data: {
-        connectorId: connectorId ?? chargingData?.connectorId ?? 1,
-        idTag: idTag.trim(),
-        timestamp: new Date().toISOString(),
-      },
-    };
+    const connectorToUse =
+      connectorId ?? chargingData?.connectorId ?? 1;
 
-    if (sendMessage(payload)) {
-      appendLog(
-        "info",
-        `ส่งคำสั่งเริ่มชาร์จ (Connector ${payload.data.connectorId})`,
-      );
+    try {
+      setIsCreatingTransaction(true);
+
+      let transactionIdToUse = backendTransactionId;
+
+      if (!transactionIdToUse) {
+        let resolvedUserId = userId;
+
+        if (!resolvedUserId) {
+          const credentials = await getCredentials();
+          resolvedUserId = credentials?.id ?? null;
+          if (resolvedUserId) {
+            setUserId(resolvedUserId);
+          }
+        }
+
+        if (!resolvedUserId) {
+          throw new Error("ไม่สามารถระบุผู้ใช้งานเพื่อสร้างธุรกรรมได้");
+        }
+
+        const response = await transactionService.createTransaction({
+          chargePointIdentity,
+          connectorId: connectorToUse,
+          userId: resolvedUserId,
+        });
+
+        if (!response.success || !response.data?.transactionId) {
+          throw new Error(
+            response.message ?? "ไม่สามารถสร้างธุรกรรมใหม่ได้",
+          );
+        }
+
+        transactionIdToUse = String(response.data.transactionId);
+        setBackendTransactionId(transactionIdToUse);
+        setIdTag(transactionIdToUse);
+        appendLog(
+          "info",
+          `สร้างธุรกรรมใหม่จาก Backend: ${transactionIdToUse}`,
+        );
+      }
+
+      if (!transactionIdToUse) {
+        throw new Error("ระบบไม่พบรหัสธุรกรรมสำหรับเริ่มชาร์จ");
+      }
+
+      setHasNavigatedToSummary(false);
+      setTransactionSummary(null);
+      setHasFetchedSummary(false);
+      setIsFetchingSummary(false);
+
+      const payload = {
+        type: "RemoteStartTransaction",
+        data: {
+          connectorId: connectorToUse,
+          idTag: transactionIdToUse,
+          timestamp: new Date().toISOString(),
+        },
+      };
+
+      if (sendMessage(payload)) {
+        appendLog(
+          "info",
+          `ส่งคำสั่งเริ่มชาร์จ (Connector ${connectorToUse}) ด้วย Transaction ${transactionIdToUse}`,
+        );
+      }
+    } catch (error: any) {
+      console.error("ไม่สามารถเริ่มชาร์จได้:", error);
+      const message =
+        typeof error?.message === "string"
+          ? error.message
+          : "ไม่สามารถเริ่มชาร์จได้ กรุณาลองใหม่อีกครั้ง";
+      Alert.alert("ไม่สามารถเริ่มชาร์จได้", message);
+      appendLog("error", message);
+    } finally {
+      setIsCreatingTransaction(false);
     }
   };
 
   const handleStopCharging = () => {
+    const backendTransactionNumeric =
+      backendTransactionId !== null
+        ? Number(backendTransactionId)
+        : null;
+
+    const normalizedBackendTransaction =
+      typeof backendTransactionNumeric === "number" &&
+      Number.isFinite(backendTransactionNumeric)
+        ? backendTransactionNumeric
+        : null;
+
     const transactionIdToUse =
-      activeTransactionId ?? chargingData?.transactionId ?? null;
+      activeTransactionId ??
+      chargingData?.transactionId ??
+      normalizedBackendTransaction;
 
     if (transactionIdToUse === null || !Number.isFinite(transactionIdToUse)) {
       Alert.alert(
@@ -466,7 +724,11 @@ export default function ChargeSessionScreen() {
   };
 
   const rawStatus = (chargingData?.status ?? status?.status ?? "") as string;
-  const normalizedStatus = rawStatus.toString().toLowerCase();
+  const normalizedStatus = rawStatus
+    .toString()
+    .toLowerCase()
+    .replace("suspendedevse", "suspended_evse")
+    .replace("suspendedev", "suspended_ev");
   
   // Debug logging
   console.log("🔍 Status Debug:", {
@@ -495,7 +757,161 @@ export default function ChargeSessionScreen() {
   const canStopCharging =
     connectionState === "connected" &&
     (CONNECTOR_CHARGING_STATUSES.has(normalizedStatus) ||
-      activeTransactionId !== null);
+      activeTransactionId !== null ||
+      backendTransactionId !== null);
+
+  useEffect(() => {
+    const isPendingSummaryStatus =
+      normalizedStatus === "finishing" ||
+      normalizedStatus === "suspended_ev" ||
+      normalizedStatus === "suspended_evse";
+
+    console.log("🔍 Summary Fetch Debug:", {
+      backendTransactionId,
+      activeTransactionId,
+      transactionSummary: !!transactionSummary,
+      hasFetchedSummary,
+      isFetchingSummary,
+      isPendingSummaryStatus,
+      normalizedStatus,
+      shouldFetch: backendTransactionId &&
+        (!activeTransactionId || normalizedStatus === "finishing") &&
+        !transactionSummary &&
+        !hasFetchedSummary &&
+        !isFetchingSummary &&
+        isPendingSummaryStatus
+    });
+
+    if (
+      backendTransactionId &&
+      (!activeTransactionId || normalizedStatus === "finishing") &&
+      !transactionSummary &&
+      !hasFetchedSummary &&
+      !isFetchingSummary &&
+      isPendingSummaryStatus
+    ) {
+      console.log("📊 Fetching transaction summary for:", backendTransactionId);
+      fetchTransactionSummary(backendTransactionId);
+    }
+  }, [
+    activeTransactionId,
+    backendTransactionId,
+    fetchTransactionSummary,
+    hasFetchedSummary,
+    isFetchingSummary,
+    normalizedStatus,
+    transactionSummary,
+  ]);
+
+  useEffect(() => {
+    console.log("🚀 Navigation Debug:", {
+      transactionSummary: !!transactionSummary,
+      hasFetchedSummary,
+      isFetchingSummary,
+      activeTransactionId,
+      hasNavigatedToSummary,
+      normalizedStatus,
+      shouldNavigate: transactionSummary &&
+        hasFetchedSummary &&
+        !isFetchingSummary &&
+        (!activeTransactionId || normalizedStatus === "finishing") &&
+        !hasNavigatedToSummary
+    });
+
+    if (
+      transactionSummary &&
+      hasFetchedSummary &&
+      !isFetchingSummary &&
+      (!activeTransactionId || normalizedStatus === "finishing") &&
+      !hasNavigatedToSummary
+    ) {
+      const energyParam = energyKWh != null ? String(energyKWh) : "";
+      const costParam = costEstimate != null ? String(costEstimate) : "";
+      const durationParam = transactionSummary.durationSeconds != null
+        ? String(transactionSummary.durationSeconds)
+        : "";
+      const meterStartParam = transactionSummary.meterStart != null
+        ? String(transactionSummary.meterStart)
+        : "";
+      const meterStopParam = transactionSummary.meterStop != null
+        ? String(transactionSummary.meterStop)
+        : "";
+      const rateParam = transactionSummary.appliedRate != null
+        ? String(transactionSummary.appliedRate)
+        : baseRate != null
+          ? String(baseRate)
+          : "";
+      const connectorParam = transactionSummary.connectorNumber != null
+        ? String(transactionSummary.connectorNumber)
+        : connectorId != null
+          ? String(connectorId)
+          : chargingData?.connectorId != null
+            ? String(chargingData.connectorId)
+            : "1";
+
+      router.replace({
+        pathname: "/charge-session/summary",
+        params: {
+          transactionId: transactionSummary.transactionId,
+          energy: energyParam,
+          cost: costParam,
+          durationSeconds: durationParam,
+          startTime: transactionSummary.startTime,
+          endTime: transactionSummary.endTime ?? "",
+          meterStart: meterStartParam,
+          meterStop: meterStopParam,
+          stopReason: transactionSummary.stopReason ?? "",
+          connectorId: connectorParam,
+          chargePointIdentity:
+            transactionSummary.chargePointIdentity ?? params.chargePointIdentity ?? "",
+          chargePointName:
+            params.stationName ?? params.chargePointName ?? params.chargePointIdentity ?? "",
+          currency: params.currency ?? "บาท",
+          rate: rateParam,
+        },
+      });
+      setHasNavigatedToSummary(true);
+    }
+  }, [
+    activeTransactionId,
+    baseRate,
+    chargingData?.connectorId,
+    connectorId,
+    costEstimate,
+    energyKWh,
+    hasFetchedSummary,
+    hasNavigatedToSummary,
+    isFetchingSummary,
+    params.chargePointIdentity,
+    params.chargePointName,
+    params.currency,
+    params.stationName,
+    router,
+    transactionSummary,
+  ]);
+
+  useEffect(() => {
+    if (
+      backendTransactionId &&
+      !activeTransactionId &&
+      !transactionSummary &&
+      !hasFetchedSummary &&
+      !isFetchingSummary &&
+      (normalizedStatus === "finishing" ||
+        normalizedStatus === "suspended_ev" ||
+        normalizedStatus === "suspended_evse")
+    ) {
+      fetchTransactionSummary(backendTransactionId);
+    }
+  }, [
+    activeTransactionId,
+    backendTransactionId,
+    fetchTransactionSummary,
+    hasFetchedSummary,
+    isFetchingSummary,
+    transactionSummary,
+    normalizedStatus,
+  ]);
 
   useEffect(() => {
     if (isCharging) {
@@ -662,8 +1078,9 @@ export default function ChargeSessionScreen() {
     );
   }
 
-  const energyDelivered = formatNumber(chargingData?.energyDelivered ?? 5.75, 2); // กำหนดค่าเริ่มต้นเป็น 5.75 kWh
-  console.log("🔋 Energy Delivered:", energyDelivered, "Raw:", chargingData?.energyDelivered);
+  const energyKWh = transactionSummary?.totalEnergy ?? chargingData?.energyDelivered;
+  const energyDeliveredDisplay = formatNumber(energyKWh, 2);
+  console.log("🔋 Energy Delivered:", energyDeliveredDisplay, "Raw:", energyKWh);
   const currentPower = formatNumber(chargingData?.currentPower ?? 0, 2);
   const estimatedTimeText = formatDuration(
     chargingData?.estimatedRemainingSeconds ?? chargingData?.duration,
@@ -672,11 +1089,30 @@ export default function ChargeSessionScreen() {
   const startTimeLabel = formatDateTime(
     sessionStartTime ?? chargingData?.startTime,
   );
-  const costValue =
-    chargingData?.cost ??
-    (baseRate !== undefined && chargingData?.energyDelivered
-      ? chargingData.energyDelivered * 4 // คูณด้วย 4 บาทตามที่กำหนด
-      : undefined);
+  const costEstimate = (() => {
+    if (transactionSummary?.totalCost != null) {
+      return transactionSummary.totalCost;
+    }
+    if (chargingData?.cost != null) {
+      return chargingData.cost;
+    }
+    if (energyKWh != null && baseRate !== undefined) {
+      return energyKWh * baseRate;
+    }
+    return undefined;
+  })();
+  const costDisplay = costEstimate != null
+    ? formatCurrency(costEstimate, params.currency ?? "บาท")
+    : null;
+  const summaryStartTimeText = transactionSummary?.startTime
+    ? formatDateTime(transactionSummary.startTime)
+    : null;
+  const summaryEndTimeText = transactionSummary?.endTime
+    ? formatDateTime(transactionSummary.endTime)
+    : null;
+  const summaryDurationText = transactionSummary?.durationSeconds != null
+    ? formatDuration(transactionSummary.durationSeconds)
+    : null;
 
   const statusBadgeText =
     connectionState === "connected"
@@ -707,11 +1143,24 @@ export default function ChargeSessionScreen() {
     },
   ];
 
-  // เพิ่มข้อมูลพลังงานที่ได้รับเฉพาะเมื่อเริ่มชาร์จแล้ว
-  if (isCharging || activeTransactionId) {
+  if (energyKWh != null && (isCharging || activeTransactionId || transactionSummary)) {
     stationRows.push({
       label: "พลังงานที่ได้รับ",
-      value: `${energyDelivered} kWh`,
+      value: `${formatNumber(energyKWh, 2)} kWh`,
+    });
+  }
+
+  if (costEstimate != null) {
+    stationRows.push({
+      label: "ค่าใช้จ่ายโดยประมาณ",
+      value: formatCurrency(costEstimate, params.currency ?? "บาท"),
+    });
+  }
+
+  if (transactionSummary?.durationSeconds != null) {
+    stationRows.push({
+      label: "เวลาที่ใช้",
+      value: formatDuration(transactionSummary.durationSeconds),
     });
   }
 
@@ -759,6 +1208,16 @@ export default function ChargeSessionScreen() {
     }
     if (CONNECTOR_CHARGING_STATUSES.has(normalizedStatus)) {
       return "กำลังชาร์จอยู่ในขณะนี้";
+    }
+    if (normalizedStatus === "finishing") {
+      return transactionSummary
+        ? "การชาร์จเสร็จสิ้นแล้ว"
+        : "กำลังสรุปข้อมูลการชาร์จ...";
+    }
+    if (normalizedStatus === "suspended_ev" || normalizedStatus === "suspended_evse") {
+      return transactionSummary
+        ? "รถชาร์จเต็มแล้ว"
+        : "กำลังเตรียมหยุดการชาร์จ";
     }
     if (normalizedStatus === "faulted") {
       return "หัวชาร์จมีปัญหา กรุณาติดต่อเจ้าหน้าที่";
@@ -852,16 +1311,18 @@ export default function ChargeSessionScreen() {
 
             {/* Energy display with enhanced styling */}
             <View style={styles.energyDisplayContainer}>
-              {isCharging || activeTransactionId ? (
-                <Animated.Text style={[
-                  styles.energyText,
-                  isCharging && {
-                    textShadowColor: COLORS.glow,
-                    textShadowRadius: 20,
-                    textShadowOffset: { width: 0, height: 0 }
-                  }
-                ]}>
-                  {energyDelivered}
+              {energyKWh != null ? (
+                <Animated.Text
+                  style={[
+                    styles.energyText,
+                    isCharging && {
+                      textShadowColor: COLORS.glow,
+                      textShadowRadius: 20,
+                      textShadowOffset: { width: 0, height: 0 }
+                    }
+                  ]}
+                >
+                  {energyDeliveredDisplay}
                   <Text style={styles.energyUnit}> kWh</Text>
                 </Animated.Text>
               ) : (
@@ -1090,24 +1551,40 @@ export default function ChargeSessionScreen() {
               <Ionicons name="person-circle-outline" size={20} color={COLORS.textSecondary} />
               <TextInput
                 value={idTag}
-                onChangeText={setIdTag}
-                placeholder="เช่น EV-USER-001"
+                editable={false}
+                selectTextOnFocus={false}
+                placeholder="ระบบจะสร้างให้อัตโนมัติ"
                 placeholderTextColor={COLORS.textSecondary}
-                style={styles.textInput}
+                style={[
+                  styles.textInput,
+                  !idTag && styles.textInputDisabled,
+                ]}
               />
             </View>
 
             <View style={styles.buttonsRow}>
               <TouchableOpacity
-                disabled={!canStartCharging}
+                disabled={!canStartCharging || isCreatingTransaction}
                 activeOpacity={0.8}
                 onPress={handleStartCharging}
                 style={[
                   styles.primaryButtonWrapper,
-                  !canStartCharging && styles.primaryButtonDisabledWrapper,
+                  (!canStartCharging || isCreatingTransaction) &&
+                    styles.primaryButtonDisabledWrapper,
                 ]}
               >
-                {canStartCharging ? (
+                {(!canStartCharging || isCreatingTransaction) ? (
+                  <View style={[styles.primaryButton, styles.primaryButtonDisabled]}>
+                    <Ionicons
+                      name={isCreatingTransaction ? "time-outline" : "flash-off"}
+                      size={20}
+                      color="rgba(255, 255, 255, 0.6)"
+                    />
+                    <Text style={styles.primaryButtonText}>
+                      {isCreatingTransaction ? "กำลังเตรียม..." : primaryButtonLabel}
+                    </Text>
+                  </View>
+                ) : (
                   <LinearGradient
                     colors={[COLORS.glow, COLORS.glowGreen]}
                     start={{ x: 0, y: 0.5 }}
@@ -1117,11 +1594,6 @@ export default function ChargeSessionScreen() {
                     <Ionicons name="flash" size={20} color="#FFFFFF" />
                     <Text style={styles.primaryButtonText}>{primaryButtonLabel}</Text>
                   </LinearGradient>
-                ) : (
-                  <View style={[styles.primaryButton, styles.primaryButtonDisabled]}>
-                    <Ionicons name="flash-off" size={20} color="rgba(255, 255, 255, 0.5)" />
-                    <Text style={styles.primaryButtonText}>{primaryButtonLabel}</Text>
-                  </View>
                 )}
               </TouchableOpacity>
 
@@ -1150,6 +1622,59 @@ export default function ChargeSessionScreen() {
             )}
           </LinearGradient>
         </View>
+
+        {transactionSummary && (
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>สรุปการชาร์จ</Text>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>เริ่ม</Text>
+              <Text style={styles.summaryValue}>
+                {summaryStartTimeText ?? '-'}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>สิ้นสุด</Text>
+              <Text style={styles.summaryValue}>
+                {summaryEndTimeText ?? '-'}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>ระยะเวลา</Text>
+              <Text style={styles.summaryValue}>
+                {summaryDurationText ?? '-'}
+              </Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            {transactionSummary.appliedRate != null && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>อัตราค่าบริการ</Text>
+                <Text style={styles.summaryValue}>
+                  {formatCurrency(transactionSummary.appliedRate, params.currency ?? "บาท")}/kWh
+                </Text>
+              </View>
+            )}
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>พลังงานรวม</Text>
+              <Text style={styles.summaryValue}>
+                {energyKWh != null ? `${formatNumber(energyKWh, 2)} kWh` : '-'}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>ค่าใช้จ่ายโดยประมาณ</Text>
+              <Text style={styles.summaryValue}>
+                {costDisplay ?? '-'}
+              </Text>
+            </View>
+            {transactionSummary.stopReason && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>เหตุผลการหยุด</Text>
+                <Text style={styles.summaryValue}>
+                  {transactionSummary.stopReason}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {lastHeartbeat && (
           <Text style={styles.heartbeatText}>
@@ -1614,6 +2139,9 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontWeight: '500',
   },
+  textInputDisabled: {
+    color: COLORS.textSecondary,
+  },
   buttonsRow: {
     marginTop: 24,
   },
@@ -1691,5 +2219,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textSecondary,
     textAlign: "center",
+  },
+  summaryCard: {
+    marginTop: 16,
+    borderRadius: 18,
+    padding: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 12,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  summaryLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  summaryValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: COLORS.divider,
+    marginVertical: 12,
   },
 });

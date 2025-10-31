@@ -77,7 +77,10 @@ const GATEWAY_ROUTE_RULES: GatewayRouteRule[] = [
   { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/update-from-boot$/ },
   { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/heartbeat$/ },
   { methods: ['GET'], pattern: /^\/api\/chargepoints\/check-connectors\/[^/]+$/ },
-  { methods: ['POST'], pattern: /^\/api\/chargepoints\/create-connectors$/ }
+  { methods: ['POST'], pattern: /^\/api\/chargepoints\/create-connectors$/ },
+  { methods: ['POST'], pattern: /^\/api\/transactions\/authorize$/ },
+  { methods: ['POST'], pattern: /^\/api\/transactions\/[^/]+\/start$/ },
+  { methods: ['POST'], pattern: /^\/api\/transactions\/ocpp\/[^/]+\/stop$/ }
 ];
 
 const isGatewayRoute = (method: string, path: string) =>
@@ -234,6 +237,7 @@ export const app = new Elysia()
   .use(serviceContainer.getAuthController())
   .use(serviceContainer.getUserController())
   .use(serviceContainer.getChargePointController())
+  .use(serviceContainer.getTransactionController())
   .guard(
     ({ user }: any) => !!user,
     (app: any) =>
