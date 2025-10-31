@@ -2,7 +2,7 @@
 import { Ionicons } from "@expo/vector-icons";
 // นำเข้า LinearGradient สำหรับสร้างพื้นหลังแบบไล่สี
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 // นำเข้า components พื้นฐานจาก React Native
 import {
   Animated,
@@ -21,6 +21,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { ClipPath, Defs, G, Path, Rect } from "react-native-svg";
 import MiniProfileModal, { DEFAULT_PROFILE_AVATAR } from "./miniprofile";
 import NotificationModal from "./notification";
+import ChargingStatusPopup, {
+  useChargingStatusPopup,
+} from "./popup";
 
 type NewsItem = {
   id: string;
@@ -362,6 +365,16 @@ export default function HomeScreen() {
   const [profileName, setProfileName] = useState("PONIX Member");
   const [profileAvatar, setProfileAvatar] =
     useState<ImageSourcePropType>(DEFAULT_PROFILE_AVATAR);
+  const {
+    data: chargingPopupData,
+    visible: isChargingPopupVisible,
+    hide: hideChargingPopup,
+  } = useChargingStatusPopup();
+
+  const handleNavigateToCharging = useCallback(() => {
+    hideChargingPopup();
+    router.push("/(tabs)/charging");
+  }, [hideChargingPopup, router]);
 
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar, ตั้งพื้นหลังเป็นสีเทาอ่อน
@@ -595,6 +608,14 @@ export default function HomeScreen() {
           {/* ส่วนล่างถูกตัดออกตามคำขอ */}
         </View>
       </ScrollView>
+      {chargingPopupData ? (
+        <ChargingStatusPopup
+          visible={isChargingPopupVisible}
+          data={chargingPopupData}
+          onClose={hideChargingPopup}
+          onNavigateToCharging={handleNavigateToCharging}
+        />
+      ) : null}
       <NotificationModal
         visible={isNotificationVisible}
         onClose={() => setNotificationVisible(false)}
