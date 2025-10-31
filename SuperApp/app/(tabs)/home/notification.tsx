@@ -59,25 +59,33 @@ export default function NotificationModal({
   onClose,
 }: NotificationModalProps) {
   const [internalVisible, setInternalVisible] = useState(visible);
-  const scale = useRef(new Animated.Value(0.9)).current;
+  const scale = useRef(new Animated.Value(0.95)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       setInternalVisible(true);
-      scale.setValue(0.9);
+      scale.setValue(0.95);
       opacity.setValue(0);
+      backdropOpacity.setValue(0);
       Animated.parallel([
         Animated.timing(opacity, {
           toValue: 1,
-          duration: 220,
+          duration: 260,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 260,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.spring(scale, {
           toValue: 1,
-          damping: 16,
-          stiffness: 180,
+          damping: 18,
+          stiffness: 140,
           useNativeDriver: true,
         }),
       ]).start();
@@ -85,13 +93,19 @@ export default function NotificationModal({
       Animated.parallel([
         Animated.timing(opacity, {
           toValue: 0,
-          duration: 160,
+          duration: 200,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(backdropOpacity, {
+          toValue: 0,
+          duration: 200,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(scale, {
-          toValue: 0.9,
-          duration: 160,
+          toValue: 0.95,
+          duration: 200,
           easing: Easing.inOut(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -99,7 +113,7 @@ export default function NotificationModal({
         setInternalVisible(false);
       });
     }
-  }, [internalVisible, opacity, scale, visible]);
+  }, [backdropOpacity, internalVisible, opacity, scale, visible]);
 
   return (
     <Modal
@@ -108,7 +122,10 @@ export default function NotificationModal({
       visible={internalVisible}
       onRequestClose={onClose}
     >
-      <View className="flex-1 bg-black/50 justify-center">
+      <Animated.View
+        className="flex-1 bg-black/50 justify-center"
+        style={{ opacity: backdropOpacity }}
+      >
         <TouchableOpacity
           className="absolute inset-0"
           activeOpacity={1}
@@ -203,7 +220,7 @@ export default function NotificationModal({
               </TouchableOpacity>
           </View>
         </Animated.View>
-      </View>
+      </Animated.View>
     </Modal>
   );
 }

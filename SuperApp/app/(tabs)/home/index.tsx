@@ -343,13 +343,14 @@ const quickActions: QuickAction[] = [
     labelTh: "สถานีชาร์จ",
     labelEn: "Station",
     Icon: EVStationIcon,
+    route: "/(tabs)/qr-scanner" // กำหนดไปยังหน้าแสกนเมื่อลูกค้าเรากดปุ่ม
   },
   {
     key: "charger",
     labelTh: "เครื่องชาร์จ",
     labelEn: "Charger",
     Icon: EVHouseIcon,
-    route: "/(tabs)/charging",
+    route: "/(tabs)/charging", //กำหนดไปยังหน้าชาร์จรถเมื่อลูกค้ากดปุ่ม
   },
 ];
 
@@ -395,6 +396,7 @@ export default function HomeScreen() {
 
           {/* === POINTS CARD SECTION === */}
           <View className="mb-5">
+            <TouchableScale activeOpacity={0.9} onPress={() =>router.push("/card") }>
             <LinearGradient
               colors={["#1F274B", "#395F85", "#589FAF", "#67C1A5", "#5EC1A0"]}
               locations={[0, 0.25, 0.55, 0.75, 1]}
@@ -447,6 +449,7 @@ export default function HomeScreen() {
               <View className="h-[2px] bg-white/90 mb-5 " />
               <Text className="mb-5 ml-5 text-sm text-white/90">หมดอายุ : 30 ก.ย. 2568</Text>
             </LinearGradient>
+           </TouchableScale>
           </View>
 
           {/* === QUICK ACCESS BUTTONS === */}
