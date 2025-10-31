@@ -13,7 +13,7 @@ import {
   PressableProps,
   ScrollView,
   Text,
-  View, 
+  View,
 } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
 import { useRouter, type Href } from "expo-router";
