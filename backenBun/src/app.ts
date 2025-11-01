@@ -1,12 +1,12 @@
-import { cors } from '@elysiajs/cors';
-import { jwt } from '@elysiajs/jwt';
-import { fromTypes, openapi } from '@elysiajs/openapi';
-import { Elysia, t } from 'elysia';
-import { logger, requestLogger } from './lib/logger';
-import { prisma } from './lib/prisma';
-import { serviceContainer } from './user';
-import { adminServiceContainer } from './admin';
-import { authMiddleware } from './middleware/auth';
+import { cors } from "@elysiajs/cors";
+import { jwt } from "@elysiajs/jwt";
+import { fromTypes, openapi } from "@elysiajs/openapi";
+import { Elysia, t } from "elysia";
+import { logger, requestLogger } from "./lib/logger";
+import { prisma } from "./lib/prisma";
+import { serviceContainer } from "./user";
+import { adminServiceContainer } from "./admin";
+import { authMiddleware } from "./middleware/auth";
 
 // Get services from container
 const { jwtService } = serviceContainer;
@@ -14,51 +14,60 @@ const { jwtService } = serviceContainer;
 const port = Number(process.env.PORT ?? 8080);
 const serverUrl = process.env.BASE_URL ?? `http://localhost:${port}`;
 
-const userModel = t.Object({
-  id: t.String(),
-  firebaseUid: t.String(),
-  phoneNumber: t.Optional(t.String()),
-  email: t.Optional(t.String()),
-  fullName: t.Optional(t.String()),
-  typeUser: t.Optional(t.String()),
-  status: t.Optional(t.String()),
-  createdAt: t.String({ format: 'date-time' }),
-  updatedAt: t.Optional(t.String({ format: 'date-time' }))
-}, { description: 'User information payload returned from SuperApp services' });
+const userModel = t.Object(
+  {
+    id: t.String(),
+    firebaseUid: t.String(),
+    phoneNumber: t.Optional(t.String()),
+    email: t.Optional(t.String()),
+    fullName: t.Optional(t.String()),
+    typeUser: t.Optional(t.String()),
+    status: t.Optional(t.String()),
+    createdAt: t.String({ format: "date-time" }),
+    updatedAt: t.Optional(t.String({ format: "date-time" })),
+  },
+  { description: "User information payload returned from SuperApp services" },
+);
 
-const errorResponseModel = t.Object({
-  success: t.Boolean(),
-  message: t.String(),
-  errors: t.Optional(t.Array(t.Unknown()))
-}, { description: 'Standard error response envelope used across SuperApp APIs' });
+const errorResponseModel = t.Object(
+  {
+    success: t.Boolean(),
+    message: t.String(),
+    errors: t.Optional(t.Array(t.Unknown())),
+  },
+  { description: "Standard error response envelope used across SuperApp APIs" },
+);
 
-const authenticatedProfileResponseModel = t.Object({
-  success: t.Boolean(),
-  data: t.Object({
-    user: userModel
-  })
-}, { description: 'Authenticated user profile response payload' });
+const authenticatedProfileResponseModel = t.Object(
+  {
+    success: t.Boolean(),
+    data: t.Object({
+      user: userModel,
+    }),
+  },
+  { description: "Authenticated user profile response payload" },
+);
 
 const PUBLIC_ROUTES = [
-  '/health',
-  '/api/auth/login',
-  '/api/auth/register',
-  '/api/auth/refresh'
+  "/health",
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/refresh",
 ];
 
-const GATEWAY_API_KEY = process.env.WS_GATEWAY_API_KEY || 'your-api-key';
+const GATEWAY_API_KEY = process.env.WS_GATEWAY_API_KEY || "your-api-key";
 
 const extractGatewayKey = (request: Request) => {
   const headerValue =
-    request.headers.get('x-api-key') ||
-    request.headers.get('authorization') ||
-    '';
+    request.headers.get("x-api-key") ||
+    request.headers.get("authorization") ||
+    "";
 
   if (!headerValue) {
     return null;
   }
 
-  return headerValue.startsWith('Bearer ')
+  return headerValue.startsWith("Bearer ")
     ? headerValue.substring(7).trim()
     : headerValue.trim();
 };
@@ -69,35 +78,47 @@ type GatewayRouteRule = {
 };
 
 const GATEWAY_ROUTE_RULES: GatewayRouteRule[] = [
-  { methods: ['GET'], pattern: /^\/api\/chargepoints\/ws-gateway\/chargepoints$/ },
-  { methods: ['POST'], pattern: /^\/api\/chargepoints\/validate-whitelist$/ },
-  { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/validate-ocpp$/ },
-  { methods: ['PUT'], pattern: /^\/api\/chargepoints\/[^/]+\/connection-status$/ },
-  { methods: ['GET'], pattern: /^\/api\/chargepoints\/[^/]+$/ },
-  { methods: ['POST'], pattern: /^\/api\/chargepoints$/ },
-  { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/status$/ },
-  { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/update-from-boot$/ },
-  { methods: ['POST'], pattern: /^\/api\/chargepoints\/[^/]+\/heartbeat$/ },
-  { methods: ['GET'], pattern: /^\/api\/chargepoints\/check-connectors\/[^/]+$/ },
-  { methods: ['POST'], pattern: /^\/api\/chargepoints\/create-connectors$/ },
-  { methods: ['POST'], pattern: /^\/api\/transactions\/authorize$/ },
-  { methods: ['POST'], pattern: /^\/api\/transactions\/[^/]+\/start$/ },
-  { methods: ['POST'], pattern: /^\/api\/transactions\/ocpp\/[^/]+\/stop$/ }
+  {
+    methods: ["GET"],
+    pattern: /^\/api\/chargepoints\/ws-gateway\/chargepoints$/,
+  },
+  { methods: ["POST"], pattern: /^\/api\/chargepoints\/validate-whitelist$/ },
+  { methods: ["POST"], pattern: /^\/api\/chargepoints\/[^/]+\/validate-ocpp$/ },
+  {
+    methods: ["PUT"],
+    pattern: /^\/api\/chargepoints\/[^/]+\/connection-status$/,
+  },
+  { methods: ["GET"], pattern: /^\/api\/chargepoints\/[^/]+$/ },
+  { methods: ["POST"], pattern: /^\/api\/chargepoints$/ },
+  { methods: ["POST"], pattern: /^\/api\/chargepoints\/[^/]+\/status$/ },
+  {
+    methods: ["POST"],
+    pattern: /^\/api\/chargepoints\/[^/]+\/update-from-boot$/,
+  },
+  { methods: ["POST"], pattern: /^\/api\/chargepoints\/[^/]+\/heartbeat$/ },
+  {
+    methods: ["GET"],
+    pattern: /^\/api\/chargepoints\/check-connectors\/[^/]+$/,
+  },
+  { methods: ["POST"], pattern: /^\/api\/chargepoints\/create-connectors$/ },
+  { methods: ["POST"], pattern: /^\/api\/transactions\/authorize$/ },
+  { methods: ["POST"], pattern: /^\/api\/transactions\/[^/]+\/start$/ },
+  { methods: ["POST"], pattern: /^\/api\/transactions\/ocpp\/[^/]+\/stop$/ },
 ];
 
 const isGatewayRoute = (method: string, path: string) =>
   GATEWAY_ROUTE_RULES.some(
     (rule) =>
-      rule.methods.includes(method.toUpperCase()) && rule.pattern.test(path)
+      rule.methods.includes(method.toUpperCase()) && rule.pattern.test(path),
   );
 
 const isPublicRoute = (path: string) => {
-  if (path.startsWith('/openapi')) {
+  if (path.startsWith("/openapi")) {
     return true;
   }
 
   return PUBLIC_ROUTES.some(
-    (route) => path === route || path.startsWith(`${route}/`)
+    (route) => path === route || path.startsWith(`${route}/`),
   );
 };
 
@@ -107,48 +128,69 @@ export const app = new Elysia()
   .model({
     User: userModel,
     ErrorResponse: errorResponseModel,
-    AuthenticatedProfileResponse: authenticatedProfileResponseModel
+    AuthenticatedProfileResponse: authenticatedProfileResponseModel,
   })
-  .use(openapi({
-    documentation: {
-      info: {
-        title: 'SuperApp API',
-        description: 'API documentation for SuperApp backend services',
-        version: '1.0.0'
+  .use(
+    openapi({
+      documentation: {
+        info: {
+          title: "SuperApp API",
+          description: "API documentation for SuperApp backend services",
+          version: "1.0.0",
+        },
+        servers: [
+          {
+            url: serverUrl,
+            description: "Local development server",
+          },
+        ],
+        tags: [
+          {
+            name: "Authentication",
+            description: "Authentication and authorization endpoints",
+          },
+          {
+            name: "User Management",
+            description: "User profile and administration operations",
+          },
+          {
+            name: "Charge Point",
+            description: "Charging station provisioning and commands",
+          },
+          {
+            name: "Tax Invoice Profile",
+            description: "Tax invoice profile management for users",
+          },
+          {
+            name: "Health",
+            description: "Service readiness and monitoring probes",
+          },
+        ],
+        components: {
+          securitySchemes: {
+            bearerAuth: {
+              type: "http",
+              scheme: "bearer",
+              bearerFormat: "JWT",
+              description:
+                "Include JWT access token generated by /api/auth/login in the Authorization header",
+            },
+          },
+        },
       },
-      servers: [
-        {
-          url: serverUrl,
-          description: 'Local development server'
-        }
-      ],
-      tags: [
-        { name: 'Authentication', description: 'Authentication and authorization endpoints' },
-        { name: 'User Management', description: 'User profile and administration operations' },
-        { name: 'Charge Point', description: 'Charging station provisioning and commands' },
-        { name: 'Health', description: 'Service readiness and monitoring probes' }
-      ],
-      components: {
-        securitySchemes: {
-          bearerAuth: {
-            type: 'http',
-            scheme: 'bearer',
-            bearerFormat: 'JWT',
-            description: 'Include JWT access token generated by /api/auth/login in the Authorization header'
-          }
-        }
-      }
-    },
-    references: fromTypes('src/app.ts')
-  }))
-  .use(jwt({
-    name: 'jwt',
-    secret: process.env.JWT_SECRET || 'your-secret-key'
-  }))
+      references: fromTypes("src/app.ts"),
+    }),
+  )
+  .use(
+    jwt({
+      name: "jwt",
+      secret: process.env.JWT_SECRET || "your-secret-key",
+    }),
+  )
   .use(authMiddleware(jwtService))
   // Global guard: block non-public routes when JWT is missing or invalid
   .onBeforeHandle(({ request, user, set }: any) => {
-    if (request.method === 'OPTIONS') {
+    if (request.method === "OPTIONS") {
       return;
     }
 
@@ -165,37 +207,40 @@ export const app = new Elysia()
         return;
       }
 
-      logger.warn('Unauthorized gateway access attempt', {
+      logger.warn("Unauthorized gateway access attempt", {
         path,
         method,
-        status: 401
+        status: 401,
       });
       set.status = 401;
       return {
         success: false,
-        message: 'Unauthorized: invalid gateway key'
+        message: "Unauthorized: invalid gateway key",
       };
     }
 
     if (!user) {
       // ตรวจสอบว่าอยู่ใน development mode หรือไม่
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      const bypassAuth = process.env.DEV_BYPASS_AUTH === 'true';
-      
+      const isDevelopment = process.env.NODE_ENV === "development";
+      const bypassAuth = process.env.DEV_BYPASS_AUTH === "true";
+
       if (isDevelopment && bypassAuth) {
-        console.log('🔓 Development mode: Allowing access without authentication for', path);
+        console.log(
+          "🔓 Development mode: Allowing access without authentication for",
+          path,
+        );
         return; // อนุญาตให้เข้าถึงได้
       }
-      
-      logger.warn('Unauthorized API access blocked', {
+
+      logger.warn("Unauthorized API access blocked", {
         path,
         method,
-        status: 401
+        status: 401,
       });
       set.status = 401;
       return {
         success: false,
-        message: 'Unauthorized: missing or invalid token'
+        message: "Unauthorized: missing or invalid token",
       };
     }
   })
@@ -205,120 +250,144 @@ export const app = new Elysia()
   .use(adminServiceContainer.getAuthController())
   .use(adminServiceContainer.getChargePointController())
   .use(serviceContainer.getTransactionController())
+  .use(serviceContainer.getSsTaxInvoiceProfileController())
   .guard(
     ({ user }: any) => {
       // Allow access in development mode even without user
-      if (process.env.NODE_ENV === 'development' && process.env.DEV_BYPASS_AUTH === 'true') {
+      if (
+        process.env.NODE_ENV === "development" &&
+        process.env.DEV_BYPASS_AUTH === "true"
+      ) {
         return true;
       }
       return !!user;
     },
     (app: any) =>
-      app.get('/api/profile', ({ user }: any) => {
-        // In development mode, provide mock user if no user is available
-        const profileUser = user || (process.env.NODE_ENV === 'development' && process.env.DEV_BYPASS_AUTH === 'true' ? {
-          id: 'dev-user-123',
-          phoneNumber: '+66999999999',
-          status: 'ACTIVE',
-          typeUser: 'USER',
-          createdAt: new Date().toISOString()
-        } : null);
+      app.get(
+        "/api/profile",
+        ({ user }: any) => {
+          // In development mode, provide mock user if no user is available
+          const profileUser =
+            user ||
+            (process.env.NODE_ENV === "development" &&
+            process.env.DEV_BYPASS_AUTH === "true"
+              ? {
+                  id: "dev-user-123",
+                  phoneNumber: "+66999999999",
+                  status: "ACTIVE",
+                  typeUser: "USER",
+                  createdAt: new Date().toISOString(),
+                }
+              : null);
 
-        return {
-          success: true,
-          data: {
-            user: profileUser
-          }
-        };
-      }, {
-        detail: {
-          tags: ['User Management'],
-          summary: 'Retrieve authenticated user profile',
-          description: 'Returns the profile information for the user associated with the provided bearer token.',
-          security: [
-            {
-              bearerAuth: []
-            }
-          ],
-          responses: {
-            200: {
-              description: 'Profile information successfully retrieved',
-              content: {
-                'application/json': {
-                  schema: { $ref: '#/components/schemas/AuthenticatedProfileResponse' }
-                }
-              }
+          return {
+            success: true,
+            data: {
+              user: profileUser,
             },
-            401: {
-              description: 'Missing or invalid bearer token',
-              content: {
-                'application/json': {
-                  schema: { $ref: '#/components/schemas/ErrorResponse' }
-                }
-              }
-            }
-          }
-        }
-      })
+          };
+        },
+        {
+          detail: {
+            tags: ["User Management"],
+            summary: "Retrieve authenticated user profile",
+            description:
+              "Returns the profile information for the user associated with the provided bearer token.",
+            security: [
+              {
+                bearerAuth: [],
+              },
+            ],
+            responses: {
+              200: {
+                description: "Profile information successfully retrieved",
+                content: {
+                  "application/json": {
+                    schema: {
+                      $ref: "#/components/schemas/AuthenticatedProfileResponse",
+                    },
+                  },
+                },
+              },
+              401: {
+                description: "Missing or invalid bearer token",
+                content: {
+                  "application/json": {
+                    schema: { $ref: "#/components/schemas/ErrorResponse" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ),
   )
-  .get('/health', () => ({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    version: '1.0.0',
-    environment: process.env.NODE_ENV || 'development'
-  }), {
-    detail: {
-      tags: ['Health'],
-      summary: '🏥 Health Check',
-      description: 'Returns the current status and health information of the API server',
-      responses: {
-        200: {
-          description: 'Server is healthy',
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  status: { type: 'string', example: 'ok' },
-                  timestamp: { type: 'string', format: 'date-time' },
-                  uptime: { type: 'number', description: 'Server uptime in seconds' },
-                  version: { type: 'string', example: '1.0.0' },
-                  environment: { type: 'string', example: 'development' }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  })
+  .get(
+    "/health",
+    () => ({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      version: "1.0.0",
+      environment: process.env.NODE_ENV || "development",
+    }),
+    {
+      detail: {
+        tags: ["Health"],
+        summary: "🏥 Health Check",
+        description:
+          "Returns the current status and health information of the API server",
+        responses: {
+          200: {
+            description: "Server is healthy",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    status: { type: "string", example: "ok" },
+                    timestamp: { type: "string", format: "date-time" },
+                    uptime: {
+                      type: "number",
+                      description: "Server uptime in seconds",
+                    },
+                    version: { type: "string", example: "1.0.0" },
+                    environment: { type: "string", example: "development" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  )
   .onError(({ code, error, set }: { code: any; error: any; set: any }) => {
     switch (code) {
-      case 'VALIDATION':
+      case "VALIDATION":
         set.status = 400;
         return {
           success: false,
-          message: 'Invalid input data',
-          errors: error.all
+          message: "Invalid input data",
+          errors: error.all,
         };
-      case 'NOT_FOUND':
+      case "NOT_FOUND":
         set.status = 404;
         return {
           success: false,
-          message: 'Resource not found'
+          message: "Resource not found",
         };
-      case 'INTERNAL_SERVER_ERROR':
+      case "INTERNAL_SERVER_ERROR":
         set.status = 500;
         return {
           success: false,
-          message: 'Internal server error'
+          message: "Internal server error",
         };
       default:
         set.status = 500;
         return {
           success: false,
-          message: 'An unexpected error occurred'
+          message: "An unexpected error occurred",
         };
     }
   });
