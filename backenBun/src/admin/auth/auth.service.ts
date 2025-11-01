@@ -86,7 +86,6 @@ export class AdminAuthService {
         message: "ลงทะเบียนสำเร็จ",
         data: {
           admin: {
-            id: admin.id,
             email: admin.email,
             firstName: admin.firstName,
             lastName: admin.lastName,
@@ -140,14 +139,15 @@ export class AdminAuthService {
 
       return {
         success: true,
-        message: "เข้าสู่ระบบสำเร็จ",
+        message: "เข้าสู่ระบบแอดมินสำเร็จ",
         data: {
           admin: {
-            id: admin.id,
             email: admin.email,
             firstName: admin.firstName,
             lastName: admin.lastName,
-            role: admin.role
+            role: admin.role,
+            isActive: admin.isActive,
+            createdAt: admin.createdAt
           },
           accessToken,
           refreshToken

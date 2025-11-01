@@ -1,15 +1,23 @@
-import { PrismaClient, OCPPVersion, ConnectorType } from '@prisma/client'
+import { PrismaClient, OCPPVersion, ChargePointStatus } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
 async function chargePointExamples() {
   try {
     // 1. สร้าง ChargePoint ใหม่
+    const station = await prisma.station.upsert({
+      where: { stationname: "EV Station Central World" },
+      update: {},
+      create: {
+        stationname: "EV Station Central World"
+      }
+    })
+
     const newChargePoint = await prisma.chargePoint.create({
       data: {
         id: "CP_BKK_001",
-        name: "Central World EV Station",
-        stationName: "EV Station Central World",
+        chargepointname: "Central World EV Station",
+        stationId: station.id,
         location: "999/9 Rama I Rd, Pathumwan, Bangkok",
         latitude: 13.7463,
         longitude: 100.5388,
@@ -24,7 +32,7 @@ async function chargePointExamples() {
         connectorCount: 2,
         
         // ข้อมูล OCPP
-        protocol: "OCPP16",
+        protocol: OCPPVersion.OCPP16,
         chargePointIdentity: "CP001",
         
         
@@ -39,7 +47,7 @@ async function chargePointExamples() {
     const allChargePoints = await prisma.chargePoint.findMany({
       where: {
         isPublic: true,
-        status: 'AVAILABLE'
+        chargepointstatus: ChargePointStatus.AVAILABLE
       },
       include: {
         connectors: true,
@@ -56,7 +64,7 @@ async function chargePointExamples() {
       include: {
         transactions: {
           where: {
-            status: 'ACTIVE'
+        status: 'ACTIVE'
           }
         }
       }
@@ -69,7 +77,7 @@ async function chargePointExamples() {
         id: "CP_BKK_001"
       },
       data: {
-        status: 'MAINTENANCE',
+        chargepointstatus: ChargePointStatus.MAINTENANCE,
         lastSeen: new Date(),
         heartbeatIntervalSec: 300
       }

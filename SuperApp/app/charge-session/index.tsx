@@ -185,6 +185,10 @@ export default function ChargeSessionScreen() {
   }, [params.baseRate]);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const lastSummaryAttemptRef = useRef<{ id: string | null; timestamp: number }>({
+    id: null,
+    timestamp: 0,
+  });
   const chargingGlow = useRef(new Animated.Value(0.3)).current;
   const circleScale = useRef(new Animated.Value(1)).current;
   const chargingAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -216,6 +220,7 @@ export default function ChargeSessionScreen() {
   const [hasFetchedSummary, setHasFetchedSummary] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [hasNavigatedToSummary, setHasNavigatedToSummary] = useState(false);
+  const [hasReceivedStopEvent, setHasReceivedStopEvent] = useState(false);
 
   const appendLog = useCallback((level: LogLevel, message: string) => {
     const prefix =
@@ -259,8 +264,10 @@ export default function ChargeSessionScreen() {
     };
 
     ws.onmessage = (event) => {
+      console.log("📦 Raw WS message:", event.data);
       try {
         const parsed = JSON.parse(event.data);
+        console.log("🧾 Parsed WS message:", parsed);
         handleIncomingMessage(parsed);
       } catch (error) {
         console.error("ไม่สามารถแปลงข้อความที่ได้รับ:", error);
@@ -287,6 +294,7 @@ export default function ChargeSessionScreen() {
       setHasFetchedSummary(false);
       setIsFetchingSummary(false);
       setHasNavigatedToSummary(false);
+      setHasReceivedStopEvent(false);
     };
 
     return () => {
@@ -324,12 +332,28 @@ export default function ChargeSessionScreen() {
         return;
       }
 
+      if (!force) {
+        const lastAttempt = lastSummaryAttemptRef.current;
+        if (
+          lastAttempt.id === transactionId &&
+          Date.now() - lastAttempt.timestamp < 5000
+        ) {
+          return;
+        }
+      }
+
+      lastSummaryAttemptRef.current = {
+        id: transactionId,
+        timestamp: Date.now(),
+      };
+      setHasReceivedStopEvent(true);
+
       try {
         setIsFetchingSummary(true);
         appendLog("info", `กำลังดึงสรุปธุรกรรม ${transactionId}`);
 
         const response = await transactionService.getTransactionSummary(transactionId);
-
+        console.log("response transactionService", response.data);
         if (!response.success || !response.data) {
           appendLog("error", "ไม่สามารถดึงข้อมูลสรุปธุรกรรมได้");
           return;
@@ -485,6 +509,7 @@ export default function ChargeSessionScreen() {
         setHasFetchedSummary(false);
         setIsFetchingSummary(false);
         setIsCreatingTransaction(false);
+        setHasReceivedStopEvent(false);
         break;
       }
       case "StopTransaction": {
@@ -541,6 +566,7 @@ export default function ChargeSessionScreen() {
           setHasNavigatedToSummary(false);
         }
         setIsCreatingTransaction(false);
+        setHasReceivedStopEvent(true);
         break;
       }
       case "error": {
@@ -605,6 +631,7 @@ export default function ChargeSessionScreen() {
 
     try {
       setIsCreatingTransaction(true);
+      setHasReceivedStopEvent(false);
 
       let transactionIdToUse = backendTransactionId;
 
@@ -628,7 +655,7 @@ export default function ChargeSessionScreen() {
           connectorId: connectorToUse,
           userId: resolvedUserId,
         });
-
+        console.log("respone crate transaction", response.data);
         if (!response.success || !response.data?.transactionId) {
           throw new Error(
             response.message ?? "ไม่สามารถสร้างธุรกรรมใหม่ได้",
@@ -761,37 +788,42 @@ export default function ChargeSessionScreen() {
       backendTransactionId !== null);
 
   useEffect(() => {
-    const isPendingSummaryStatus =
+    const isFinalizedStatus =
       normalizedStatus === "finishing" ||
       normalizedStatus === "suspended_ev" ||
-      normalizedStatus === "suspended_evse";
+      normalizedStatus === "suspended_evse" ||
+      normalizedStatus === "available";
+
+    const summaryCandidateId =
+      backendTransactionId ??
+      (isFinalizedStatus && activeTransactionId != null
+        ? String(activeTransactionId)
+        : null);
+
+    const shouldFetchSummary =
+      hasReceivedStopEvent &&
+      !!summaryCandidateId &&
+      (!activeTransactionId || isFinalizedStatus) &&
+      !transactionSummary &&
+      !hasFetchedSummary &&
+      !isFetchingSummary;
 
     console.log("🔍 Summary Fetch Debug:", {
       backendTransactionId,
       activeTransactionId,
+      summaryCandidateId,
       transactionSummary: !!transactionSummary,
       hasFetchedSummary,
       isFetchingSummary,
-      isPendingSummaryStatus,
       normalizedStatus,
-      shouldFetch: backendTransactionId &&
-        (!activeTransactionId || normalizedStatus === "finishing") &&
-        !transactionSummary &&
-        !hasFetchedSummary &&
-        !isFetchingSummary &&
-        isPendingSummaryStatus
+      isFinalizedStatus,
+      hasReceivedStopEvent,
+      shouldFetchSummary,
     });
 
-    if (
-      backendTransactionId &&
-      (!activeTransactionId || normalizedStatus === "finishing") &&
-      !transactionSummary &&
-      !hasFetchedSummary &&
-      !isFetchingSummary &&
-      isPendingSummaryStatus
-    ) {
-      console.log("📊 Fetching transaction summary for:", backendTransactionId);
-      fetchTransactionSummary(backendTransactionId);
+    if (shouldFetchSummary) {
+      console.log("📊 Fetching transaction summary for:", summaryCandidateId);
+      fetchTransactionSummary(summaryCandidateId);
     }
   }, [
     activeTransactionId,
@@ -799,6 +831,7 @@ export default function ChargeSessionScreen() {
     fetchTransactionSummary,
     hasFetchedSummary,
     isFetchingSummary,
+    hasReceivedStopEvent,
     normalizedStatus,
     transactionSummary,
   ]);
@@ -810,8 +843,10 @@ export default function ChargeSessionScreen() {
       isFetchingSummary,
       activeTransactionId,
       hasNavigatedToSummary,
+      hasReceivedStopEvent,
       normalizedStatus,
-      shouldNavigate: transactionSummary &&
+      shouldNavigate: hasReceivedStopEvent &&
+        transactionSummary &&
         hasFetchedSummary &&
         !isFetchingSummary &&
         (!activeTransactionId || normalizedStatus === "finishing") &&
@@ -819,6 +854,7 @@ export default function ChargeSessionScreen() {
     });
 
     if (
+      hasReceivedStopEvent &&
       transactionSummary &&
       hasFetchedSummary &&
       !isFetchingSummary &&
@@ -881,6 +917,7 @@ export default function ChargeSessionScreen() {
     energyKWh,
     hasFetchedSummary,
     hasNavigatedToSummary,
+    hasReceivedStopEvent,
     isFetchingSummary,
     params.chargePointIdentity,
     params.chargePointName,
@@ -888,29 +925,6 @@ export default function ChargeSessionScreen() {
     params.stationName,
     router,
     transactionSummary,
-  ]);
-
-  useEffect(() => {
-    if (
-      backendTransactionId &&
-      !activeTransactionId &&
-      !transactionSummary &&
-      !hasFetchedSummary &&
-      !isFetchingSummary &&
-      (normalizedStatus === "finishing" ||
-        normalizedStatus === "suspended_ev" ||
-        normalizedStatus === "suspended_evse")
-    ) {
-      fetchTransactionSummary(backendTransactionId);
-    }
-  }, [
-    activeTransactionId,
-    backendTransactionId,
-    fetchTransactionSummary,
-    hasFetchedSummary,
-    isFetchingSummary,
-    transactionSummary,
-    normalizedStatus,
   ]);
 
   useEffect(() => {
@@ -1665,14 +1679,7 @@ export default function ChargeSessionScreen() {
                 {costDisplay ?? '-'}
               </Text>
             </View>
-            {transactionSummary.stopReason && (
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>เหตุผลการหยุด</Text>
-                <Text style={styles.summaryValue}>
-                  {transactionSummary.stopReason}
-                </Text>
-              </View>
-            )}
+    
           </View>
         )}
 

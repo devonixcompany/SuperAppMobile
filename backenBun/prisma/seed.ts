@@ -1,38 +1,49 @@
 import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcrypt'
 
 const prisma = new PrismaClient()
 
 async function main() {
+  // Hash passwords before storing
+  const adminPassword = await bcrypt.hash('admin123', 10)
+  const userPassword = await bcrypt.hash('user123', 10)
+
   // สร้าง Admin
-  const admin = await prisma.admin.create({
-    data: {
+  const admin = await prisma.admin.upsert({
+    where: { email: 'admin@example.com' },
+    update: {},
+    create: {
       email: 'admin@example.com',
-      password: 'admin123', // ในการใช้งานจริงควรเข้ารหัสก่อน
+      password: adminPassword, // Now properly hashed
       role: 'SUPERADMIN',
       firstName: 'Admin',
       lastName: 'User',
       isActive: true
     }
   })
-  console.log('Created admin:', admin)
+  console.log('Created/Updated admin:', admin)
 
   // สร้าง User
-  const user = await prisma.user.create({
-    data: {
+  const user = await prisma.user.upsert({
+    where: { email: 'user@example.com' },
+    update: {},
+    create: {
       email: 'user@example.com',
       phoneNumber: '+66812345678',
-      password: 'user123', // ในการใช้งานจริงควรเข้ารหัสก่อน
+      password: userPassword, // Now properly hashed
       firebaseUid: 'firebase123',
       fullName: 'John Doe',
       typeUser: 'NORMAL',
       status: 'ACTIVE'
     }
   })
-  console.log('Created user:', user)
+  console.log('Created/Updated user:', user)
 
   // สร้าง UserVehicle
-  const vehicle = await prisma.userVehicle.create({
-    data: {
+  const vehicle = await prisma.userVehicle.upsert({
+    where: { licensePlate: 'กข 1234 กรุงเทพ' },
+    update: {},
+    create: {
       userId: user.id,
       licensePlate: 'กข 1234 กรุงเทพ',
       make: 'Tesla',
@@ -40,14 +51,14 @@ async function main() {
       type: 'ELECTRIC'
     }
   })
-  console.log('Created vehicle:', vehicle)
+  console.log('Created/Updated vehicle:', vehicle)
 
   // สร้าง ChargePoint
-  const chargePoint = await prisma.chargePoint.create({
-    data: {
-      id: 'CP_BKK_001',
-      name: 'Central World EV Station',
-      stationName: 'EV Station Central World',
+  const chargePoint = await prisma.chargePoint.upsert({
+    where: { chargePointIdentity: 'CP001' },
+    update: {},
+    create: {
+      chargepointname: 'Central World EV Station',
       location: '999/9 Rama I Rd, Pathumwan, Bangkok',
       latitude: 13.7463,
       longitude: 100.5388,
@@ -65,7 +76,7 @@ async function main() {
       isPublic: true
     }
   })
-  console.log('Created charge point:', chargePoint)
+  console.log('Created/Updated charge point:', chargePoint)
 
   // สร้าง Connector
   const connector = await prisma.connector.create({

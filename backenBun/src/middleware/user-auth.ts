@@ -3,22 +3,21 @@ import { JWTService } from '../lib/jwt';
 import { prisma } from '../lib/prisma';
 import { devAuthMiddleware } from './dev-auth';
 
-export const authMiddleware = (jwtService: JWTService) => {
+export const userAuthMiddleware = (jwtService: JWTService) => {
   const bypassAuth =
     (process.env.DEV_BYPASS_AUTH ?? '').toLowerCase() === 'true';
   
   if (bypassAuth) {
-    console.log('🔓 Using development auth middleware (bypassing authentication)');
+    console.log('🔓 Using development user auth middleware (bypassing user authentication)');
     return devAuthMiddleware();
   }
 
-  console.log('🔒 Using production auth middleware');
-  return new Elysia({ name: 'auth' })
+  console.log('🔒 Using production user auth middleware');
+  return new Elysia({ name: 'user-auth' })
     .derive(async ({ request, set }) => {
       const authHeader = request.headers.get('authorization');
       
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        set.status = 401;
         return {
           user: null,
           error: 'Missing or invalid authorization header'
@@ -29,7 +28,6 @@ export const authMiddleware = (jwtService: JWTService) => {
       const payload = await jwtService.verifyToken(token);
 
       if (!payload) {
-        set.status = 401;
         return {
           user: null,
           error: 'Invalid or expired token'
@@ -49,7 +47,6 @@ export const authMiddleware = (jwtService: JWTService) => {
       });
 
       if (!user || user.status !== 'ACTIVE') {
-        set.status = 401;
         return {
           user: null,
           error: 'User not found or inactive'
@@ -66,7 +63,7 @@ export const authMiddleware = (jwtService: JWTService) => {
         set.status = 401;
         return {
           success: false,
-          message: error || 'Unauthorized eiei'
+          message: error || 'Unauthorized'
         };
       }
     });

@@ -1,5 +1,10 @@
 import env from "@/config/env";
-import { getCredentials, getTokens } from "@/utils/keychain";
+import {
+  clearCredentials,
+  clearTokens,
+  getCredentials,
+  getTokens,
+} from "@/utils/keychain";
 import {
   normalizeUrlToDevice,
   normalizeWebSocketUrlToDevice,
@@ -7,7 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { BarcodeScanningResult, Camera, CameraView } from "expo-camera";
 import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,7 +22,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { chargepointService } from "@/services/api";
+import { ApiError, chargepointService } from "@/services/api";
 
 type ResolvedPayload = {
   requestUrl: string;
@@ -30,6 +35,7 @@ export default function QRScannerScreen() {
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const isHandlingScanRef = useRef(false);
 
   useEffect(() => {
     const getPermissions = async () => {
@@ -42,9 +48,13 @@ export default function QRScannerScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      isHandlingScanRef.current = false;
       setScanned(false);
       setIsProcessing(false);
-      return () => setIsProcessing(false);
+      return () => {
+        isHandlingScanRef.current = false;
+        setIsProcessing(false);
+      };
     }, []),
   );
 
@@ -211,10 +221,11 @@ export default function QRScannerScreen() {
   const handleBarCodeScanned = async ({
     data,
   }: BarcodeScanningResult | { data: string }) => {
-    if (scanned || isProcessing) {
+    if (isHandlingScanRef.current || scanned || isProcessing) {
       return;
     }
 
+    isHandlingScanRef.current = true;
     setScanned(true);
     setIsProcessing(true);
 
@@ -309,13 +320,28 @@ export default function QRScannerScreen() {
       });
     } catch (error) {
       console.error("QR scan handling failed", error);
+
+      setIsProcessing(false);
+      setScanned(false);
+      isHandlingScanRef.current = false;
+
+      const apiError = error as ApiError | undefined;
+      if (apiError?.status === 401) {
+        await clearTokens();
+        await clearCredentials();
+        Alert.alert("เซสชันหมดอายุ", "กรุณาเข้าสู่ระบบใหม่", [
+          {
+            text: "ไปหน้าเข้าสู่ระบบ",
+            onPress: () => router.replace("/login" as never),
+          },
+        ]);
+        return;
+      }
+
       const message =
         error instanceof Error
           ? error.message
           : "ไม่สามารถประมวลผล QR Code ได้";
-
-      setIsProcessing(false);
-      setScanned(false);
 
       Alert.alert("เชื่อมต่อไม่สำเร็จ", message, [
         {

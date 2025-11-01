@@ -20,7 +20,7 @@ export class ChargePointService {
         data: {
           lastSeen: new Date(),
           // อัปเดตสถานะตามผลการเชื่อมต่อ
-          status: isConnected ? 'AVAILABLE' : 'UNAVAILABLE'
+          chargepointstatus: isConnected ? ChargePointStatus.AVAILABLE : ChargePointStatus.UNAVAILABLE
         },
         include: {
           connectors: true,
@@ -39,39 +39,45 @@ export class ChargePointService {
    * ดึงข้อมูลเครื่องชาร์จทั้งหมดสำหรับ ws-gateway
    */
   async getAllChargePointsForWSGateway() {
-    return await this.prisma.chargePoint.findMany(
-      {
-      select: {
-        //ดึงทั้งหมดฃ
-      
-        id: true,
-        name: true,
-        stationName: true,
-        location: true,
-        latitude: true,
-        longitude: true,
-        openingHours: true,
-        is24Hours: true,
-        brand: true,
-        serialNumber: true,
-        powerRating: true,
-        protocol: true,
-        chargePointIdentity: true,
-        status: true,
-        connectorCount: true,
-        lastSeen: true,
-        heartbeatIntervalSec: true,
-        vendor: true,
-        model: true,
-        firmwareVersion: true,
-        ocppProtocolRaw: true,
-        isWhitelisted: true,
-        ownerId: true,
-        ownershipType: true,
-        isPublic: true,
-        urlwebSocket: true
+    const chargePoints = await this.prisma.chargePoint.findMany({
+      include: {
+        station: {
+          select: {
+            stationname: true
+          }
+        }
       }
     });
+
+    return chargePoints.map((cp) => ({
+      id: cp.id,
+      name: cp.chargepointname,
+      stationName: cp.station?.stationname ?? null,
+      location: cp.location,
+      latitude: cp.latitude ? Number(cp.latitude) : null,
+      longitude: cp.longitude ? Number(cp.longitude) : null,
+      openingHours: cp.openingHours,
+      is24Hours: cp.is24Hours,
+      brand: cp.brand,
+      serialNumber: cp.serialNumber,
+      powerRating: cp.powerRating,
+      powerSystem: cp.powerSystem,
+      protocol: cp.protocol,
+      chargePointIdentity: cp.chargePointIdentity,
+      status: cp.chargepointstatus,
+      connectorCount: cp.connectorCount,
+      lastSeen: cp.lastSeen,
+      heartbeatIntervalSec: cp.heartbeatIntervalSec,
+      vendor: cp.vendor,
+      model: cp.model,
+      firmwareVersion: cp.firmwareVersion,
+      ocppProtocolRaw: cp.ocppProtocolRaw,
+      isWhitelisted: cp.isWhitelisted,
+      ownerId: cp.ownerId,
+      ownershipType: cp.ownershipType,
+      isPublic: cp.isPublic,
+      urlwebSocket: cp.urlwebSocket
+    }));
   }
 
   /**
@@ -152,18 +158,34 @@ export class ChargePointService {
     longitude?: number;
     description?: string;
     connectorCount?: number;
+    isWhitelisted?: boolean;
+    isPublic?: boolean;
   }) {
     const protocol = this.convertProtocolToEnum(data.protocol);
     const chargePointId = data.id || randomUUID();
     const urlwebSocket = this.generateWebSocketUrl(data.chargePointIdentity, protocol);
     const connectorCount = data.connectorCount || 2; // Default to 2 connectors for whitelist
 
+    let stationId: string | undefined;
+    const normalizedStationName = data.stationName?.trim();
+
+    if (normalizedStationName) {
+      const station = await this.prisma.station.upsert({
+        where: { stationname: normalizedStationName },
+        update: {},
+        create: { stationname: normalizedStationName }
+      });
+      stationId = station.id;
+    }
+
     const newChargePoint = await this.prisma.chargePoint.create({
       data: {
         id: chargePointId,
-        name: data.name,
-        stationName: data.stationName,
+        chargepointname: data.name,
+        stationId,
         location: data.location,
+        latitude: data.latitude,
+        longitude: data.longitude,
         serialNumber: data.serialNumber,
         protocol,
         chargePointIdentity: data.chargePointIdentity,
@@ -172,7 +194,9 @@ export class ChargePointService {
         powerRating: data.powerRating,
         connectorCount,
         ownershipType: OwnershipType.PRIVATE,
-        isWhitelisted: true
+        isWhitelisted: data.isWhitelisted ?? true,
+        isPublic: data.isPublic ?? true,
+        chargepointstatus: ChargePointStatus.AVAILABLE
       }
     });
 
@@ -190,8 +214,7 @@ export class ChargePointService {
         connectors: true,
         _count: {
           select: {
-            transactions: true,
-            sessions: true
+            transactions: true
           }
         }
       }
@@ -394,12 +417,12 @@ export class ChargePointService {
         },
         update: {
           // แปลงสถานะจาก OCPP ให้ตรงกับ enum ภายในระบบ
-          status: this.mapOcppStatusToConnectorStatus(statusData.status)
+          connectorstatus: this.mapOcppStatusToConnectorStatus(statusData.status)
         },
         create: {
           chargePointId: chargePoint.id,
           connectorId: statusData.connectorId,
-          status: this.mapOcppStatusToConnectorStatus(statusData.status),
+          connectorstatus: this.mapOcppStatusToConnectorStatus(statusData.status),
           type: 'TYPE_2' // กำหนดชนิดหัวชาร์จเริ่มต้น
       }
       });
@@ -459,6 +482,9 @@ export class ChargePointService {
     protocol?: OCPPVersion;
     ownerId?: string;
     isPublic?: boolean;
+    latitude?: number;
+    longitude?: number;
+    radius?: number;
   } = {}) {
     const {
       page = 1,
@@ -477,14 +503,14 @@ export class ChargePointService {
     
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
+        { chargepointname: { contains: search, mode: 'insensitive' } },
         { location: { contains: search, mode: 'insensitive' } },
         { serialNumber: { contains: search, mode: 'insensitive' } }
       ];
     }
 
     if (status) {
-      where.status = status;
+      where.chargepointstatus = status;
     }
 
     if (protocol) {
@@ -516,8 +542,7 @@ export class ChargePointService {
           connectors: true,
           _count: {
             select: {
-              transactions: true,
-              charging_sessions: true
+              transactions: true
             }
           }
         },
@@ -639,11 +664,10 @@ export class ChargePointService {
           owner: true,
           connectors: true,
           _count: {
-          select: {
-            transactions: true,
-            charging_sessions: true
+            select: {
+              transactions: true
+            }
           }
-        }
         }
       });
 
@@ -675,7 +699,7 @@ export class ChargePointService {
       const deletedChargePoint = await this.prisma.chargePoint.update({
         where: { chargePointIdentity },
         data: {
-          status: 'UNAVAILABLE'
+          chargepointstatus: ChargePointStatus.UNAVAILABLE
         }
       });
 
@@ -733,48 +757,109 @@ export class ChargePointService {
    */
   async createChargePoint(data: any) {
     try {
-      // Ensure all required fields are present with appropriate defaults
-      // Only include valid fields that exist in the Prisma schema
-      const chargePointData = {
-        name: data.name || `Auto-created: ${data.chargePointIdentity || 'Unknown'}`,
-        stationName: data.stationName || data.name || `Station: ${data.chargePointIdentity || 'Unknown'}`,
+      const connectorCount =
+        typeof data.connectorCount === 'number'
+          ? data.connectorCount
+          : Number.isFinite(Number(data.connectorCount))
+            ? Number(data.connectorCount)
+            : 0;
+
+      const protocol =
+        typeof data.protocol === 'string'
+          ? this.convertProtocolToEnum(data.protocol)
+          : data.protocol ?? OCPPVersion.OCPP16;
+
+      let stationId: string | undefined;
+      const stationName =
+        typeof data.stationName === 'string' && data.stationName.trim()
+          ? data.stationName.trim()
+          : undefined;
+
+      if (stationName) {
+        const station = await this.prisma.station.upsert({
+          where: { stationname: stationName },
+          update: {},
+          create: { stationname: stationName }
+        });
+        stationId = station.id;
+      }
+
+      const chargePointData: any = {
+        chargepointname: data.name || `Auto-created: ${data.chargePointIdentity || 'Unknown'}`,
         location: data.location || 'Unknown Location',
         brand: data.brand || 'Unknown Brand',
         serialNumber: data.serialNumber || `SN-${Date.now()}`,
-        powerRating: data.powerRating || 22,
-        protocol: data.protocol || 'OCPP16',
+        powerRating: data.powerRating ?? 22,
+        protocol,
         chargePointIdentity: data.chargePointIdentity,
-        // Optional fields - only include if provided and valid
-        ...(data.latitude !== undefined && { latitude: data.latitude }),
-        ...(data.longitude !== undefined && { longitude: data.longitude }),
-        ...(data.openingHours !== undefined && { openingHours: data.openingHours }),
-        ...(data.is24Hours !== undefined && { is24Hours: data.is24Hours }),
-        ...(data.powerSystem !== undefined && { powerSystem: data.powerSystem }),
-        ...(data.connectorCount !== undefined && { connectorCount: data.connectorCount }),
-        ...(data.csmsUrl !== undefined && { csmsUrl: data.csmsUrl }),
-        ...(data.status !== undefined && { status: data.status }),
-        ...(data.maxPower !== undefined && { maxPower: data.maxPower }),
-        ...(data.lastSeen !== undefined && { lastSeen: data.lastSeen }),
-        ...(data.heartbeatIntervalSec !== undefined && { heartbeatIntervalSec: data.heartbeatIntervalSec }),
-        ...(data.vendor !== undefined && { vendor: data.vendor }),
-        ...(data.model !== undefined && { model: data.model }),
-        ...(data.firmwareVersion !== undefined && { firmwareVersion: data.firmwareVersion }),
-        // Map ocppProtocol to ocppProtocolRaw if provided
-        ...(data.ocppProtocol !== undefined && { ocppProtocolRaw: data.ocppProtocol }),
-        ...(data.ocppProtocolRaw !== undefined && { ocppProtocolRaw: data.ocppProtocolRaw }),
-        ...(data.ocppSessionId !== undefined && { ocppSessionId: data.ocppSessionId }),
-        ...(data.isWhitelisted !== undefined && { isWhitelisted: data.isWhitelisted }),
-        ...(data.ownerId !== undefined && { ownerId: data.ownerId }),
-        ...(data.ownershipType !== undefined && { ownershipType: data.ownershipType }),
-        ...(data.isPublic !== undefined && { isPublic: data.isPublic }),
-        ...(data.onPeakRate !== undefined && { onPeakRate: data.onPeakRate }),
-        ...(data.onPeakStartTime !== undefined && { onPeakStartTime: data.onPeakStartTime }),
-        ...(data.onPeakEndTime !== undefined && { onPeakEndTime: data.onPeakEndTime }),
-        ...(data.offPeakRate !== undefined && { offPeakRate: data.offPeakRate }),
-        ...(data.offPeakStartTime !== undefined && { offPeakStartTime: data.offPeakStartTime }),
-        ...(data.offPeakEndTime !== undefined && { offPeakEndTime: data.offPeakEndTime }),
-        ...(data.urlwebSocket !== undefined && { urlwebSocket: data.urlwebSocket }),
+        connectorCount,
+        chargepointstatus:
+          (data.status as ChargePointStatus) ?? ChargePointStatus.AVAILABLE,
+        ownershipType: data.ownershipType ?? OwnershipType.PUBLIC,
+        isWhitelisted: data.isWhitelisted ?? true,
+        isPublic: data.isPublic ?? true,
+        onPeakRate: data.onPeakRate ?? 10,
+        onPeakStartTime: data.onPeakStartTime ?? '10:00',
+        onPeakEndTime: data.onPeakEndTime ?? '12:00',
+        offPeakRate: data.offPeakRate ?? 20,
+        offPeakStartTime: data.offPeakStartTime ?? '16:00',
+        offPeakEndTime: data.offPeakEndTime ?? '22:00'
       };
+
+      if (stationId) {
+        chargePointData.stationId = stationId;
+      }
+      if (data.latitude !== undefined) {
+        chargePointData.latitude = data.latitude;
+      }
+      if (data.longitude !== undefined) {
+        chargePointData.longitude = data.longitude;
+      }
+      if (data.openingHours !== undefined) {
+        chargePointData.openingHours = data.openingHours;
+      }
+      if (data.is24Hours !== undefined) {
+        chargePointData.is24Hours = data.is24Hours;
+      }
+      if (data.powerSystem !== undefined) {
+        chargePointData.powerSystem = data.powerSystem;
+      }
+      if (data.csmsUrl !== undefined) {
+        chargePointData.csmsUrl = data.csmsUrl;
+      }
+      if (data.maxPower !== undefined) {
+        chargePointData.maxPower = data.maxPower;
+      }
+      if (data.lastSeen !== undefined) {
+        chargePointData.lastSeen = data.lastSeen;
+      }
+      if (data.heartbeatIntervalSec !== undefined) {
+        chargePointData.heartbeatIntervalSec = data.heartbeatIntervalSec;
+      }
+      if (data.vendor !== undefined) {
+        chargePointData.vendor = data.vendor;
+      }
+      if (data.model !== undefined) {
+        chargePointData.model = data.model;
+      }
+      if (data.firmwareVersion !== undefined) {
+        chargePointData.firmwareVersion = data.firmwareVersion;
+      }
+      if (data.ocppProtocol !== undefined) {
+        chargePointData.ocppProtocolRaw = data.ocppProtocol;
+      }
+      if (data.ocppProtocolRaw !== undefined) {
+        chargePointData.ocppProtocolRaw = data.ocppProtocolRaw;
+      }
+      if (data.ocppSessionId !== undefined) {
+        chargePointData.ocppSessionId = data.ocppSessionId;
+      }
+      if (data.urlwebSocket !== undefined) {
+        chargePointData.urlwebSocket = data.urlwebSocket;
+      }
+      if (data.ownerId !== undefined) {
+        chargePointData.ownerId = data.ownerId;
+      }
 
       const newChargePoint = await this.prisma.chargePoint.create({
         data: chargePointData,
@@ -783,8 +868,7 @@ export class ChargePointService {
           connectors: true,
           _count: {
             select: {
-              transactions: true,
-              charging_sessions: true
+              transactions: true
             }
           }
         }
@@ -806,8 +890,7 @@ export class ChargePointService {
           connectors: true,
           _count: {
             select: {
-              transactions: true,
-              sessions: true
+              transactions: true
             }
           }
         }
@@ -950,7 +1033,7 @@ export class ChargePointService {
           connectorId: i,
           type: this.normalizeConnectorType(rawType),
           typeDescription: rawType,
-          status: 'AVAILABLE'
+          connectorstatus: ConnectorStatus.AVAILABLE
         };
 
         if (typeof detail?.maxCurrent === 'number') {
@@ -958,7 +1041,7 @@ export class ChargePointService {
         }
 
         const updateData: any = {
-          status: 'AVAILABLE'
+          connectorstatus: ConnectorStatus.AVAILABLE
         };
 
         if (rawType) {
@@ -1016,7 +1099,8 @@ export class ChargePointService {
         include: {
           connectors: {
             where: { connectorId }
-          }
+          },
+          station: true
         }
       });
 
@@ -1044,21 +1128,21 @@ export class ChargePointService {
         chargePoint: {
           id: chargePoint.id,
           chargePointIdentity: chargePoint.chargePointIdentity,
-          name: chargePoint.name,
-          stationName: chargePoint.stationName,
+          name: chargePoint.chargepointname,
+          stationName: chargePoint.station ? chargePoint.station.stationname : undefined,
           location: chargePoint.location,
           openingHours: chargePoint.openingHours,
           is24Hours: chargePoint.is24Hours,
           protocol: chargePoint.protocol,
           powerRating: chargePoint.powerRating,
           brand: chargePoint.brand,
-          status: chargePoint.status
+          status: chargePoint.chargepointstatus
         },
         connector: {
           id: connector.id,
           connectorId: connector.connectorId,
           type: connector.type,
-          status: connector.status,
+          status: connector.connectorstatus,
           maxCurrent: connector.maxCurrent,
           maxPower: connector.maxPower
         },

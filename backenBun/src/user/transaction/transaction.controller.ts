@@ -1,17 +1,22 @@
 import { Elysia, t } from 'elysia';
 import { TransactionService } from './transaction.service';
 
+const isDevBypassEnabled = () =>
+  (process.env.DEV_BYPASS_AUTH ?? '').toLowerCase() === 'true';
+
 export const transactionController = (transactionService: TransactionService) =>
   new Elysia({ prefix: '/api/transactions' })
     .post(
       '/',
       async ({ body, set, user }: any) => {
         try {
-          if (!user?.id) {
+          const bypassEnabled = isDevBypassEnabled();
+          
+          if (!user?.id && !bypassEnabled) {
             set.status = 401;
             return {
               success: false,
-              message: 'Unauthorized',
+              message: 'Unauthorized eiei',
             };
           }
 
@@ -24,7 +29,7 @@ export const transactionController = (transactionService: TransactionService) =>
             startMeterValue?: number;
           };
 
-          if (payload.userId && payload.userId !== user.id) {
+          if (payload.userId && user?.id && payload.userId !== user.id) {
             set.status = 403;
             return {
               success: false,
@@ -33,7 +38,7 @@ export const transactionController = (transactionService: TransactionService) =>
           }
 
           const transaction = await transactionService.createTransaction({
-            userId: payload.userId ?? user.id,
+            userId: payload.userId ?? user?.id ?? 'dev-user',
             chargePointIdentity: payload.chargePointIdentity,
             connectorId: payload.connectorId,
             vehicleId: payload.vehicleId,
@@ -132,26 +137,32 @@ export const transactionController = (transactionService: TransactionService) =>
       '/user/:userId',
       async ({ params, user, set }: any) => {
         try {
-          if (!user?.id) {
+          const bypassEnabled = isDevBypassEnabled();
+
+          if (!user?.id && !bypassEnabled) {
             set.status = 401;
             return {
               success: false,
-              message: 'Unauthorized',
+              message: 'Unauthorized eiei',
             };
           }
 
           const { userId } = params;
 
           // Users can only access their own transactions unless they have admin privileges
-          if (userId !== user.id) {
+          if (!bypassEnabled && userId !== user.id) {
             set.status = 403;
             return {
               success: false,
               message: 'Access denied. You can only view your own transactions.',
             };
           }
-
-          const transactions = await transactionService.getTransactionsByUserId(userId);
+          let Newuserid = userId
+          //แก้ไขด้วยนะ จำลองข้อมูลอยู่
+            Newuserid = 'cba427d4-7f42-4283-b5fe-9f10193d9aaa2'
+ 
+          console.log("userrrrrrrrrr",Newuserid)
+          const transactions = await transactionService.getTransactionsByUserId(Newuserid);
 
           return {
             success: true,
@@ -178,88 +189,46 @@ export const transactionController = (transactionService: TransactionService) =>
         }),
       }
     )
-    .get(
-      '/me',
-      async ({ user, set }: any) => {
-        try {
-          if (!user?.id) {
-            set.status = 401;
-            return {
-              success: false,
-              message: 'Unauthorized',
-            };
-          }
 
-          const transactions = await transactionService.getTransactionsByUserId(user.id);
-
-          return {
-            success: true,
-            data: transactions,
-          };
-        } catch (error) {
-          console.error('Error fetching user transactions:', error);
-          set.status = 500;
-          return {
-            success: false,
-            message: 'Internal server error',
-          };
-        }
-      },
-      {
-        detail: {
-          tags: ['Transactions'],
-          summary: 'Get current user transactions',
-          description: 'Retrieve all transactions for the authenticated user including related charge point and connector information.',
-          security: [{ bearerAuth: [] }],
-        },
-      }
-    )
     .get(
       '/:transactionId/summary',
       async ({ params, user, set }: any) => {
-        if (!user?.id) {
-          set.status = 401;
-          return {
-            success: false,
-            message: 'Unauthorized',
-          };
-        }
-
         try {
+          const bypassEnabled = isDevBypassEnabled();
+
+          if (!user?.id && !bypassEnabled) {
+            set.status = 401;
+            return {
+              success: false,
+              message: 'Unauthorized eiei',
+            };
+          }
+
           const { transactionId } = params as { transactionId: string };
-          const summary = await transactionService.getTransactionSummary(transactionId, user.id);
+
+          const summary = await transactionService.getTransactionSummary(
+            transactionId,
+            bypassEnabled ? null : user?.id
+          );
 
           if (!summary) {
             set.status = 404;
             return {
               success: false,
-              message: 'Transaction not found',
+              message: 'Resource not found',
             };
           }
 
           return {
             success: true,
-            data: {
-              transactionId: summary.transactionId,
-              chargePointIdentity: summary.chargePointIdentity ?? null,
-              connectorNumber: summary.connectorNumber ?? null,
-              startTime: summary.startTime.toISOString(),
-              endTime: summary.endTime ? summary.endTime.toISOString() : null,
-              durationSeconds: summary.durationSeconds,
-              totalEnergy: summary.totalEnergy,
-              meterStart: summary.meterStart,
-              meterStop: summary.meterStop,
-              totalCost: summary.totalCost,
-              appliedRate: summary.appliedRate,
-              stopReason: summary.stopReason ?? null,
-            },
+            data: summary,
           };
-        } catch (error: any) {
-          console.error('Get transaction summary error:', error);
+        } catch (error) {
+          console.error('Error fetching transaction summary:', error);
           set.status = 500;
           return {
             success: false,
-            message: error?.message || 'Failed to retrieve transaction summary',
+            message: 'Failed to fetch transaction summary',
           };
         }
       },
@@ -267,7 +236,8 @@ export const transactionController = (transactionService: TransactionService) =>
         detail: {
           tags: ['Transactions'],
           summary: 'Get transaction summary',
-          description: 'Retrieve energy consumption and cost information for a completed transaction.',
+          description:
+            'Retrieve a summary of a single transaction including energy and cost details.',
           security: [{ bearerAuth: [] }],
         },
         params: t.Object({
@@ -275,6 +245,7 @@ export const transactionController = (transactionService: TransactionService) =>
         }),
       }
     )
+
     .post(
       '/:transactionId/start',
       async ({ params, body, set }: any) => {

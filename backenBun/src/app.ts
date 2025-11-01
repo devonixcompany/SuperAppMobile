@@ -2,17 +2,16 @@ import { cors } from '@elysiajs/cors';
 import { jwt } from '@elysiajs/jwt';
 import { fromTypes, openapi } from '@elysiajs/openapi';
 import { Elysia, t } from 'elysia';
-import { logger, requestLogger } from './lib/logger';
-import { prisma } from './lib/prisma';
-import { serviceContainer } from './user';
 import { adminServiceContainer } from './admin';
-import { authMiddleware } from './middleware/auth';
+import { logger, requestLogger } from './lib/logger';
+import { userAuthMiddleware } from './middleware/user-auth';
+import { serviceContainer } from './user';
 
 // Get services from container
 const { jwtService } = serviceContainer;
 
 const port = Number(process.env.PORT ?? 8080);
-const serverUrl = process.env.BASE_URL ?? `http://localhost:${port}`;
+const serverUrl = process.env.BASE_URL ?? `https://bw6z7nqh-8080.asse.devtunnels.ms`;
 
 const userModel = t.Object({
   id: t.String(),
@@ -47,6 +46,9 @@ const PUBLIC_ROUTES = [
 ];
 
 const GATEWAY_API_KEY = process.env.WS_GATEWAY_API_KEY || 'your-api-key';
+
+const isDevBypassEnabled = () =>
+  (process.env.DEV_BYPASS_AUTH ?? '').toLowerCase() === 'true';
 
 const extractGatewayKey = (request: Request) => {
   const headerValue =
@@ -145,7 +147,7 @@ export const app = new Elysia()
     name: 'jwt',
     secret: process.env.JWT_SECRET || 'your-secret-key'
   }))
-  .use(authMiddleware(jwtService))
+  .use(userAuthMiddleware(jwtService))
   // Global guard: block non-public routes when JWT is missing or invalid
   .onBeforeHandle(({ request, user, set }: any) => {
     if (request.method === 'OPTIONS') {
@@ -156,6 +158,12 @@ export const app = new Elysia()
     const method = request.method.toUpperCase();
 
     if (isPublicRoute(path)) {
+      return;
+    }
+
+    // Skip global guard for admin routes - they have their own strict authentication
+    if (path.startsWith('/admin/') || path.startsWith('/api/admin/')) {
+      console.log('🔐 Admin route detected, skipping global guard (admin middleware will handle auth):', path);
       return;
     }
 
@@ -177,17 +185,14 @@ export const app = new Elysia()
       };
     }
 
+    // For user routes, check user authentication
     if (!user) {
-      // ตรวจสอบว่าอยู่ใน development mode หรือไม่
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      const bypassAuth = process.env.DEV_BYPASS_AUTH === 'true';
-      
-      if (isDevelopment && bypassAuth) {
-        console.log('🔓 Development mode: Allowing access without authentication for', path);
+      if (isDevBypassEnabled()) {
+        console.log('🔓 Development mode: Allowing user access without authentication for eiei', path);
         return; // อนุญาตให้เข้าถึงได้
       }
       
-      logger.warn('Unauthorized API access blocked', {
+      logger.warn('Unauthorized user API access blocked', {
         path,
         method,
         status: 401
@@ -195,20 +200,30 @@ export const app = new Elysia()
       set.status = 401;
       return {
         success: false,
-        message: 'Unauthorized: missing or invalid token'
+        message: 'Unauthorized: missing or invalid user token'
       };
     }
   })
   .use(serviceContainer.getAuthController())
   .use(serviceContainer.getUserController())
   .use(serviceContainer.getChargePointController())
-  .use(adminServiceContainer.getAuthController())
-  .use(adminServiceContainer.getChargePointController())
+  .use((() => {
+    console.log('🔧 Registering admin auth controller');
+    const adminAuthCtrl = adminServiceContainer.getAuthController();
+    console.log('✅ Admin auth controller registered');
+    return adminAuthCtrl;
+  })())
+  .use((() => {
+    console.log('🔧 Registering admin chargepoint controller');
+    const adminChargePointCtrl = adminServiceContainer.getChargePointController();
+    console.log('✅ Admin chargepoint controller registered');
+    return adminChargePointCtrl;
+  })())
   .use(serviceContainer.getTransactionController())
   .guard(
     ({ user }: any) => {
       // Allow access in development mode even without user
-      if (process.env.NODE_ENV === 'development' && process.env.DEV_BYPASS_AUTH === 'true') {
+      if (isDevBypassEnabled()) {
         return true;
       }
       return !!user;
@@ -216,7 +231,7 @@ export const app = new Elysia()
     (app: any) =>
       app.get('/api/profile', ({ user }: any) => {
         // In development mode, provide mock user if no user is available
-        const profileUser = user || (process.env.NODE_ENV === 'development' && process.env.DEV_BYPASS_AUTH === 'true' ? {
+        const profileUser = user || (isDevBypassEnabled() ? {
           id: 'dev-user-123',
           phoneNumber: '+66999999999',
           status: 'ACTIVE',

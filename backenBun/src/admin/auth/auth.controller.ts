@@ -13,7 +13,7 @@ export const adminAuthController = (adminAuthService: AdminAuthService) =>
           if (result.success && result.data) {
             // Set access token cookie (1 hour)
             cookie.accessToken.set({
-              value: result.data.token,
+              value: result.data.accessToken,
               httpOnly: true,
               secure: process.env.NODE_ENV === 'production',
               sameSite: 'strict',
@@ -32,7 +32,7 @@ export const adminAuthController = (adminAuthService: AdminAuthService) =>
             });
             
             // Remove tokens from response body for security
-            const { token, refreshToken, ...responseData } = result.data;
+            const { accessToken, refreshToken, ...responseData } = result.data;
             set.status = 201;
             return {
               ...result,
@@ -231,7 +231,7 @@ Register a new admin account in the system.
           if (result.success && result.data) {
             // Set access token cookie (1 hour)
             cookie.accessToken.set({
-              value: result.data.token,
+              value: result.data.accessToken,
               httpOnly: true,
               secure: process.env.NODE_ENV === 'production',
               sameSite: 'strict',
@@ -249,12 +249,8 @@ Register a new admin account in the system.
               path: '/'
             });
             
-            // Remove tokens from response body for security
-            const { token, refreshToken, ...responseData } = result.data;
-            return {
-              ...result,
-              data: responseData
-            };
+            // Return full response including tokens
+            return result;
           }
           
           return result;
@@ -395,10 +391,177 @@ Authenticate an admin and receive access tokens.
     )
     
     .post(
+      '/refresh',
+      async ({ body, set }) => {
+        try {
+          const { refreshToken } = body as { refreshToken: string };
+          const result = await adminAuthService.refreshToken(refreshToken);
+          
+          if (!result.success) {
+            set.status = 401;
+            return result;
+          }
+          
+          return result;
+          
+        } catch (error) {
+          console.error('Admin refresh token error:', error);
+          set.status = 401;
+          return {
+            success: false,
+            message: error instanceof Error ? error.message : 'Failed to refresh admin token'
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['Admin Authentication'],
+          summary: '🔄 Admin Refresh Token',
+          description: `
+Generate a new admin access token using a valid refresh token.
+
+**Token Refresh Process:**
+1. Validate the provided refresh token
+2. Check if the token is not expired and not revoked
+3. Verify the associated admin account is still active
+4. Generate new access and refresh tokens
+5. Revoke the old refresh token and store the new one
+
+**Security Notes:**
+- Refresh tokens are single-use (invalidated after use)
+- New refresh token is generated with each refresh
+- Access tokens have shorter expiration (1 hour)
+- Refresh tokens have longer expiration (7 days)
+- Only active admin accounts can refresh tokens
+          `,
+          requestBody: {
+            description: 'Admin refresh token data',
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['refreshToken'],
+                  properties: {
+                    refreshToken: {
+                      type: 'string',
+                      description: 'Valid JWT admin refresh token',
+                      example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+                    }
+                  }
+                },
+                examples: {
+                  refresh: {
+                    summary: 'Admin Token Refresh Request',
+                    value: {
+                      refreshToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbklkIjoiMTIzNDU2Nzg5MCIsInR5cGUiOiJhZG1pbl9yZWZyZXNoIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Admin token refreshed successfully',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      message: { type: 'string', example: 'Admin token refreshed successfully' },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          accessToken: { 
+                            type: 'string', 
+                            description: 'New JWT admin access token (expires in 1 hour)',
+                            example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+                          },
+                          refreshToken: { 
+                            type: 'string', 
+                            description: 'New JWT admin refresh token (expires in 7 days)',
+                            example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            401: {
+              description: 'Invalid or expired refresh token',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: false },
+                      message: { type: 'string', example: 'Invalid or expired refresh token' }
+                    }
+                  },
+                  examples: {
+                    invalid_token: {
+                      summary: 'Invalid Token',
+                      value: {
+                        success: false,
+                        message: 'Invalid refresh token'
+                      }
+                    },
+                    expired_token: {
+                      summary: 'Expired Token',
+                      value: {
+                        success: false,
+                        message: 'Invalid or expired refresh token'
+                      }
+                    },
+                    admin_not_found: {
+                      summary: 'Admin Not Found',
+                      value: {
+                        success: false,
+                        message: 'Admin not found'
+                      }
+                    },
+                    inactive_admin: {
+                      summary: 'Inactive Admin',
+                      value: {
+                        success: false,
+                        message: 'Admin account is inactive'
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            500: {
+              description: 'Internal server error',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: false },
+                      message: { type: 'string', example: 'Failed to refresh admin token' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        body: t.Object({
+          refreshToken: t.String()
+        })
+      }
+    )
+    
+    .post(
       '/logout',
       async ({ cookie, set }) => {
         try {
-          const refreshToken = cookie.refreshToken.value;
+          const refreshToken = cookie.refreshToken.value as string | undefined;
           
           if (refreshToken) {
             await adminAuthService.revokeRefreshToken(refreshToken);

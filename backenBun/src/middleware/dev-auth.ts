@@ -21,7 +21,7 @@ export const devAuthMiddleware = () =>
     })
     .onBeforeHandle(({ user, error, set }) => {
       // ใน development mode จะไม่มีการ block request
-      if (!user || error) {
-        console.log('⚠️ Development mode: Would normally block this request');
-      }
+      // แต่ต้องให้ user ผ่านไปเสมอ
+      console.log('🔓 Development mode: Allowing all requests');
+      // ไม่ return อะไรเพื่อให้ request ผ่านไป
     });

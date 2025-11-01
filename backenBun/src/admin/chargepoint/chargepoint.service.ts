@@ -17,6 +17,25 @@ export interface CreateChargePointData {
   protocol: 'OCPP16' | 'OCPP20' | 'OCPP21';
   csmsUrl?: string;
   chargePointIdentity: string;
+  // เพิ่มฟิลด์ที่ขาดหายไป
+  maxPower?: number;
+  heartbeatIntervalSec?: number;
+  vendor?: string;
+  model?: string;
+  firmwareVersion?: string;
+  ocppProtocolRaw?: string;
+  ocppSessionId?: string;
+  isWhitelisted?: boolean;
+  ownerId?: string;
+  ownershipType?: 'PUBLIC' | 'PRIVATE';
+  isPublic?: boolean;
+  onPeakRate?: number;
+  onPeakStartTime?: string;
+  onPeakEndTime?: string;
+  offPeakRate?: number;
+  offPeakStartTime?: string;
+  offPeakEndTime?: string;
+  urlwebSocket?: string;
 }
 
 export interface UpdateChargePointData {
@@ -35,6 +54,25 @@ export interface UpdateChargePointData {
   protocol?: 'OCPP16' | 'OCPP20' | 'OCPP21';
   csmsUrl?: string;
   chargePointIdentity?: string;
+  // เพิ่มฟิลด์ที่ขาดหายไป
+  maxPower?: number;
+  heartbeatIntervalSec?: number;
+  vendor?: string;
+  model?: string;
+  firmwareVersion?: string;
+  ocppProtocolRaw?: string;
+  ocppSessionId?: string;
+  isWhitelisted?: boolean;
+  ownerId?: string;
+  ownershipType?: 'PUBLIC' | 'PRIVATE';
+  isPublic?: boolean;
+  onPeakRate?: number;
+  onPeakStartTime?: string;
+  onPeakEndTime?: string;
+  offPeakRate?: number;
+  offPeakStartTime?: string;
+  offPeakEndTime?: string;
+  urlwebSocket?: string;
 }
 
 export interface GetChargePointsQuery {
@@ -98,7 +136,26 @@ export class AdminChargePointService {
           connectorCount: data.connectorCount || 1,
           protocol: data.protocol,
           csmsUrl: data.csmsUrl,
-          chargePointIdentity: data.chargePointIdentity
+          chargePointIdentity: data.chargePointIdentity,
+          // เพิ่มฟิลด์ที่ขาดหายไป
+          maxPower: data.maxPower,
+          heartbeatIntervalSec: data.heartbeatIntervalSec,
+          vendor: data.vendor,
+          model: data.model,
+          firmwareVersion: data.firmwareVersion,
+          ocppProtocolRaw: data.ocppProtocolRaw,
+          ocppSessionId: data.ocppSessionId,
+          isWhitelisted: data.isWhitelisted ?? true,
+          ownerId: data.ownerId,
+          ownershipType: data.ownershipType || 'PUBLIC',
+          isPublic: data.isPublic ?? true,
+          onPeakRate: data.onPeakRate ?? 10.0,
+          onPeakStartTime: data.onPeakStartTime || '10:00',
+          onPeakEndTime: data.onPeakEndTime || '12:00',
+          offPeakRate: data.offPeakRate ?? 20.0,
+          offPeakStartTime: data.offPeakStartTime || '16:00',
+          offPeakEndTime: data.offPeakEndTime || '22:00',
+          urlwebSocket: data.urlwebSocket
         },
         include: {
           station: true
@@ -176,7 +233,26 @@ export class AdminChargePointService {
           ...(data.connectorCount !== undefined && { connectorCount: data.connectorCount }),
           ...(data.protocol && { protocol: data.protocol }),
           ...(data.csmsUrl !== undefined && { csmsUrl: data.csmsUrl }),
-          ...(data.chargePointIdentity && { chargePointIdentity: data.chargePointIdentity })
+          ...(data.chargePointIdentity && { chargePointIdentity: data.chargePointIdentity }),
+          // เพิ่มฟิลด์ที่ขาดหายไป
+          ...(data.maxPower !== undefined && { maxPower: data.maxPower }),
+          ...(data.heartbeatIntervalSec !== undefined && { heartbeatIntervalSec: data.heartbeatIntervalSec }),
+          ...(data.vendor !== undefined && { vendor: data.vendor }),
+          ...(data.model !== undefined && { model: data.model }),
+          ...(data.firmwareVersion !== undefined && { firmwareVersion: data.firmwareVersion }),
+          ...(data.ocppProtocolRaw !== undefined && { ocppProtocolRaw: data.ocppProtocolRaw }),
+          ...(data.ocppSessionId !== undefined && { ocppSessionId: data.ocppSessionId }),
+          ...(data.isWhitelisted !== undefined && { isWhitelisted: data.isWhitelisted }),
+          ...(data.ownerId !== undefined && { ownerId: data.ownerId }),
+          ...(data.ownershipType !== undefined && { ownershipType: data.ownershipType }),
+          ...(data.isPublic !== undefined && { isPublic: data.isPublic }),
+          ...(data.onPeakRate !== undefined && { onPeakRate: data.onPeakRate }),
+          ...(data.onPeakStartTime !== undefined && { onPeakStartTime: data.onPeakStartTime }),
+          ...(data.onPeakEndTime !== undefined && { onPeakEndTime: data.onPeakEndTime }),
+          ...(data.offPeakRate !== undefined && { offPeakRate: data.offPeakRate }),
+          ...(data.offPeakStartTime !== undefined && { offPeakStartTime: data.offPeakStartTime }),
+          ...(data.offPeakEndTime !== undefined && { offPeakEndTime: data.offPeakEndTime }),
+          ...(data.urlwebSocket !== undefined && { urlwebSocket: data.urlwebSocket })
         },
         include: {
           station: true

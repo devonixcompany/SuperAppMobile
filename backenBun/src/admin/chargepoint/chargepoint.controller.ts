@@ -1,13 +1,28 @@
 import { Elysia, t } from 'elysia';
-import { AdminChargePointService } from './chargepoint.service';
+import {
+  AdminChargePointService,
+  CreateChargePointData,
+  UpdateChargePointData
+} from './chargepoint.service';
+import { requireAdminAuth } from '../../middleware/admin-auth';
+import { JWTService } from '../../lib/jwt';
 
-export const adminChargePointController = new Elysia({ prefix: '/admin/chargepoint' })
-  .decorate('adminChargePointService', new AdminChargePointService())
+export const adminChargePointController = (jwtService: JWTService) => {
+  console.log('🏭 Creating admin chargepoint controller with jwtService');
+  const authMiddleware = requireAdminAuth(jwtService);
+  console.log('🔧 Admin auth middleware created:', authMiddleware);
+  
+  console.log('🎯 Admin chargepoint controller created with middleware');
+  return new Elysia({ prefix: '/api/admin/chargepoint' })
+    .use(authMiddleware)
+    .decorate('adminChargePointService', new AdminChargePointService())
   .post(
     '/create',
     async ({ body, set, adminChargePointService }) => {
+      console.log('🎯 Admin chargepoint create route called');
       try {
-        const result = await adminChargePointService.createChargePoint(body);
+        const payload = body as CreateChargePointData;
+        const result = await adminChargePointService.createChargePoint(payload);
         return {
           success: true,
           message: 'สร้างจุดชาร์จสำเร็จ',
@@ -37,7 +52,26 @@ export const adminChargePointController = new Elysia({ prefix: '/admin/chargepoi
         connectorCount: t.Optional(t.Number({ minimum: 1, description: 'จำนวนหัวชาร์จ' })),
         protocol: t.String({ enum: ['OCPP16', 'OCPP20', 'OCPP21'], description: 'เวอร์ชัน OCPP' }),
         csmsUrl: t.Optional(t.String({ description: 'URL ของ CSMS' })),
-        chargePointIdentity: t.String({ minLength: 1, maxLength: 36, description: 'Charge Point Identity' })
+        chargePointIdentity: t.String({ minLength: 1, maxLength: 36, description: 'Charge Point Identity' }),
+        // เพิ่มฟิลด์ที่ขาดหายไป
+        maxPower: t.Optional(t.Number({ minimum: 0, description: 'กำลังไฟสูงสุด (kW)' })),
+        heartbeatIntervalSec: t.Optional(t.Number({ minimum: 1, description: 'ช่วงเวลา Heartbeat (วินาที)' })),
+        vendor: t.Optional(t.String({ description: 'ผู้ผลิต' })),
+        model: t.Optional(t.String({ description: 'รุ่น' })),
+        firmwareVersion: t.Optional(t.String({ description: 'เวอร์ชัน Firmware' })),
+        ocppProtocolRaw: t.Optional(t.String({ description: 'OCPP Protocol Raw' })),
+        ocppSessionId: t.Optional(t.String({ description: 'OCPP Session ID' })),
+        isWhitelisted: t.Optional(t.Boolean({ description: 'อนุญาตให้ใช้งาน', default: true })),
+        ownerId: t.Optional(t.String({ description: 'รหัสเจ้าของ' })),
+        ownershipType: t.Optional(t.String({ enum: ['PUBLIC', 'PRIVATE'], description: 'ประเภทความเป็นเจ้าของ', default: 'PUBLIC' })),
+        isPublic: t.Optional(t.Boolean({ description: 'เปิดให้สาธารณะ', default: true })),
+        onPeakRate: t.Optional(t.Number({ minimum: 0, description: 'อัตราค่าไฟช่วงเวลาเร่งด่วน (บาท/kWh)', default: 10.0 })),
+        onPeakStartTime: t.Optional(t.String({ description: 'เวลาเริ่มช่วงเร่งด่วน', default: '10:00' })),
+        onPeakEndTime: t.Optional(t.String({ description: 'เวลาสิ้นสุดช่วงเร่งด่วน', default: '12:00' })),
+        offPeakRate: t.Optional(t.Number({ minimum: 0, description: 'อัตราค่าไฟช่วงเวลาปกติ (บาท/kWh)', default: 20.0 })),
+        offPeakStartTime: t.Optional(t.String({ description: 'เวลาเริ่มช่วงปกติ', default: '16:00' })),
+        offPeakEndTime: t.Optional(t.String({ description: 'เวลาสิ้นสุดช่วงปกติ', default: '22:00' })),
+        urlwebSocket: t.Optional(t.String({ description: 'URL WebSocket' }))
       }),
       detail: {
         tags: ['Admin ChargePoint'],
@@ -50,7 +84,8 @@ export const adminChargePointController = new Elysia({ prefix: '/admin/chargepoi
     '/update/:id',
     async ({ params, body, set, adminChargePointService }) => {
       try {
-        const result = await adminChargePointService.updateChargePoint(params.id, body);
+        const payload = body as UpdateChargePointData;
+        const result = await adminChargePointService.updateChargePoint(params.id, payload);
         return {
           success: true,
           message: 'อัปเดตจุดชาร์จสำเร็จ',
@@ -83,7 +118,26 @@ export const adminChargePointController = new Elysia({ prefix: '/admin/chargepoi
         connectorCount: t.Optional(t.Number({ minimum: 1, description: 'จำนวนหัวชาร์จ' })),
         protocol: t.Optional(t.String({ enum: ['OCPP16', 'OCPP20', 'OCPP21'], description: 'เวอร์ชัน OCPP' })),
         csmsUrl: t.Optional(t.String({ description: 'URL ของ CSMS' })),
-        chargePointIdentity: t.Optional(t.String({ minLength: 1, maxLength: 36, description: 'Charge Point Identity' }))
+        chargePointIdentity: t.Optional(t.String({ minLength: 1, maxLength: 36, description: 'Charge Point Identity' })),
+        // เพิ่มฟิลด์ที่ขาดหายไป
+        maxPower: t.Optional(t.Number({ minimum: 0, description: 'กำลังไฟสูงสุด (kW)' })),
+        heartbeatIntervalSec: t.Optional(t.Number({ minimum: 1, description: 'ช่วงเวลา Heartbeat (วินาที)' })),
+        vendor: t.Optional(t.String({ description: 'ผู้ผลิต' })),
+        model: t.Optional(t.String({ description: 'รุ่น' })),
+        firmwareVersion: t.Optional(t.String({ description: 'เวอร์ชัน Firmware' })),
+        ocppProtocolRaw: t.Optional(t.String({ description: 'OCPP Protocol Raw' })),
+        ocppSessionId: t.Optional(t.String({ description: 'OCPP Session ID' })),
+        isWhitelisted: t.Optional(t.Boolean({ description: 'อนุญาตให้ใช้งาน' })),
+        ownerId: t.Optional(t.String({ description: 'รหัสเจ้าของ' })),
+        ownershipType: t.Optional(t.String({ enum: ['PUBLIC', 'PRIVATE'], description: 'ประเภทความเป็นเจ้าของ' })),
+        isPublic: t.Optional(t.Boolean({ description: 'เปิดให้สาธารณะ' })),
+        onPeakRate: t.Optional(t.Number({ minimum: 0, description: 'อัตราค่าไฟช่วงเวลาเร่งด่วน (บาท/kWh)' })),
+        onPeakStartTime: t.Optional(t.String({ description: 'เวลาเริ่มช่วงเร่งด่วน' })),
+        onPeakEndTime: t.Optional(t.String({ description: 'เวลาสิ้นสุดช่วงเร่งด่วน' })),
+        offPeakRate: t.Optional(t.Number({ minimum: 0, description: 'อัตราค่าไฟช่วงเวลาปกติ (บาท/kWh)' })),
+        offPeakStartTime: t.Optional(t.String({ description: 'เวลาเริ่มช่วงปกติ' })),
+        offPeakEndTime: t.Optional(t.String({ description: 'เวลาสิ้นสุดช่วงปกติ' })),
+        urlwebSocket: t.Optional(t.String({ description: 'URL WebSocket' }))
       }),
       detail: {
         tags: ['Admin ChargePoint'],
@@ -123,6 +177,7 @@ export const adminChargePointController = new Elysia({ prefix: '/admin/chargepoi
   .get(
     '/list',
     async ({ query, set, adminChargePointService }) => {
+      console.log('🎯 Admin chargepoint list route called');
       try {
         const result = await adminChargePointService.getChargePoints(query);
         return {
@@ -169,15 +224,6 @@ export const adminChargePointController = new Elysia({ prefix: '/admin/chargepoi
           message: error.message || 'ไม่พบจุดชาร์จ'
         };
       }
-    },
-    {
-      params: t.Object({
-        id: t.String({ description: 'รหัสจุดชาร์จ' })
-      }),
-      detail: {
-        tags: ['Admin ChargePoint'],
-        summary: 'ดึงข้อมูลจุดชาร์จ',
-        description: 'ดึงข้อมูลจุดชาร์จตาม ID'
-      }
     }
   );
+};

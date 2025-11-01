@@ -28,6 +28,7 @@ export interface ConnectorMetrics {
   energyDeliveredKWh?: number;  // พลังงานที่ส่งไปแล้ว (kWh)
   energyBaselineKWh?: number;   // ค่าเริ่มต้นของมิเตอร์ (ใช้หักลบ)
   rawEnergyReadingKWh?: number; // ค่ามิเตอร์แบบ absolute ล่าสุด (kWh)
+  connectorStatus?: string;     // สถานะล่าสุดของหัวชาร์จ
   stateOfChargePercent?: number; // เปอร์เซ็นต์แบตเตอรี่รถ (SoC)
   powerKw?: number;             // กำลังไฟฟ้า (kW)
   voltage?: number;             // แรงดันไฟฟ้า (V)
@@ -678,12 +679,19 @@ export class GatewaySessionManager extends EventEmitter {
       );
       chargePoint.connectors.push({
         connectorId,
-        status
+        status,
+        metrics: {
+          connectorStatus: status
+        }
       });
     } else {
       // อัปเดตสถานะของ connector ที่มีอยู่
       const oldStatus = chargePoint.connectors[connectorIndex].status;
       chargePoint.connectors[connectorIndex].status = status;
+      const metrics = chargePoint.connectors[connectorIndex].metrics;
+      if (metrics) {
+        metrics.connectorStatus = status;
+      }
       console.log(
         `🧭 [GatewaySession] หัวชาร์จ ${connectorId} ของ ${chargePointId}: ${oldStatus ?? 'ยังไม่มีข้อมูล'} -> ${status} (errorCode: ${errorCode || 'ไม่มี'})`
       );
@@ -739,6 +747,9 @@ export class GatewaySessionManager extends EventEmitter {
     }
 
     const metrics = connector.metrics!;
+    if (connector.status) {
+      metrics.connectorStatus = connector.status;
+    }
     let updated = false;
     let latestTimestamp = metrics.lastMeterTimestamp ? metrics.lastMeterTimestamp.getTime() : 0;
 

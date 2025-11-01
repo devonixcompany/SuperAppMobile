@@ -590,19 +590,35 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
     });
     
     // ส่งข้อมูลสถานะเริ่มต้น
+    const parsedConnectorId = Number(connectorId);
+    const connectorStatus =
+      Number.isFinite(parsedConnectorId) && chargePoint
+        ? chargePoint.connectors.find(
+            (connector) => connector.connectorId === parsedConnectorId
+          )?.status
+        : undefined;
+
+    const resolvedStatus = connectorStatus ?? (chargePoint ? 'Available' : 'OFFLINE');
+
     const initialStatus = {
       type: 'status',
       timestamp: new Date().toISOString(),
       data: {
         chargePointId: chargePointId,
         connectorId: parseInt(connectorId),
-        status: chargePoint ? 'Available' : 'OFFLINE', // ถ้ามี charge point ที่เชื่อมต่ออยู่ให้แสดง AVAILABLE ไม่งั้นแสดง OFFLINE
+        status: resolvedStatus,
         isOnline: !!chargePoint, // true ถ้า charge point เชื่อมต่ออยู่
-        message: chargePoint ? 'เชื่อมต่อสำเร็จ - Charge Point พร้อมใช้งาน' : 'เชื่อมต่อสำเร็จ - Charge Point ออฟไลน์',
-        chargePointInfo: cachedChargePoint ? {
-          serialNumber: cachedChargePoint.serialNumber,
-          identity: cachedChargePoint.chargePointIdentity
-        } : undefined
+        message: chargePoint
+          ? connectorStatus
+            ? `เชื่อมต่อสำเร็จ - หัวชาร์จอยู่ในสถานะ ${connectorStatus}`
+            : 'เชื่อมต่อสำเร็จ - Charge Point พร้อมใช้งาน'
+          : 'เชื่อมต่อสำเร็จ - Charge Point ออฟไลน์',
+        chargePointInfo: cachedChargePoint
+          ? {
+              serialNumber: cachedChargePoint.serialNumber,
+              identity: cachedChargePoint.chargePointIdentity
+            }
+          : undefined
       }
     };
     console.log('ส่งสถานะเริ่มต้นให้ผู้ใช้:', initialStatus);

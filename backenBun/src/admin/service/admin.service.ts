@@ -520,7 +520,7 @@ export class AdminService {
               id: true,
               connectorId: true,
               type: true,
-              status: true,
+              connectorstatus: true,
               maxPower: true,
               maxCurrent: true,
             },
@@ -671,9 +671,11 @@ export class AdminService {
         record.type =
           connector.type as Prisma.ConnectorCreateWithoutChargePointInput["type"];
       }
-      if (connector.status !== undefined) {
-        record.status =
-          connector.status as Prisma.ConnectorCreateWithoutChargePointInput["status"];
+      const connectorStatus =
+        (connector as any).connectorstatus ?? (connector as any).status;
+      if (connectorStatus !== undefined) {
+        record.connectorstatus =
+          connectorStatus as Prisma.ConnectorCreateWithoutChargePointInput["connectorstatus"];
       }
       if (connector.maxPower !== undefined) {
         record.maxPower =

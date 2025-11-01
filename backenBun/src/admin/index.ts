@@ -1,5 +1,4 @@
 // Legacy exports (to be deprecated)
-export { adminRoutes } from './routes/admin.routes';
 export { AdminService, type AdminLoginData, type AdminRegistrationData } from './service/admin.service';
 
 // New microservice exports
@@ -10,10 +9,10 @@ export { AdminChargePointService } from './chargepoint/chargepoint.service';
 
 // Import services and controllers
 import { JWTService } from '../lib/jwt';
-import { AdminAuthService } from './auth/auth.service';
-import { AdminChargePointService } from './chargepoint/chargepoint.service';
 import { adminAuthController } from './auth/auth.controller';
+import { AdminAuthService } from './auth/auth.service';
 import { adminChargePointController } from './chargepoint/chargepoint.controller';
+import { AdminChargePointService } from './chargepoint/chargepoint.service';
 
 // Service container for admin microservices
 export class AdminServiceContainer {
@@ -21,10 +20,12 @@ export class AdminServiceContainer {
   
   public readonly adminAuthService: AdminAuthService;
   public readonly adminChargePointService: AdminChargePointService;
+  
+  public readonly jwtService: JWTService;
 
   private constructor() {
-    const jwtService = new JWTService(process.env.JWT_SECRET || 'default-secret');
-    this.adminAuthService = new AdminAuthService(jwtService);
+    this.jwtService = new JWTService(process.env.JWT_SECRET || 'default-secret');
+    this.adminAuthService = new AdminAuthService(this.jwtService);
     this.adminChargePointService = new AdminChargePointService();
   }
 
@@ -41,7 +42,7 @@ export class AdminServiceContainer {
   }
 
   public getChargePointController() {
-    return adminChargePointController;
+    return adminChargePointController(this.jwtService);
   }
 }
 

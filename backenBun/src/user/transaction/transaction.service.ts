@@ -216,13 +216,28 @@ export class TransactionService {
 
     const ocppId = String(ocppTransactionId);
 
+    const transactionInclude = {
+      chargePoint: {
+        select: {
+          onPeakRate: true,
+          offPeakRate: true,
+          onPeakStartTime: true,
+          onPeakEndTime: true,
+          offPeakStartTime: true,
+          offPeakEndTime: true,
+        },
+      },
+    } as const;
+
     let transaction = await this.prisma.transaction.findFirst({
       where: { ocppTransactionId: ocppId },
+      include: transactionInclude,
     });
 
     if (!transaction && idTag) {
       transaction = await this.prisma.transaction.findUnique({
         where: { transactionId: idTag },
+        include: transactionInclude,
       });
     }
 
@@ -261,6 +276,16 @@ export class TransactionService {
       }
     }
 
+    const resolvedEnergy = totalEnergy ?? transaction.totalEnergy ?? null;
+    const rateFromSchedule =
+      this.resolveRateForTimestamp(stopTime, transaction.chargePoint) ?? null;
+    const appliedRate = rateFromSchedule ?? transaction.appliedRate ?? null;
+    const computedCost =
+      resolvedEnergy !== null && appliedRate !== null
+        ? this.computeCost(resolvedEnergy, appliedRate)
+        : null;
+    const totalCost = computedCost ?? transaction.totalCost ?? null;
+
     const updatedTransaction = await this.prisma.transaction.update({
       where: { id: transaction.id },
       data: {
@@ -268,6 +293,8 @@ export class TransactionService {
         startMeterValue: normalizedStart ?? transaction.startMeterValue,
         endMeterValue: normalizedEnd ?? meterStop,
         totalEnergy: totalEnergy ?? transaction.totalEnergy,
+        totalCost,
+        appliedRate,
         stopReason: reason ?? transaction.stopReason,
         status: TransactionStatus.COMPLETED,
       },
@@ -422,18 +449,125 @@ export class TransactionService {
     return null;
   }
 
+  private resolveRateForTimestamp(
+    timestamp: Date,
+    pricing?: {
+      onPeakRate?: number | null;
+      offPeakRate?: number | null;
+      onPeakStartTime?: string | null;
+      onPeakEndTime?: string | null;
+      offPeakStartTime?: string | null;
+      offPeakEndTime?: string | null;
+    }
+  ): number | null {
+    if (!pricing || !Number.isFinite(timestamp.getTime())) {
+      return null;
+    }
+
+    const minutes = timestamp.getHours() * 60 + timestamp.getMinutes();
+
+    const onPeakStart = this.timeStringToMinutes(pricing.onPeakStartTime);
+    const onPeakEnd = this.timeStringToMinutes(pricing.onPeakEndTime);
+    const offPeakStart = this.timeStringToMinutes(pricing.offPeakStartTime);
+    const offPeakEnd = this.timeStringToMinutes(pricing.offPeakEndTime);
+
+    const hasOnPeakRate =
+      typeof pricing.onPeakRate === 'number' && Number.isFinite(pricing.onPeakRate);
+    const hasOffPeakRate =
+      typeof pricing.offPeakRate === 'number' && Number.isFinite(pricing.offPeakRate);
+
+    if (hasOnPeakRate && this.isWithinPeriod(minutes, onPeakStart, onPeakEnd)) {
+      return pricing.onPeakRate as number;
+    }
+
+    if (hasOffPeakRate && this.isWithinPeriod(minutes, offPeakStart, offPeakEnd)) {
+      return pricing.offPeakRate as number;
+    }
+
+    if (hasOffPeakRate) {
+      return pricing.offPeakRate as number;
+    }
+
+    if (hasOnPeakRate) {
+      return pricing.onPeakRate as number;
+    }
+
+    return null;
+  }
+
+  private timeStringToMinutes(value?: string | null): number | null {
+    if (!value) {
+      return null;
+    }
+
+    const [hoursStr, minutesStr] = value.split(':');
+    if (hoursStr === undefined || minutesStr === undefined) {
+      return null;
+    }
+
+    const hours = Number(hoursStr);
+    const minutes = Number(minutesStr);
+
+    if (
+      !Number.isFinite(hours) ||
+      !Number.isFinite(minutes) ||
+      hours < 0 ||
+      hours > 23 ||
+      minutes < 0 ||
+      minutes > 59
+    ) {
+      return null;
+    }
+
+    return hours * 60 + minutes;
+  }
+
+  private isWithinPeriod(minutes: number, start: number | null, end: number | null): boolean {
+    if (start === null || end === null) {
+      return false;
+    }
+
+    if (start === end) {
+      return true;
+    }
+
+    if (start < end) {
+      return minutes >= start && minutes < end;
+    }
+
+    return minutes >= start || minutes < end;
+  }
+
+  private computeCost(energy: number, rate: number): number | null {
+    if (!Number.isFinite(energy) || !Number.isFinite(rate)) {
+      return null;
+    }
+
+    const sanitizedEnergy = Math.max(energy, 0);
+    const sanitizedRate = Math.max(rate, 0);
+    const product = sanitizedEnergy * sanitizedRate;
+
+    if (!Number.isFinite(product)) {
+      return null;
+    }
+
+    return Math.round(product * 100) / 100;
+  }
+
   /**
    * Get all transactions for a specific user with charge point information
    */
   async getTransactionsByUserId(userId: string) {
     const transactions = await this.prisma.transaction.findMany({
-      where: { userId },
+      where: { 
+        userId,
+        status: TransactionStatus.ACTIVE 
+      },
       include: {
         chargePoint: {
           select: {
             id: true,
-            name: true,
-            stationName: true,
+            chargepointname: true,
             location: true,
             latitude: true,
             longitude: true,
@@ -441,7 +575,7 @@ export class TransactionService {
             serialNumber: true,
             powerRating: true,
             chargePointIdentity: true,
-            status: true,
+            chargepointstatus: true,
             maxPower: true,
             onPeakRate: true,
             offPeakRate: true,
@@ -461,7 +595,7 @@ export class TransactionService {
             connectorId: true,
             type: true,
             typeDescription: true,
-            status: true,
+            connectorstatus: true,
             maxPower: true,
             maxCurrent: true
           }
@@ -484,9 +618,25 @@ export class TransactionService {
     return transactions;
   }
 
-  async getTransactionSummary(transactionId: string, userId: string): Promise<TransactionSummary | null> {
-    const transaction = await this.prisma.transaction.findUnique({
-      where: { transactionId },
+  async getTransactionSummary(
+    transactionId: string,
+    userId?: string | null
+  ): Promise<TransactionSummary | null> {
+    const normalizedId = transactionId.trim();
+    const isNumericId = /^\d+$/.test(normalizedId);
+
+    const transaction = await this.prisma.transaction.findFirst({
+      where: {
+        AND: [
+          ...(userId ? [{ userId }] : []),
+          {
+            OR: [
+              { transactionId: normalizedId },
+              ...(isNumericId ? [{ ocppTransactionId: normalizedId }] : [])
+            ]
+          }
+        ]
+      },
       include: {
         chargePoint: {
           select: {
@@ -502,7 +652,7 @@ export class TransactionService {
       }
     });
 
-    if (!transaction || transaction.userId !== userId) {
+    if (!transaction) {
       return null;
     }
 

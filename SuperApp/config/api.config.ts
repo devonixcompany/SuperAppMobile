@@ -66,6 +66,16 @@ export const API_CONFIG = {
       MARK_ALL_READ: '/api/notifications/read-all',
       SETTINGS: '/api/notifications/settings',
     },
+    
+    // Transactions
+    TRANSACTIONS: {
+      CREATE: '/api/transactions',
+      SUMMARY: (transactionId: string) => 
+        `/api/transactions/${encodeURIComponent(transactionId)}/summary`,
+      LIST: '/api/transactions',
+      USER_TRANSACTIONS: (userId: string) => 
+        `/api/transactions/user/${encodeURIComponent(userId)}`,
+    },
   },
   
   // Request Configuration
