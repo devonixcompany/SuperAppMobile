@@ -8,11 +8,11 @@ datasource db {
 }
 
 model User {
-  id            String        @id @default(uuid())
-  firebaseUid   String        @unique
-  email         String        @unique
-  phoneNumber   String        @unique
-  fullName      String?
+  id            String        @id @default(uuid())                              
+  firebaseUid   String        @unique                         
+  email         String        @unique                        
+  phoneNumber   String        @unique                         
+  fullName      String?                                       
   password      String
   status        String        @default("PENDING")
   createdAt     DateTime      @default(now())
@@ -22,6 +22,8 @@ model User {
   chargePoints  ChargePoint[] @relation("UserChargePoints")
   transactions  Transaction[]
   vehicles      UserVehicle[]
+  rfidCards      RfidCard[]   @relation("UserOwnedRfidCards")   // บัตร RFID ที่ผู้ใช้นี้เป็นเจ้าของ
+  issuedRfidCards RfidCard[]  @relation("UserIssuedRfidCards")  // บัตร RFID ที่ผู้ใช้นี้เป็นผู้ออกให้ผู้อื่น
 }
 
 model UserVehicle {
@@ -38,6 +40,38 @@ model UserVehicle {
 
   @@map("user_vehicles")
 }
+
+model RfidCard {
+  id             String         @id @default(cuid())
+  ownerId        String
+  owner          User           @relation("UserOwnedRfidCards", fields: [ownerId], references: [id]) // ผู้ใช้ที่เป็นเจ้าของบัตร
+  cardNumber     String         @unique @db.VarChar(64)           // หมายเลข UID/SN ของบัตร
+  qrCodeValue    String?        @unique @db.VarChar(128)          // ค่า QR (ถ้ามี) สำหรับสแกนลงทะเบียน
+  alias          String?        @db.VarChar(64)                   // ชื่อเล่นของบัตรที่ผู้ใช้ตั้งเอง
+  isPrimary      Boolean        @default(false)                   // true เมื่อเป็นบัตรหลักของเจ้าของ
+  status         RfidCardStatus @default(ACTIVE)                  // สถานะการใช้งานของบัตร
+  issuedById     String?
+  issuedBy       User?          @relation("UserIssuedRfidCards", fields: [issuedById], references: [id]) // ผู้ใช้ที่ออกบัตรใบนี้ให้
+  activatedAt    DateTime?                                        // เวลาที่บัตรถูกยืนยันใช้งาน
+  lastUsedAt     DateTime?                                        // เวลาที่บัตรถูกใช้ครั้งล่าสุด
+  revokedAt      DateTime?                                        // เวลาที่บัตรถูกเพิกถอน
+  deletedAt      DateTime?                                        // เวลาที่ลบบัตรแบบ soft delete
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([ownerId, status])    // ช่วยค้นหาบัตรตามเจ้าของ/สถานะ
+  @@index([ownerId, isPrimary]) // ช่วยตรวจว่าเจ้าของมีบัตรหลักแล้วหรือไม่
+}
+
+
+enum RfidCardStatus {
+  ACTIVE
+  INACTIVE
+  LOST
+  REVOKED
+}
+
+
 model SsTaxInvoiceProfile {
   id             String        @id @default(uuid())
   userId         String                               //ผูกกับเจ้าของโปรไฟล์
@@ -75,7 +109,8 @@ model Station {
 
 model ChargePoint {
   id               String            @id @default(cuid()) // รหัสจุดชาร์จ เช่น "CP_BKK_001", "CP_CNX_002"
-  chargepointname  String            // ชื่อจุดชาร์จ เช่น "Central World", "Big C Ladprao"
+  name             String            @map("chargepointname")
+  stationName      String?            // ชื่อจุดชาร์จ เช่น "Central World", "Big C Ladprao"
   stationId        String?                 // รหัสสถานี (foreign key ไปยัง Station.id)
   location         String            // ที่อยู่ เช่น "999/9 Rama I Rd, Pathumwan, Bangkok"
   latitude         Decimal?          // ละติจูด เช่น 13.7563 (สำหรับแสดงบนแผนที่)
@@ -98,7 +133,7 @@ model ChargePoint {
 
 
 
-  chargepointstatus           ChargePointStatus @default(AVAILABLE) // สถานะ: AVAILABLE, OCCUPIED, UNAVAILABLE, FAULTED, MAINTENANCE
+  status          ChargePointStatus @default(AVAILABLE) @map("chargepointstatus") // สถานะ: AVAILABLE, OCCUPIED, UNAVAILABLE, FAULTED, MAINTENANCE
   maxPower         Float?            // กำลังไฟสูงสุด เช่น 22.0 (kW), 50.0 (kW) - deprecated, ใช้ powerRating แทน
 
 
@@ -145,7 +180,7 @@ model Connector {
   typeDescription   String?        // ข้อความชนิดหัวชาร์จที่รับมาจาก OCPP (raw string)
 
 
-  connectorstatus   ConnectorStatus   @default(AVAILABLE)
+  status            ConnectorStatus   @default(AVAILABLE) @map("connectorstatus")
   maxPower          Float?
   maxCurrent        Float?
   chargePoint       ChargePoint       @relation(fields: [chargePointId], references: [id], onDelete: Cascade)

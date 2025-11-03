@@ -2,8 +2,9 @@ import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
 
 export interface CreateChargePointData {
-  chargepointname: string;
+  name: string;
   stationId?: string;
+  stationName?: string;
   location: string;
   latitude?: number;
   longitude?: number;
@@ -20,8 +21,9 @@ export interface CreateChargePointData {
 }
 
 export interface UpdateChargePointData {
-  chargepointname?: string;
+  name?: string;
   stationId?: string;
+  stationName?: string;
   location?: string;
   latitude?: number;
   longitude?: number;
@@ -48,7 +50,7 @@ export class AdminChargePointService {
   async createChargePoint(data: CreateChargePointData) {
     try {
       // Validate required fields
-      if (!data.chargepointname || !data.location || !data.brand || !data.serialNumber || !data.chargePointIdentity) {
+      if (!data.name || !data.location || !data.brand || !data.serialNumber || !data.chargePointIdentity) {
         throw new Error('ข้อมูลที่จำเป็นไม่ครบถ้วน');
       }
 
@@ -84,7 +86,8 @@ export class AdminChargePointService {
       // Create charge point
       const chargePoint = await prisma.chargePoint.create({
         data: {
-          chargepointname: data.chargepointname,
+          name: data.name,
+          stationName: data.stationName,
           stationId: data.stationId,
           location: data.location,
           latitude: data.latitude,
@@ -162,7 +165,8 @@ export class AdminChargePointService {
       const updatedChargePoint = await prisma.chargePoint.update({
         where: { id },
         data: {
-          ...(data.chargepointname && { chargepointname: data.chargepointname }),
+          ...(data.name && { name: data.name }),
+          ...(data.stationName !== undefined && { stationName: data.stationName }),
           ...(data.stationId !== undefined && { stationId: data.stationId }),
           ...(data.location && { location: data.location }),
           ...(data.latitude !== undefined && { latitude: data.latitude }),
@@ -225,7 +229,7 @@ export class AdminChargePointService {
 
       if (search) {
         where.OR = [
-          { chargepointname: { contains: search, mode: 'insensitive' } },
+          { name: { contains: search, mode: 'insensitive' } },
           { location: { contains: search, mode: 'insensitive' } },
           { brand: { contains: search, mode: 'insensitive' } },
           { serialNumber: { contains: search, mode: 'insensitive' } }

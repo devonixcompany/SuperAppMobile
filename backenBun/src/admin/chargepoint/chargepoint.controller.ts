@@ -7,7 +7,11 @@ export const adminChargePointController = new Elysia({ prefix: '/admin/chargepoi
     '/create',
     async ({ body, set, adminChargePointService }) => {
       try {
-        const result = await adminChargePointService.createChargePoint(body);
+        const { chargepointname, ...rest } = body as any;
+        const result = await adminChargePointService.createChargePoint({
+          ...rest,
+          name: chargepointname
+        });
         return {
           success: true,
           message: 'สร้างจุดชาร์จสำเร็จ',
@@ -24,6 +28,7 @@ export const adminChargePointController = new Elysia({ prefix: '/admin/chargepoi
     {
       body: t.Object({
         chargepointname: t.String({ minLength: 1, description: 'ชื่อจุดชาร์จ' }),
+        stationName: t.Optional(t.String({ description: 'Station name' })),
         stationId: t.Optional(t.String({ description: 'รหัสสถานี' })),
         location: t.String({ minLength: 1, description: 'ที่อยู่' }),
         latitude: t.Optional(t.Number({ description: 'ละติจูด' })),
@@ -50,7 +55,11 @@ export const adminChargePointController = new Elysia({ prefix: '/admin/chargepoi
     '/update/:id',
     async ({ params, body, set, adminChargePointService }) => {
       try {
-        const result = await adminChargePointService.updateChargePoint(params.id, body);
+        const { chargepointname, ...rest } = body as any;
+        const result = await adminChargePointService.updateChargePoint(params.id, {
+          ...rest,
+          ...(chargepointname !== undefined ? { name: chargepointname } : {})
+        });
         return {
           success: true,
           message: 'อัปเดตจุดชาร์จสำเร็จ',
@@ -70,6 +79,7 @@ export const adminChargePointController = new Elysia({ prefix: '/admin/chargepoi
       }),
       body: t.Object({
         chargepointname: t.Optional(t.String({ minLength: 1, description: 'ชื่อจุดชาร์จ' })),
+        stationName: t.Optional(t.String({ description: 'Station name' })),
         stationId: t.Optional(t.String({ description: 'รหัสสถานี' })),
         location: t.Optional(t.String({ minLength: 1, description: 'ที่อยู่' })),
         latitude: t.Optional(t.Number({ description: 'ละติจูด' })),
@@ -181,3 +191,4 @@ export const adminChargePointController = new Elysia({ prefix: '/admin/chargepoi
       }
     }
   );
+
