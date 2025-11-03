@@ -19,11 +19,15 @@ model User {
   updatedAt     DateTime      @updatedAt
   typeUser      UserType?
   refresh_token String?
+  omiseCustomerId String?     @unique                         // รหัสลูกค้าใน Omise/OPN สำหรับการเรียกเก็บเงินซ้ำ
   chargePoints  ChargePoint[] @relation("UserChargePoints")
   transactions  Transaction[]
   vehicles      UserVehicle[]
   rfidCards      RfidCard[]   @relation("UserOwnedRfidCards")   // บัตร RFID ที่ผู้ใช้นี้เป็นเจ้าของ
   issuedRfidCards RfidCard[]  @relation("UserIssuedRfidCards")  // บัตร RFID ที่ผู้ใช้นี้เป็นผู้ออกให้ผู้อื่น
+  paymentCards  PaymentCard[]
+  omisePaymentCards PaymentCard[] @relation("UserOmiseCustomer") // บัตรที่ผูกกับ Omise Customer ID
+  payments      Payment[]
 }
 
 model UserVehicle {
@@ -218,6 +222,7 @@ model PaymentCard {
   id             String        @id @default(cuid())
   userId         String
   omiseCardId    String        @unique             // card_XXX จาก Omise
+  omiseCustomerId String?                          // รหัสลูกค้าใน Omise/OPN ที่บัตรนี้ผูกอยู่
   brand          String?
   lastDigits     String?
   expirationMonth Int?
@@ -227,8 +232,10 @@ model PaymentCard {
   updatedAt      DateTime      @updatedAt
 
   user           User          @relation(fields: [userId], references: [id])
+  omiseCustomer  User?         @relation("UserOmiseCustomer", fields: [omiseCustomerId], references: [omiseCustomerId])
 
   @@index([userId])
+  @@index([omiseCustomerId])
 }
 model PaymentLog {
   id            String     @id @default(cuid())
@@ -293,6 +300,7 @@ model Transaction {
   connector       Connector         @relation(fields: [connectorId], references: [id])
   user            User              @relation(fields: [userId], references: [id])
   vehicle         UserVehicle?      @relation(fields: [vehicleId], references: [id])
+  payments        Payment[]
 
   @@map("transactions")
 }
