@@ -444,9 +444,9 @@ export class AdminService {
           const [firstCandidate] = Array.from(stationNameCandidates);
           const nameForCreation =
             firstCandidate ??
-            (typeof chargePointData.chargepointname === "string" &&
-            chargePointData.chargepointname.trim()
-              ? `${(chargePointData.chargepointname as string).trim()} Station`
+            (typeof chargePointData.name === "string" &&
+            chargePointData.name.trim()
+              ? `${(chargePointData.name as string).trim()} Station`
               : `Station-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
 
           stationRecord = await prisma.station.create({
@@ -573,7 +573,8 @@ export class AdminService {
   };
 
   private ALLOWED_CHARGE_POINT_FIELDS = [
-    "chargepointname",
+    "name",
+    "stationName",
     "location",
     "latitude",
     "longitude",
@@ -587,7 +588,7 @@ export class AdminService {
     "protocol",
     "csmsUrl",
     "chargePointIdentity",
-    "chargepointstatus",
+    "status",
     "maxPower",
     "lastSeen",
     "heartbeatIntervalSec",
@@ -607,7 +608,6 @@ export class AdminService {
     "offPeakEndTime",
     "urlwebSocket",
     "stationId",
-    "powerSystem",
   ] as const satisfies readonly (keyof Prisma.ChargePointUncheckedCreateInput)[];
 
   private NUMERIC_FIELDS = [
