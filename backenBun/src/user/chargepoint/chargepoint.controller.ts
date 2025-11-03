@@ -1,4 +1,5 @@
 import { ChargePointStatus, OCPPVersion } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
 import { Elysia, t } from 'elysia';
 import { ValidationService } from '../validation/validation.service';
 import { ChargePointService } from './chargepoint.service';
@@ -51,204 +52,6 @@ export const chargePointController = (
     )
 
     /**
-     * Admin API สำหรับเพิ่มเครื่องชาร์จเข้า whitelist
-     * ใช้สำหรับการอนุญาตให้เครื่องชาร์จสามารถเชื่อมต่อ OCPP ได้
-     */
-    .post(
-      '/admin/charge-points',
-      async ({ body, set }) => {
-        try {
-          console.log('🔐 คำขอเพิ่ม Charge Point เข้า whitelist:', body);
-          
-          const data = body as any;
-          console.log("data", data)
-          // ตรวจสอบข้อมูลที่จำเป็นทั้งหมด (ไม่รวม id เพราะจะ auto-generate)
-          if (!data.name || !data.stationName || !data.location || 
-              !data.serialNumber || !data.chargePointIdentity || !data.protocol || 
-              !data.brand || !data.powerRating) {
-            console.error('❌ ข้อมูลไม่ครบถ้วนสำหรับการเพิ่มเข้า whitelist');
-            set.status = 400;
-            return {
-              success: false,
-              message: 'กรุณาระบุข้อมูลที่จำเป็น: name, stationName, location, serialNumber, chargePointIdentity, protocol, brand, powerRating'
-            };
-          }
-
-          // ตรวจสอบความซ้ำซ้อนของ serialNumber
-          const existingSerial = await chargePointService.findBySerialNumber(data.serialNumber);
-          if (existingSerial) {
-            console.error(`❌ serialNumber ${data.serialNumber} มีอยู่ในระบบแล้ว`);
-            set.status = 400;
-            return {
-              success: false,
-              message: 'Serial Number นี้มีอยู่ในระบบแล้ว'
-            };
-          }
-
-          // ตรวจสอบความซ้ำซ้อนของ chargePointIdentity
-          const existingIdentity = await chargePointService.findByChargePointIdentity(data.chargePointIdentity);
-          if (existingIdentity) {
-            console.error(`❌ chargePointIdentity ${data.chargePointIdentity} มีอยู่ในระบบแล้ว`);
-            set.status = 400;
-            return {
-              success: false,
-              message: 'Charge Point Identity นี้มีอยู่ในระบบแล้ว'
-            };
-          }
-
-          // สร้างเครื่องชาร์จใหม่ในระบบ
-          const chargePoint = await chargePointService.createChargePointForWhitelist({
-            id: data.id,
-            name: data.name,
-            stationName: data.stationName,
-            location: data.location,
-            serialNumber: data.serialNumber,
-            chargePointIdentity: data.chargePointIdentity,
-            protocol: data.protocol,
-            brand: data.brand,
-            powerRating: data.powerRating,
-            isWhitelisted: data.isWhitelisted ?? true // เพิ่มเข้า whitelist ทันที
-          });
-
-          console.log(`✅ เพิ่ม Charge Point ${data.chargePointIdentity} เข้า whitelist สำเร็จ`);
-
-          set.status = 201;
-          return {
-            success: true,
-            message: 'เพิ่มเครื่องชาร์จเข้า whitelist สำเร็จ',
-            data: chargePoint
-          };
-        } catch (error: any) {
-          console.error('💥 เกิดข้อผิดพลาดในการเพิ่มเครื่องชาร์จเข้า whitelist:', error);
-          set.status = 500;
-          return {
-            success: false,
-            message: 'เกิดข้อผิดพลาดในการเพิ่มเครื่องชาร์จ'
-          };
-        }
-      },
-      {
-        detail: {
-          tags: ['Admin'],
-          summary: '🔐 Add Charge Point to Whitelist',
-          description: `
-เพิ่มเครื่องชาร์จเข้าระบบ whitelist สำหรับอนุญาตให้เชื่อมต่อ OCPP
-
-**หลักการ:**
-- serialNumber และ chargePointIdentity ต้อง unique
-- เซ็ต isWhitelisted=true เพื่ออนุญาตให้เชื่อมต่อ
-- connectorCount ใส่คร่าว ๆ ได้ แต่หลังเชื่อมต่อเราจะ "ยืนยัน/ปรับ" จากค่าคอนฟิกจริง
-          `,
-          requestBody: {
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    id: { 
-                      type: 'string', 
-                      description: 'รหัสจุดชาร์จ',
-                      example: 'CP_BKK_001' 
-                    },
-                    name: { 
-                      type: 'string', 
-                      description: 'ชื่อจุดชาร์จ',
-                      example: 'สถานีทดสอบบางนา' 
-                    },
-                    stationName: { 
-                      type: 'string', 
-                      description: 'ชื่อสถานี',
-                      example: 'Devonix Test Site' 
-                    },
-                    location: { 
-                      type: 'string', 
-                      description: 'ที่อยู่',
-                      example: 'บางนา, กรุงเทพมหานคร' 
-                    },
-                    serialNumber: { 
-                      type: 'string', 
-                      description: 'Serial Number',
-                      example: 'SN-AUTEL-23-001234' 
-                    },
-                    chargePointIdentity: { 
-                      type: 'string', 
-                      description: 'Charge Point Identity',
-                      example: 'ChargeStationOne-001' 
-                    },
-                    protocol: { 
-                      type: 'string', 
-                      enum: ['OCPP16', 'OCPP20', 'OCPP21'],
-                      description: 'เวอร์ชัน OCPP',
-                      example: 'OCPP16' 
-                    },
-                    brand: { 
-                      type: 'string', 
-                      description: 'ยี่ห้อ/รุ่น',
-                      example: 'Autel MaxiCharger AC' 
-                    },
-                    powerRating: { 
-                      type: 'number', 
-                      description: 'กำลังไฟ (kW)',
-                      example: 22.0 
-                    },
-                    connectorCount: { 
-                      type: 'integer', 
-                      description: 'จำนวนหัวชาร์จ',
-                      example: 2 
-                    },
-                    isWhitelisted: { 
-                      type: 'boolean', 
-                      description: 'อนุญาตให้เชื่อมต่อหรือไม่',
-                      example: true 
-                    }
-                  },
-                  required: ['name', 'stationName', 'location', 'serialNumber', 'chargePointIdentity', 'protocol', 'brand', 'powerRating']
-                }
-              }
-            }
-          },
-          responses: {
-            201: {
-              description: 'เพิ่มเครื่องชาร์จเข้า whitelist สำเร็จ',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      success: { type: 'boolean', example: true },
-                      message: { type: 'string', example: 'เพิ่มเครื่องชาร์จเข้า whitelist สำเร็จ' },
-                      data: {
-                        type: 'object',
-                        properties: {
-                          id: { type: 'string', example: 'CP_BKK_001' },
-                          name: { type: 'string', example: 'สถานีทดสอบบางนา' },
-                          serialNumber: { type: 'string', example: 'SN-AUTEL-23-001234' },
-                          chargePointIdentity: { type: 'string', example: 'ChargeStationOne-001' },
-                          isWhitelisted: { type: 'boolean', example: true }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        body: t.Object({
-          id: t.Optional(t.String()),
-          name: t.String(),
-          stationName: t.String(),
-          location: t.String(),
-          serialNumber: t.String(),
-          chargePointIdentity: t.String(),
-          protocol: t.String(),
-          brand: t.String(),
-          powerRating: t.Number(),
-          connectorCount: t.Optional(t.Number({ default: 2 })),
-          isWhitelisted: t.Optional(t.Boolean({ default: true }))
-        })
-      }
-    )
     
     /**
      * Heartbeat endpoint สำหรับอัปเดต lastSeen
@@ -439,6 +242,54 @@ export const chargePointController = (
     )
     
     /**
+     * Get all charge points for ws-gateway
+     * ดึงข้อมูลเครื่องชาร์จทั้งหมดสำหรับ ws-gateway
+     */
+    .get(
+      '/ws-gateway/chargepoints',
+      async ({ headers, set }) => {
+        try {
+          // ตรวจสอบ API Key
+          const apiKey = headers['x-api-key'];
+          if (apiKey !== WS_GATEWAY_API_KEY) {
+            console.error('❌ Invalid API key for ws-gateway endpoint');
+            set.status = 401;
+            return {
+              success: false,
+              message: 'Unauthorized'
+            };
+          }
+
+          console.log('📋 ดึงข้อมูลเครื่องชาร์จทั้งหมดสำหรับ ws-gateway');
+          
+          const chargePoints = await chargePointService.getAllChargePointsForWSGateway();
+          
+          console.log(`✅ ดึงข้อมูลเครื่องชาร์จสำเร็จ จำนวน: ${chargePoints.length} เครื่อง`);
+          
+          return {
+            success: true,
+            data: chargePoints,
+            message: 'ดึงข้อมูลเครื่องชาร์จสำเร็จ'
+          };
+        } catch (error: any) {
+          console.error('💥 เกิดข้อผิดพลาดในการดึงข้อมูลเครื่องชาร์จสำหรับ ws-gateway:', error);
+          set.status = 500;
+          return {
+            success: false,
+            message: 'เกิดข้อผิดพลาดในการดึงข้อมูลเครื่องชาร์จ'
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['WS-Gateway'],
+          summary: '📋 Get All Charge Points for WS-Gateway',
+          description: 'ดึงข้อมูลเครื่องชาร์จทั้งหมดสำหรับ WebSocket Gateway'
+        }
+      }
+    )
+    
+    /**
      * Update from BootNotification endpoint
      * ใช้อัปเดตข้อมูลเครื่องชาร์จจาก BootNotification message
      */
@@ -516,516 +367,6 @@ export const chargePointController = (
       }
     )
     
-    // สร้างเครื่องชาร์จใหม่
-    .post(
-      '/',
-      async ({ body, set }) => {
-        try {
-          const data = body as any;
-          
-          // Validate required fields
-          if (!data.name || !data.stationName || !data.location || !data.brand || 
-              !data.serialNumber || !data.powerRating || !data.protocol || !data.chargePointIdentity) {
-            set.status = 400;
-            return {
-              success: false,
-              message: 'กรุณาระบุข้อมูลที่จำเป็น: ชื่อ, ชื่อสถานี, ที่อยู่, ยี่ห้อ/รุ่น, Serial Number, กำลังไฟ, เวอร์ชัน OCPP, และ Charge Point Identity'
-            };
-          }
-
-          // Validate station name length (2-80 characters)
-          if (data.stationName.length < 2 || data.stationName.length > 80) {
-            set.status = 400;
-            return {
-              success: false,
-              message: 'ชื่อสถานีต้องมีความยาว 2-80 ตัวอักษร'
-            };
-          }
-
-          // Validate serial number format (A-Z, 0-9, -, /, _)
-          const serialNumberRegex = /^[A-Z0-9\-\/_]+$/;
-          if (!serialNumberRegex.test(data.serialNumber)) {
-            set.status = 400;
-            return {
-              success: false,
-              message: 'Serial Number ต้องประกอบด้วยอักขระ A-Z, 0-9, -, /, _ เท่านั้น'
-            };
-          }
-
-          // Validate power rating (> 0, max 2 decimal places)
-          if (data.powerRating <= 0) {
-            set.status = 400;
-            return {
-              success: false,
-              message: 'กำลังไฟต้องมากกว่า 0'
-            };
-          }
-
-          const powerDecimalPlaces = (data.powerRating.toString().split('.')[1] || '').length;
-          if (powerDecimalPlaces > 2) {
-            set.status = 400;
-            return {
-              success: false,
-              message: 'กำลังไฟสามารถมีทศนิยมได้สูงสุด 2 ตำแหน่ง'
-            };
-          }
-
-          // Validate connector count (>= 1)
-          if (data.connectorCount && data.connectorCount < 1) {
-            set.status = 400;
-            return {
-              success: false,
-              message: 'จำนวนหัวชาร์จต้องมากกว่าหรือเท่ากับ 1'
-            };
-          }
-
-          // Validate charge point identity (1-36 characters, A-Z, 0-9, -, _)
-          const chargePointIdentityRegex = /^[A-Z0-9\-_]{1,36}$/;
-          if (!chargePointIdentityRegex.test(data.chargePointIdentity)) {
-            set.status = 400;
-            return {
-              success: false,
-              message: 'Charge Point Identity ต้องมีความยาว 1-36 ตัวอักษร และประกอบด้วย A-Z, 0-9, -, _ เท่านั้น'
-            };
-          }
-
-          // Validate opening hours format if provided
-          if (data.openingHours && !data.is24Hours) {
-            const timeRangeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]-([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-            if (!timeRangeRegex.test(data.openingHours)) {
-              set.status = 400;
-              return {
-                success: false,
-                message: 'รูปแบบเวลาเปิด-ปิดไม่ถูกต้อง (ตัวอย่าง: 06:00-22:00)'
-              };
-            }
-          }
-
-          // Validate pricing fields
-          if (data.baseRate <= 0) {
-            set.status = 400;
-            return {
-              success: false,
-              message: 'ราคาพื้นฐานต้องมากกว่า 0'
-            };
-          }
-
-          const baseRateDecimalPlaces = (data.baseRate.toString().split('.')[1] || '').length;
-          if (baseRateDecimalPlaces > 2) {
-            set.status = 400;
-            return {
-              success: false,
-              message: 'ราคาพื้นฐานสามารถมีทศนิยมได้สูงสุด 2 ตำแหน่ง'
-            };
-          }
-
-          if (data.peakRate !== undefined) {
-            if (data.peakRate <= 0) {
-              set.status = 400;
-              return {
-                success: false,
-                message: 'ราคาช่วง Peak ต้องมากกว่า 0'
-              };
-            }
-
-            const peakRateDecimalPlaces = (data.peakRate.toString().split('.')[1] || '').length;
-            if (peakRateDecimalPlaces > 2) {
-              set.status = 400;
-              return {
-                success: false,
-                message: 'ราคาช่วง Peak สามารถมีทศนิยมได้สูงสุด 2 ตำแหน่ง'
-              };
-            }
-          }
-
-          if (data.offPeakRate !== undefined) {
-            if (data.offPeakRate <= 0) {
-              set.status = 400;
-              return {
-                success: false,
-                message: 'ราคาช่วง Off-Peak ต้องมากกว่า 0'
-              };
-            }
-
-            const offPeakRateDecimalPlaces = (data.offPeakRate.toString().split('.')[1] || '').length;
-            if (offPeakRateDecimalPlaces > 2) {
-              set.status = 400;
-              return {
-                success: false,
-                message: 'ราคาช่วง Off-Peak สามารถมีทศนิยมได้สูงสุด 2 ตำแหน่ง'
-              };
-            }
-          }
-
-          // Validate pricing time periods
-          const timeValidation = validationService.validatePricingTimes(
-            data.peakStartTime,
-            data.peakEndTime,
-            data.offPeakStartTime,
-            data.offPeakEndTime
-          );
-
-          if (!timeValidation.isValid) {
-            set.status = 400;
-            return {
-              success: false,
-              message: timeValidation.errors.join(', ')
-            };
-          }
-
-          // Validate OCPP version
-          if (!Object.values(OCPPVersion).includes(data.protocol)) {
-            set.status = 400;
-            return {
-              success: false,
-              message: 'เวอร์ชัน OCPP ไม่ถูกต้อง'
-            };
-          }
-
-          const chargePoint = await chargePointService.createChargePoint(data);
-          
-          return {
-            success: true,
-            message: 'สร้างเครื่องชาร์จสำเร็จ',
-            data: chargePoint
-          };
-        } catch (error: any) {
-          console.error('Error creating charge point:', error);
-          set.status = 500;
-          return {
-            success: false,
-            message: 'เกิดข้อผิดพลาดในการสร้างเครื่องชาร์จ'
-          };
-        }
-      },
-      {
-        detail: {
-          tags: ['Charge Points'],
-          summary: '🔌 Create Charge Point',
-          description: `
-สร้างเครื่องชาร์จใหม่พร้อม WebSocket URL สำหรับการเชื่อมต่อ OCPP
-
-**คุณสมบัติ:**
-- สร้าง ID เครื่องชาร์จอัตโนมัติ
-- สร้าง WebSocket URL ตามเวอร์ชัน OCPP
-- รองรับการกำหนดพิกัด GPS
-- สร้าง connectors ตามจำนวนที่กำหนด
-
-**OCPP Versions รองรับ:**
-- OCPP16 (OCPP 1.6)
-- OCPP20 (OCPP 2.0)
-- OCPP21 (OCPP 2.1)
-          `,
-          requestBody: {
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    name: { 
-                      type: 'string', 
-                      description: 'ชื่อเครื่องชาร์จ',
-                      example: 'Central World Charging Station' 
-                    },
-                    
-                    stationName: { 
-                      type: 'string', 
-                      description: 'ชื่อสถานี (2-80 ตัวอักษร)',
-                      example: 'EV บางนา' 
-                    },
-                    location: { 
-                      type: 'string', 
-                      description: 'ที่อยู่เครื่องชาร์จ',
-                      example: '999/9 Rama I Rd, Pathumwan, Bangkok' 
-                    },
-                    latitude: { 
-                      type: 'number', 
-                      description: 'ละติจูด',
-                      example: 13.7563 
-                    },
-                    longitude: { 
-                      type: 'number', 
-                      description: 'ลองจิจูด',
-                      example: 100.5018 
-                    },
-                    openingHours: { 
-                      type: 'string', 
-                      description: 'เวลาเปิด-ปิด (เช่น 06:00-22:00)',
-                      example: '06:00-22:00' 
-                    },
-                    is24Hours: { 
-                      type: 'boolean', 
-                      description: 'ตลอด 24 ชั่วโมงหรือไม่',
-                      example: false 
-                    },
-                    brand: { 
-                      type: 'string', 
-                      description: 'ยี่ห้อ/รุ่น',
-                      example: 'Autel MaxiCharger AC Wallbox 7kW' 
-                    },
-                    serialNumber: { 
-                      type: 'string', 
-                      description: 'Serial Number (A-Z, 0-9, -, /, _)',
-                      example: 'SN-AUTEL-23-001234' 
-                    },
-                    powerRating: { 
-                      type: 'number', 
-                      description: 'กำลังไฟ (kW) > 0, ทศนิยม ≤ 2 ตำแหน่ง',
-                      example: 7.4 
-                    },
-                    protocol: { 
-                      type: 'string', 
-                      enum: ['OCPP16', 'OCPP20', 'OCPP21'],
-                      description: 'เวอร์ชัน OCPP ที่รองรับ',
-                      example: 'OCPP16' 
-                    },
-                    chargePointIdentity: { 
-                      type: 'string', 
-                      description: 'Charge Point Identity (1-36 ตัวอักษร, A-Z, 0-9, -, _)',
-                      example: 'EVBANGNA-CP001' 
-                    },
-                    maxPower: { 
-                      type: 'number', 
-                      description: 'กำลังไฟสูงสุด (kW) - deprecated, ใช้ powerRating แทน',
-                      example: 22.0 
-                    },
-                    connectorCount: { 
-                      type: 'integer', 
-                      description: 'จำนวนหัวชาร์จ (≥ 1)',
-                      example: 2 
-                    },
-                    ownerId: { 
-                      type: 'string', 
-                      description: 'ID ของเจ้าของ (สำหรับเครื่องชาร์จส่วนตัว)',
-                      example: 'user_123' 
-                    },
-                    ownershipType: { 
-                      type: 'string', 
-                      enum: ['PUBLIC', 'PRIVATE', 'SHARED'],
-                      description: 'ประเภทความเป็นเจ้าของ',
-                      example: 'PUBLIC' 
-                    },
-                    isPublic: { 
-                      type: 'boolean', 
-                      description: 'เปิดให้บริการสาธารณะหรือไม่',
-                      example: true 
-                    },
-                    baseRate: { 
-                      type: 'number', 
-                      description: 'ราคาพื้นฐาน (บาท/kWh) > 0, ทศนิยม ≤ 2 ตำแหน่ง',
-                      example: 8.50 
-                    },
-                    peakRate: { 
-                      type: 'number', 
-                      description: 'ราคาช่วง Peak (บาท/kWh) > 0, ทศนิยม ≤ 2 ตำแหน่ง',
-                      example: 12.00 
-                    },
-                    offPeakRate: { 
-                      type: 'number', 
-                      description: 'ราคาช่วง Off-Peak (บาท/kWh) > 0, ทศนิยม ≤ 2 ตำแหน่ง',
-                      example: 6.50 
-                    },
-                    peakStartTime: {
-                      type: 'string',
-                      description: 'เวลาเริ่มต้นช่วง Peak (HH:MM)',
-                      example: '09:00'
-                    },
-                    peakEndTime: {
-                      type: 'string', 
-                      description: 'เวลาสิ้นสุดช่วง Peak (HH:MM)',
-                      example: '17:00'
-                    },
-                    offPeakStartTime: {
-                      type: 'string',
-                      description: 'เวลาเริ่มต้นช่วง Off-Peak (HH:MM)',
-                      example: '22:00'
-                    },
-                    offPeakEndTime: {
-                      type: 'string',
-                      description: 'เวลาสิ้นสุดช่วง Off-Peak (HH:MM)', 
-                      example: '06:00'
-                    }
-                  },
-                  required: ['name', 'stationName', 'location', 'brand', 'serialNumber', 'powerRating', 'protocol', 'chargePointIdentity', 'baseRate']
-                }
-              }
-            }
-          },
-          responses: {
-            201: {
-              description: 'สร้างเครื่องชาร์จสำเร็จ',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      success: { type: 'boolean', example: true },
-                      message: { type: 'string', example: 'สร้างเครื่องชาร์จสำเร็จ' },
-                      data: {
-                        type: 'object',
-                        properties: {
-                          id: { type: 'string', example: 'CP_1705123456_A1B2C3D4' },
-                          name: { type: 'string', example: 'Central World Charging Station' },
-                          location: { type: 'string', example: '999/9 Rama I Rd, Pathumwan, Bangkok' },
-                          protocol: { type: 'string', example: 'OCPP16' },
-                          urlwebSocket: { type: 'string', example: 'ws://localhost:8081/ocpp/16/CP_1705123456_A1B2C3D4' },
-                          status: { type: 'string', example: 'AVAILABLE' },
-                          connectorCount: { type: 'integer', example: 2 },
-                          createdAt: { type: 'string', format: 'date-time' }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            },
-            400: {
-              description: 'ข้อมูลไม่ถูกต้อง',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      success: { type: 'boolean', example: false },
-                      message: { type: 'string', example: 'กรุณาระบุชื่อ ที่อยู่ และเวอร์ชัน OCPP' }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        body: t.Object({
-          name: t.String({ default: 'Central World Charging Station' }),
-          stationName: t.String({ default: 'EV บางนา' }),
-          location: t.String({ default: '999/9 Rama I Rd, Pathumwan, Bangkok' }),
-          latitude: t.Optional(t.Number({ default: 13.7563 })),
-          longitude: t.Optional(t.Number({ default: 100.5018 })),
-          openingHours: t.Optional(t.String({ default: '06:00-22:00' })),
-          is24Hours: t.Optional(t.Boolean({ default: false })),
-          brand: t.String({ default: 'Autel MaxiCharger AC Wallbox 7kW' }),
-          serialNumber: t.String({ default: 'SN-AUTEL-23-001234' }),
-          powerRating: t.Number({ default: 7.4 }),
-          protocol: t.String({ default: 'OCPP16' }),
-          chargePointIdentity: t.String({ default: 'EVBANGNA-CP001' }),
-          urlwebSocket: t.String({ default: 'ws://localhost:8081/ocpp/1.6/EVBANGNA-CP001' }), // เพิ่มฟิลด์ URL WebSocket
-          connectorCount: t.Optional(t.Number({ default: 2 })),
-          ownerId: t.Optional(t.String({ default: 'user_123' })),
-          ownershipType: t.Optional(t.String({ default: 'PUBLIC' })),
-          isPublic: t.Optional(t.Boolean({ default: true })),
-          // Pricing fields
-          baseRate: t.Number({ default: 8.50 }),
-          peakRate: t.Optional(t.Number({ default: 12.00 })),
-          offPeakRate: t.Optional(t.Number({ default: 6.50 })),
-          peakStartTime: t.Optional(t.String({ 
-            default: '09:00',
-            pattern: '^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$'
-          })),
-          peakEndTime: t.Optional(t.String({ 
-            default: '17:00',
-            pattern: '^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$'
-          })),
-          offPeakStartTime: t.Optional(t.String({ 
-            default: '22:00',
-            pattern: '^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$'
-          })),
-          offPeakEndTime: t.Optional(t.String({ 
-            default: '06:00',
-            pattern: '^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$'
-          })),
-          // Deprecated field
-          maxPower: t.Optional(t.Number({ default: 22.0 }))
-        })
-      }
-    )
-
-    // API สำหรับ ws-gateway ดึงข้อมูลเครื่องชาร์จทั้งหมด
-    .get(
-      '/ws-gateway/chargepoints',
-      async ({ set, request }) => {
-        try {
-          const incomingKeyRaw =
-            request.headers.get('x-api-key') ||
-            request.headers.get('authorization') ||
-            '';
-
-          const incomingKey = incomingKeyRaw.startsWith('Bearer ')
-            ? incomingKeyRaw.substring(7).trim()
-            : incomingKeyRaw.trim();
-
-          if (incomingKey !== WS_GATEWAY_API_KEY) {
-            console.warn('Unauthorized ws-gateway access attempt detected');
-            set.status = 401;
-            return {
-              success: false,
-              message: 'Invalid gateway access key'
-            };
-          }
-
-          const chargePoints = await chargePointService.getAllChargePointsForWSGateway();
-          
-          return {
-            success: true,
-            data: chargePoints
-          };
-        } catch (error) {
-          console.error('Error fetching charge points for ws-gateway:', error);
-          set.status = 500;
-          return {
-            success: false,
-            message: 'เกิดข้อผิดพลาดในการดึงข้อมูลเครื่องชาร์จ'
-          };
-        }
-      },
-      {
-        detail: {
-          tags: ['ChargePoint'],
-          summary: 'ดึงข้อมูลเครื่องชาร์จสำหรับ ws-gateway',
-          description: 'API สำหรับ ws-gateway ดึงข้อมูล serial ID และ URL WebSocket ของเครื่องชาร์จทั้งหมด',
-          responses: {
-            200: {
-              description: 'ดึงข้อมูลสำเร็จ',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      success: { type: 'boolean', example: true },
-                      data: {
-                        type: 'array',
-                        items: {
-                          type: 'object',
-                          properties: {
-                            id: { type: 'string', example: 'CP_1234567890_ABCD1234' },
-                            serialNumber: { type: 'string', example: 'SN-AUTEL-23-001234' },
-                            urlwebSocket: { type: 'string', example: 'ws://localhost:8081/ocpp/1.6/EVBANGNA-CP001' },
-                            chargePointIdentity: { type: 'string', example: 'EVBANGNA-CP001' }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            },
-            500: {
-              description: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      success: { type: 'boolean', example: false },
-                      message: { type: 'string', example: 'เกิดข้อผิดพลาดในการดึงข้อมูลเครื่องชาร์จ' }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    )
 
     // ดึงรายการเครื่องชาร์จทั้งหมด
     .get(
@@ -1045,7 +386,7 @@ export const chargePointController = (
           
           return {
             success: true,
-            data: result
+            data: result.data
           };
         } catch (error: any) {
           console.error('Error fetching charge points:', error);
@@ -1065,40 +406,136 @@ export const chargePointController = (
             {
               name: 'page',
               in: 'query',
+              required: false,
               description: 'หน้าที่ต้องการ',
               schema: { type: 'string', default: '1' }
             },
             {
               name: 'limit',
               in: 'query',
+              required: false,
               description: 'จำนวนรายการต่อหน้า (สูงสุด 100)',
               schema: { type: 'string', default: '10' }
             },
             {
               name: 'status',
               in: 'query',
+              required: false,
               description: 'กรองตามสถานะ',
               schema: { type: 'string', enum: ['AVAILABLE', 'OCCUPIED', 'UNAVAILABLE', 'FAULTED', 'MAINTENANCE'] }
             },
             {
               name: 'protocol',
               in: 'query',
+              required: false,
               description: 'กรองตามเวอร์ชัน OCPP',
               schema: { type: 'string', enum: ['OCPP16', 'OCPP20', 'OCPP21'] }
             },
             {
               name: 'ownerId',
               in: 'query',
+              required: false,
               description: 'กรองตาม ID เจ้าของ',
               schema: { type: 'string' }
             },
             {
               name: 'isPublic',
               in: 'query',
+              required: false,
               description: 'กรองตามการเปิดให้บริการสาธารณะ',
               schema: { type: 'string', enum: ['true', 'false'] }
             }
           ]
+        },
+        response: {
+          200: t.Object({
+            success: t.Boolean({ example: true }),
+            message: t.Optional(t.String({ example: 'ดึงข้อมูลเครื่องชาร์จสำเร็จ' })),
+            data: t.Array(t.Object({
+              id: t.String({ example: 'cm123abc456def' }),
+              chargepointname: t.String({ example: 'สถานีชาร์จ PTT สาขาลาดพร้าว' }),
+              stationId: t.Union([t.String(), t.Null()], { example: null }),
+              location: t.String({ example: '123 ถนนลาดพร้าว แขวงจอมพล เขตจตุจักร กรุงเทพมหานคร 10900' }),
+              latitude: t.Union([t.Number(), t.String(), t.Any(), t.Null()], { example: 13.7563 }),
+              longitude: t.Union([t.Number(), t.String(), t.Any(), t.Null()], { example: 100.5018 }),
+              openingHours: t.Union([t.String(), t.Null()], { example: '06:00-22:00' }),
+              is24Hours: t.Boolean({ example: false }),
+              brand: t.String({ example: 'ABB Terra AC' }),
+              serialNumber: t.String({ example: 'ABB-TAC-2024-001' }),
+              powerRating: t.Number({ example: 22 }),
+              powerSystem: t.Number({ example: 3 }),
+              connectorCount: t.Number({ example: 2 }),
+              protocol: t.String({ example: 'OCPP16' }),
+              csmsUrl: t.Union([t.String(), t.Null()], { example: 'wss://csms.example.com/ocpp' }),
+              chargePointIdentity: t.String({ example: 'CP-PTT-LP-001' }),
+              chargepointstatus: t.String({ example: 'AVAILABLE' }),
+              maxPower: t.Union([t.Number(), t.Null()], { example: 22 }),
+              lastSeen: t.Union([t.String(), t.Date(), t.Null()], { example: null }),
+              heartbeatIntervalSec: t.Union([t.Number(), t.Null()], { example: 300 }),
+              vendor: t.Union([t.String(), t.Null()], { example: 'ABB' }),
+              model: t.Union([t.String(), t.Null()], { example: 'Terra AC W22-T-R-0' }),
+              firmwareVersion: t.Union([t.String(), t.Null()], { example: '1.6.2024.1' }),
+              ocppProtocolRaw: t.Union([t.String(), t.Null()], { example: 'ocpp1.6' }),
+              isWhitelisted: t.Boolean({ example: true }),
+              ownerId: t.Union([t.String(), t.Null()], { example: null }),
+              ownershipType: t.String({ example: 'PUBLIC' }),
+              isPublic: t.Boolean({ example: true }),
+              onPeakRate: t.Number({ example: 12.5 }),
+              onPeakStartTime: t.String({ example: '09:00' }),
+              onPeakEndTime: t.String({ example: '22:00' }),
+              offPeakRate: t.Number({ example: 8.5 }),
+              offPeakStartTime: t.String({ example: '22:01' }),
+              offPeakEndTime: t.String({ example: '08:59' }),
+              urlwebSocket: t.Union([t.String(), t.Null()], { example: 'wss://ws.chargepoint.example.com/cp001' }),
+              createdAt: t.Union([t.String(), t.Date()], { example: '2024-01-15T10:30:00.000Z' }),
+              updatedAt: t.Union([t.String(), t.Date()], { example: '2024-01-15T10:30:00.000Z' }),
+              owner: t.Union([t.Object({
+                id: t.String({ example: 'user_123abc456def' }),
+                email: t.String({ example: 'owner@example.com' }),
+                fullName: t.Union([t.String(), t.Null()], { example: 'John Doe' })
+              }), t.Null()], { example: null }),
+              _count: t.Object({
+                transactions: t.Number({ example: 5 })
+              }),
+              connectors: t.Array(t.Object({
+                id: t.String({ example: 'conn_123abc456def' }),
+                chargePointId: t.String({ example: 'cm123abc456def' }),
+                connectorId: t.Number({ example: 1 }),
+                type: t.Union([t.String(), t.Any()], { example: 'TYPE_2' }),
+                typeDescription: t.Union([t.String(), t.Null()], { example: 'Type 2 Mennekes' }),
+                connectorstatus: t.Union([t.String(), t.Any()], { example: 'AVAILABLE' }),
+                maxPower: t.Union([t.Number(), t.Null()], { example: 22 }),
+                maxCurrent: t.Union([t.Number(), t.Null()], { example: 32 }),
+                createdAt: t.Optional(t.Union([t.String(), t.Date()], { example: '2024-01-15T10:30:00.000Z' })),
+                updatedAt: t.Optional(t.Union([t.String(), t.Date()], { example: '2024-01-15T10:30:00.000Z' }))
+              }), { example: [
+                {
+                  id: 'conn_123abc456def',
+                  connectorId: 1,
+                  type: 'TYPE_2',
+                  typeDescription: 'Type 2 Mennekes',
+                  connectorstatus: 'AVAILABLE',
+                  maxCurrent: 32,
+                  createdAt: '2024-01-15T10:30:00.000Z',
+                  updatedAt: '2024-01-15T10:30:00.000Z'
+                },
+                {
+                  id: 'conn_789xyz012ghi',
+                  connectorId: 2,
+                  type: 'TYPE_2',
+                  typeDescription: 'Type 2 Mennekes',
+                  connectorstatus: 'OCCUPIED',
+                  maxCurrent: 32,
+                  createdAt: '2024-01-15T10:30:00.000Z',
+                  updatedAt: '2024-01-15T10:30:00.000Z'
+                }
+              ] })
+            }))
+          }),
+          500: t.Object({
+            success: t.Boolean({ example: false }),
+            message: t.String({ example: 'เกิดข้อผิดพลาดในการดึงข้อมูลเครื่องชาร์จ' })
+          })
         },
         query: t.Object({
           page: t.Optional(t.String()),

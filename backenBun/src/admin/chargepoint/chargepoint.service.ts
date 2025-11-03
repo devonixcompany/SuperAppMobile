@@ -24,7 +24,6 @@ export interface CreateChargePointData {
   model?: string;
   firmwareVersion?: string;
   ocppProtocolRaw?: string;
-  ocppSessionId?: string;
   isWhitelisted?: boolean;
   ownerId?: string;
   ownershipType?: 'PUBLIC' | 'PRIVATE';
@@ -61,7 +60,6 @@ export interface UpdateChargePointData {
   model?: string;
   firmwareVersion?: string;
   ocppProtocolRaw?: string;
-  ocppSessionId?: string;
   isWhitelisted?: boolean;
   ownerId?: string;
   ownershipType?: 'PUBLIC' | 'PRIVATE';
@@ -144,7 +142,6 @@ export class AdminChargePointService {
           model: data.model,
           firmwareVersion: data.firmwareVersion,
           ocppProtocolRaw: data.ocppProtocolRaw,
-          ocppSessionId: data.ocppSessionId,
           isWhitelisted: data.isWhitelisted ?? true,
           ownerId: data.ownerId,
           ownershipType: data.ownershipType || 'PUBLIC',
@@ -241,7 +238,6 @@ export class AdminChargePointService {
           ...(data.model !== undefined && { model: data.model }),
           ...(data.firmwareVersion !== undefined && { firmwareVersion: data.firmwareVersion }),
           ...(data.ocppProtocolRaw !== undefined && { ocppProtocolRaw: data.ocppProtocolRaw }),
-          ...(data.ocppSessionId !== undefined && { ocppSessionId: data.ocppSessionId }),
           ...(data.isWhitelisted !== undefined && { isWhitelisted: data.isWhitelisted }),
           ...(data.ownerId !== undefined && { ownerId: data.ownerId }),
           ...(data.ownershipType !== undefined && { ownershipType: data.ownershipType }),

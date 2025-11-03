@@ -95,7 +95,6 @@ model ChargePoint {
   model                String?
   firmwareVersion      String?
   ocppProtocolRaw      String?
-  ocppSessionId        String?
   isWhitelisted        Boolean           @default(true)
   ownerId              String?
   ownershipType        OwnershipType     @default(PUBLIC)

@@ -11,7 +11,7 @@ import { serviceContainer } from './user';
 const { jwtService } = serviceContainer;
 
 const port = Number(process.env.PORT ?? 8080);
-const serverUrl = process.env.BASE_URL ?? `https://bw6z7nqh-8080.asse.devtunnels.ms`;
+const serverUrl = process.env.BASE_URL ?? `localhost:${port}`;
 
 const userModel = t.Object({
   id: t.String(),

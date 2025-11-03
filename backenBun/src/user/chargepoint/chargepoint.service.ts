@@ -849,11 +849,8 @@ export class ChargePointService {
         chargePointData.ocppProtocolRaw = data.ocppProtocol;
       }
       if (data.ocppProtocolRaw !== undefined) {
-        chargePointData.ocppProtocolRaw = data.ocppProtocolRaw;
-      }
-      if (data.ocppSessionId !== undefined) {
-        chargePointData.ocppSessionId = data.ocppSessionId;
-      }
+          chargePointData.ocppProtocolRaw = data.ocppProtocolRaw;
+        }
       if (data.urlwebSocket !== undefined) {
         chargePointData.urlwebSocket = data.urlwebSocket;
       }

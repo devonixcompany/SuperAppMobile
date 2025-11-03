@@ -595,7 +595,6 @@ export class AdminService {
     "model",
     "firmwareVersion",
     "ocppProtocolRaw",
-    "ocppSessionId",
     "isWhitelisted",
     "ownerId",
     "ownershipType",
