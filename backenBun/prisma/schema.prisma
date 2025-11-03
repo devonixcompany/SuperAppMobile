@@ -190,6 +190,56 @@ model Connector {
   @@unique([chargePointId, connectorId])
   @@map("connectors")
 }
+model Payment {
+  id               String          @id @default(cuid())
+  transactionId    String
+  userId           String
+  provider         String          @default("OMISE")  // อาจรองรับ Stripe, Paypal ในอนาคต
+  amount           Float
+  currency         String          @default("THB")
+  status           PaymentStatus   @default(PENDING)  // WAITING, SUCCESS, FAILED, CANCELED
+  chargeId         String?         @unique             // รหัส charge จาก Omise (เช่น chrg_test_...)
+  cardId           String?                              // รหัสบัตรจาก Omise (ถ้ามี)
+  failureMessage   String?
+  paidAt           DateTime?
+  refundedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  // Relations
+  transaction      Transaction     @relation(fields: [transactionId], references: [id])
+  user             User            @relation(fields: [userId], references: [id])
+  paymentLogs      PaymentLog[]
+
+  @@index([transactionId])
+  @@index([userId])
+}
+model PaymentCard {
+  id             String        @id @default(cuid())
+  userId         String
+  omiseCardId    String        @unique             // card_XXX จาก Omise
+  brand          String?
+  lastDigits     String?
+  expirationMonth Int?
+  expirationYear  Int?
+  isDefault      Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  user           User          @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+model PaymentLog {
+  id            String     @id @default(cuid())
+  paymentId     String
+  rawRequest    Json
+  rawResponse   Json
+  eventType     String      // เช่น "CHARGE_CREATE", "CHARGE_FAILED"
+  createdAt     DateTime    @default(now())
+
+  payment       Payment     @relation(fields: [paymentId], references: [id])
+}
 
 model Admin {
   id           String   @id @default(uuid())
@@ -323,6 +373,13 @@ enum ConnectorStatus {
   RESERVED
   UNAVAILABLE
   FAULTED
+}
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELED
+  REFUNDED
 }
 
 enum TransactionStatus {

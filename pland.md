@@ -10,8 +10,8 @@ This document outlines the steps required to implement the charge session flow, 
 *   When a user initiates a charge, send a `RemoteStartTransaction` message to the WebSocket.
 *   **Crucially, before sending `RemoteStartTransaction`:**
     *   Retrieve the `userId` from the device's keychain.
-    *   Call the `backendBun` API to create a new `Transaction` record in the database. This API call should return a unique `transactionId`.
-    *   Use this `transactionId` as the `idTag` in the `RemoteStartTransaction` message sent to the charging station.
+    *   Call the `backendBun` API to create a new `Transaction` record in the database. This API call should return a  `Id in table transaction`.
+    *   Use this `Id in table transaction` as the `idTag` in the `RemoteStartTransaction` message sent to the charging station.
 
 **Example WebSocket Message (with dynamic idTag):**
 ```json
@@ -64,7 +64,7 @@ This document outlines the steps required to implement the charge session flow, 
 
 **Action:**
 *   Upon receiving a `StopTransaction` message from the charging station, which includes meter readings and timestamps (e.g., `meterStop`, `timestamp`, `transactionData`):
-    *   Extract the relevant data: `idTag`, `meterStop`, `timestamp`, `reason`, `transactionId`, and `transactionData` (including `sampledValue` for energy consumption).
+    *   Extract the relevant data: `idTag`, `meterStop`, `timestamp`, `reason`, `Id in table transaction`, and `transactionData` (including `sampledValue` for energy consumption).
     *   Store this information in the database, updating the corresponding `Transaction` record.
 
 **Example StopTransaction Data:**
