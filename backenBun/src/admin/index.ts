@@ -4,15 +4,15 @@ export { AdminService, type AdminLoginData, type AdminRegistrationData } from '.
 // New microservice exports
 export { adminAuthController } from './auth/auth.controller';
 export { AdminAuthService } from './auth/auth.service';
-export { adminChargePointController } from './chargepoint/chargepoint.controller';
-export { AdminChargePointService } from './chargepoint/chargepoint.service';
+export { adminChargePointController } from './controlchar/controlchar.controller';
+export { AdminChargePointService } from './controlchar/controlchar.service';
 
 // Import services and controllers
 import { JWTService } from '../lib/jwt';
 import { adminAuthController } from './auth/auth.controller';
 import { AdminAuthService } from './auth/auth.service';
-import { adminChargePointController } from './chargepoint/chargepoint.controller';
-import { AdminChargePointService } from './chargepoint/chargepoint.service';
+import { adminChargePointController } from './controlchar/controlchar.controller';
+import { AdminChargePointService } from './controlchar/controlchar.service';
 
 // Service container for admin microservices
 export class AdminServiceContainer {
