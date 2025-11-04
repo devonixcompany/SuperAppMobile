@@ -16,7 +16,7 @@ import {
   View,
 } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
-import { useRouter, type Href } from "expo-router";
+import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { ClipPath, Defs, G, Path, Rect } from "react-native-svg";
 import MiniProfileModal, { DEFAULT_PROFILE_AVATAR } from "./miniprofile";
@@ -40,14 +40,6 @@ type Recommendation = {
   image: string;
   source: string;
   date: string;
-};
-
-type QuickAction = {
-  key: string;
-  labelTh: string;
-  labelEn: string;
-  Icon: React.ComponentType<{ size?: number }>;
-  route?: Href;
 };
 
 type TouchableScaleProps = PressableProps & {
@@ -260,103 +252,6 @@ const CoinIcon = ({ size = 40 }: { size?: number }) => (
   </Svg>
 );
 
-const EVStationIcon = ({ size = 36 }: { size?: number }) => (
-  <Svg width={size =36 } height={size = 40} viewBox="0 0 45 45" fill="none">
-    <Path
-      d="M19.6181 24.375L17.0044 27.7725C16.9397 27.8563 16.8975 27.9553 16.882 28.06C16.8665 28.1647 16.8781 28.2717 16.9157 28.3706C16.9533 28.4696 17.0157 28.5572 17.0969 28.6252C17.1781 28.6931 17.2753 28.7391 17.3794 28.7587L20.1187 29.34C20.2284 29.3606 20.3304 29.4105 20.4141 29.4843C20.4977 29.5582 20.5598 29.6532 20.5938 29.7595C20.6278 29.8657 20.6325 29.9792 20.6073 30.0879C20.5821 30.1966 20.5279 30.2964 20.4506 30.3769L17.2069 33.75M7.5 18.75H30"
-      stroke="#1D2144"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M3.75 39.375H33.75M30 26.25H33.1256C33.7069 26.25 33.9975 26.25 34.2356 26.3138C34.5535 26.3989 34.8433 26.5663 35.076 26.799C35.3087 27.0317 35.476 27.3215 35.5612 27.6394C35.625 27.8775 35.625 28.1681 35.625 28.7494V30.9375C35.625 31.6834 35.9213 32.3988 36.4488 32.9262C36.9762 33.4537 37.6916 33.75 38.4375 33.75C39.1834 33.75 39.8988 33.4537 40.4262 32.9262C40.9537 32.3988 41.25 31.6834 41.25 30.9375V19.1456C41.25 18.0188 41.25 17.4544 41.0887 16.9238C40.9275 16.3931 40.6162 15.9225 39.99 14.985L38.5406 12.81C38.2204 12.3302 37.7868 11.9368 37.2783 11.6647C36.7697 11.3926 36.2018 11.2501 35.625 11.25M7.5 39.375V16.875C7.5 11.5725 7.5 8.91937 9.14812 7.27312C10.7944 5.625 13.4475 5.625 18.75 5.625C24.0525 5.625 26.7056 5.625 28.3519 7.27312C30 8.91937 30 11.5725 30 16.875V39.375H7.5Z"
-      stroke="#1D2144"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-);
-
-const EVHouseIcon = ({ size = 34 }: { size?: number }) => (
-  <Svg width={size} height={size} viewBox="0 0 38 38" fill="none">
-    <Path
-      d="M28.1719 21.4688V36.7031H3.79688V21.4688"
-      stroke="#1D2144"
-      strokeWidth={1.5}
-      strokeMiterlimit={10}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M31.2188 24.5156L15.9844 9.28125L0.75 24.5156"
-      stroke="#1D2144"
-      strokeWidth={1.5}
-      strokeMiterlimit={10}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M15.9844 18.4219L12.9375 24.5156H19.0312L15.9844 30.6094"
-      stroke="#1D2144"
-      strokeWidth={1.5}
-      strokeMiterlimit={10}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M31.2188 3.79688H33.6562C35.339 3.79688 36.7031 5.16104 36.7031 6.84375V8.36719C36.7031 10.8913 34.6569 12.9375 32.1328 12.9375H28.1719C26.4892 12.9375 25.125 14.3017 25.125 15.9844V18.4219"
-      stroke="#1D2144"
-      strokeWidth={1.5}
-      strokeMiterlimit={10}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M31.2188 3.79688C31.2188 5.47959 29.8546 6.84375 28.1719 6.84375H25.125V0.75H28.1719C29.8546 0.75 31.2188 2.11416 31.2188 3.79688Z"
-      stroke="#1D2144"
-      strokeWidth={1.5}
-      strokeMiterlimit={10}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M22.0781 6.84375H25.125"
-      stroke="#1D2144"
-      strokeWidth={1.5}
-      strokeMiterlimit={10}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M22.0781 0.75H25.125"
-      stroke="#1D2144"
-      strokeWidth={1.5}
-      strokeMiterlimit={10}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-);
-
-const quickActions: QuickAction[] = [
-  {
-    key: "station",
-    labelTh: "สถานีชาร์จ",
-    labelEn: "Station",
-    Icon: EVStationIcon,
-    route: "/(tabs)/qr-scanner" // กำหนดไปยังหน้าแสกนเมื่อลูกค้าเรากดปุ่ม
-  },
-  {
-    key: "charger",
-    labelTh: "เครื่องชาร์จ",
-    labelEn: "Charger",
-    Icon: EVHouseIcon,
-    route: "/(tabs)/charging", //กำหนดไปยังหน้าชาร์จรถเมื่อลูกค้ากดปุ่ม
-  },
-];
-
 // ฟังก์ชันหลักของหน้า Home
 export default function HomeScreen() {
   const router = useRouter();
@@ -463,38 +358,6 @@ export default function HomeScreen() {
               <Text className="mb-5 ml-5 text-sm text-white/90">หมดอายุ : 30 ก.ย. 2568</Text>
             </LinearGradient>
            </TouchableScale>
-          </View>
-
-          {/* === QUICK ACCESS BUTTONS === */}
-          <View className="px-1 mb-2">
-            <View className="flex-row justify-between p-3 rounded-3xl">
-              {quickActions.map((action) => (
-                <TouchableScale
-                  key={action.key}
-                  className="flex-1 px-5 py-5 mx-2 bg-white shadow-sm rounded-2xl"
-                  onPress={() => {
-                    if (action.route) {
-                      router.push(action.route);
-                    }
-                  }}
-                  androidRippleColor="rgba(78,187,142,0.12)"
-                >
-                  <View className="flex-row items-center justify-center">
-                    <View className="mr-4">
-                      <action.Icon size={40} />
-                    </View>
-                    <View>
-                      <Text className="text-base font-semibold text-[#1B2344]">
-                        {action.labelTh}
-                      </Text>
-                      <Text className="mt-1 text-sm text-[#6B7280]">
-                        {action.labelEn}
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableScale>
-              ))}
-            </View>
           </View>
 
           {/* === NEWS UPDATES SECTION === */}
