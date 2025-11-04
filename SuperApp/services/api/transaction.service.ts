@@ -1,6 +1,7 @@
 import { http } from './client';
 import type { ApiResponse } from './client';
 import API_CONFIG from '@/config/api.config';
+import type { ProcessPaymentResponse } from './payment.service';
 
 export interface CreateTransactionRequest {
   chargePointIdentity: string;
@@ -31,6 +32,10 @@ export interface TransactionSummaryResponse {
   stopReason?: string | null;
 }
 
+export interface ProcessTransactionPaymentRequest {
+  payment_method_id?: string;
+}
+
 class TransactionService {
   async createTransaction(
     payload: CreateTransactionRequest
@@ -43,6 +48,16 @@ class TransactionService {
   ): Promise<ApiResponse<TransactionSummaryResponse>> {
     return http.get<TransactionSummaryResponse>(
       API_CONFIG.ENDPOINTS.TRANSACTIONS.SUMMARY(transactionId)
+    );
+  }
+
+  async processTransactionPayment(
+    transactionId: string,
+    data: ProcessTransactionPaymentRequest
+  ): Promise<ApiResponse<ProcessPaymentResponse>> {
+    return http.post<ProcessPaymentResponse>(
+      `/api/transactions/${encodeURIComponent(transactionId)}/payment`,
+      data
     );
   }
 }

@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { TransactionStatus } from '@prisma/client';
 import { randomInt } from 'crypto';
 import { prisma } from '../../lib/prisma';
+import { PaymentService } from '../payment/payment.service';
 
 export interface CreateTransactionParams {
   userId: string;
@@ -94,7 +95,7 @@ export class TransactionService {
       startMeterValue,
     } = params;
 
-    const chargePoint = await this.prisma.chargePoint.findUnique({
+    const chargePoint = await this.prisma.charge_points.findUnique({
       where: { chargePointIdentity },
     });
 
@@ -219,12 +220,17 @@ export class TransactionService {
     const transactionInclude = {
       chargePoint: {
         select: {
-          onPeakRate: true,
-          offPeakRate: true,
-          onPeakStartTime: true,
-          onPeakEndTime: true,
-          offPeakStartTime: true,
-          offPeakEndTime: true,
+          chargePointIdentity: true,
+          Station: {
+            select: {
+              onPeakRate: true,
+              offPeakRate: true,
+              onPeakStartTime: true,
+              onPeakEndTime: true,
+              offPeakStartTime: true,
+              offPeakEndTime: true,
+            },
+          },
         },
       },
     } as const;
@@ -278,7 +284,7 @@ export class TransactionService {
 
     const resolvedEnergy = totalEnergy ?? transaction.totalEnergy ?? null;
     const rateFromSchedule =
-      this.resolveRateForTimestamp(stopTime, transaction.chargePoint) ?? null;
+      this.resolveRateForTimestamp(stopTime, transaction.chargePoint?.Station) ?? null;
     const appliedRate = rateFromSchedule ?? transaction.appliedRate ?? null;
     const computedCost =
       resolvedEnergy !== null && appliedRate !== null
@@ -300,7 +306,63 @@ export class TransactionService {
       },
     });
 
+    // Process payment automatically if transaction has a cost
+    if (totalCost && totalCost > 0) {
+      try {
+        await PaymentService.processPayment(updatedTransaction.id);
+        console.log(`Payment processing initiated for transaction ${updatedTransaction.transactionId}`);
+      } catch (paymentError) {
+        console.error(`Payment processing failed for transaction ${updatedTransaction.transactionId}:`, paymentError);
+        // Don't throw error here - transaction is still completed, payment can be retried
+      }
+    }
+
     return updatedTransaction;
+  }
+
+  /**
+   * Process payment for a completed transaction
+   */
+  async processTransactionPayment(transactionId: string, cardId?: string) {
+    try {
+      const transaction = await this.prisma.transaction.findUnique({
+        where: { id: transactionId },
+        include: { 
+          user: {
+            include: { paymentCards: true }
+          }
+        }
+      });
+
+      if (!transaction) {
+        throw new Error('Transaction not found');
+      }
+
+      if (transaction.status !== TransactionStatus.COMPLETED) {
+        throw new Error('Transaction must be completed before processing payment');
+      }
+
+      if (!transaction.totalCost || transaction.totalCost <= 0) {
+        throw new Error('Transaction has no cost to charge');
+      }
+
+      // Check if payment already exists
+      const existingPayment = await this.prisma.payment.findFirst({
+        where: { 
+          transactionId: transaction.id,
+          status: { in: ['SUCCESS', 'PENDING'] }
+        }
+      });
+
+      if (existingPayment) {
+        throw new Error('Payment already exists for this transaction');
+      }
+
+      return await PaymentService.processPayment(transactionId, cardId);
+    } catch (error) {
+      console.error('Error processing transaction payment:', error);
+      throw error;
+    }
   }
 
   private extractEnergyExtremes(transactionData?: any[]): { start: number | null; end: number | null } {
@@ -568,25 +630,30 @@ export class TransactionService {
           select: {
             id: true,
             chargepointname: true,
-            location: true,
-            latitude: true,
-            longitude: true,
             brand: true,
             serialNumber: true,
             powerRating: true,
             chargePointIdentity: true,
             chargepointstatus: true,
             maxPower: true,
-            onPeakRate: true,
-            offPeakRate: true,
-            onPeakStartTime: true,
-            onPeakEndTime: true,
-            offPeakStartTime: true,
-            offPeakEndTime: true,
             openingHours: true,
             is24Hours: true,
             isPublic: true,
-            ownershipType: true
+            ownershipType: true,
+            Station: {
+              select: {
+                stationname: true,
+                location: true,
+                latitude: true,
+                longitude: true,
+                onPeakRate: true,
+                offPeakRate: true,
+                onPeakStartTime: true,
+                onPeakEndTime: true,
+                offPeakStartTime: true,
+                offPeakEndTime: true
+              }
+            }
           }
         },
         connector: {
@@ -615,7 +682,38 @@ export class TransactionService {
       }
     });
 
-    return transactions;
+    return transactions.map((transaction: any) => {
+      if (transaction.chargePoint?.Station) {
+        const { Station, ...restChargePoint } = transaction.chargePoint;
+        const latitude =
+          Station.latitude !== null && Station.latitude !== undefined
+            ? Number(Station.latitude)
+            : null;
+        const longitude =
+          Station.longitude !== null && Station.longitude !== undefined
+            ? Number(Station.longitude)
+            : null;
+
+        return {
+          ...transaction,
+          chargePoint: {
+            ...restChargePoint,
+            stationName: Station.stationname,
+            location: Station.location,
+            latitude,
+            longitude,
+            onPeakRate: Station.onPeakRate,
+            offPeakRate: Station.offPeakRate,
+            onPeakStartTime: Station.onPeakStartTime,
+            onPeakEndTime: Station.onPeakEndTime,
+            offPeakStartTime: Station.offPeakStartTime,
+            offPeakEndTime: Station.offPeakEndTime
+          }
+        };
+      }
+
+      return transaction;
+    });
   }
 
   async getTransactionSummary(
@@ -641,7 +739,11 @@ export class TransactionService {
         chargePoint: {
           select: {
             chargePointIdentity: true,
-            onPeakRate: true
+            Station: {
+              select: {
+                onPeakRate: true
+              }
+            }
           }
         },
         connector: {
@@ -682,7 +784,7 @@ export class TransactionService {
 
     const appliedRate =
       transaction.appliedRate ??
-      transaction.chargePoint?.onPeakRate ??
+      transaction.chargePoint?.Station?.onPeakRate ??
       null;
 
     let totalCost = transaction.totalCost ?? null;

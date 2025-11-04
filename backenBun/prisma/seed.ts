@@ -1,185 +1,265 @@
-import { PrismaClient } from '@prisma/client'
-import bcrypt from 'bcrypt'
+import { Prisma, PrismaClient, OCPPVersion, OwnershipType, ConnectorType } from '@prisma/client';
+import bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 
-const prisma = new PrismaClient()
+const prisma = new PrismaClient();
+// const { OwnershipType, OCPPVersion, ConnectorType } = Prisma;
 
-async function main() {
-  // สร้าง/อัปเดต Admin (ป้องกันซ้ำเมื่อรัน seed หลายครั้ง)
+async function seedAdminAndUser() {
+  const adminPassword = await bcrypt.hash('admin123', 10);
+
   const admin = await prisma.admin.upsert({
     where: { email: 'admin@example.com' },
     update: {
+      password: adminPassword,
       firstName: 'Admin',
       lastName: 'User',
       isActive: true
     },
     create: {
+      id: randomUUID(),
       email: 'admin@example.com',
-      password: adminPassword, // Now properly hashed
+      password: adminPassword,
       role: 'SUPERADMIN',
       firstName: 'Admin',
       lastName: 'User',
-      isActive: true
+      isActive: true,
+      updatedAt: new Date()
     }
-  })
-  console.log('Created/Updated admin:', admin)
+  });
 
-  // สร้าง/อัปเดต User
+  console.log('✅ Admin ready:', admin.email);
+
+  const userPassword = await bcrypt.hash('user123', 10);
+
   const user = await prisma.user.upsert({
     where: { email: 'user@example.com' },
     update: {
       phoneNumber: '+66812345678',
-      password: 'user123',
-      firebaseUid: 'firebase123',
+      password: userPassword,
+      firebaseUid: 'firebase-uid-001',
       fullName: 'John Doe',
       typeUser: 'NORMAL',
       status: 'ACTIVE'
     },
     create: {
+      id: randomUUID(),
       email: 'user@example.com',
       phoneNumber: '+66812345678',
-      password: userPassword, // Now properly hashed
-      firebaseUid: 'firebase123',
+      password: userPassword,
+      firebaseUid: 'firebase-uid-001',
       fullName: 'John Doe',
       typeUser: 'NORMAL',
-      status: 'ACTIVE'
+      status: 'ACTIVE',
+      updatedAt: new Date()
     }
-  })
-  console.log('Created/Updated user:', user)
+  });
 
-  // สร้าง UserVehicle
-  const vehicle = await prisma.userVehicle.upsert({
-    where: { licensePlate: 'กข 1234 กรุงเทพ' },
-    update: {},
+  console.log('✅ User ready:', user.email);
+
+  const newUserPassword = await bcrypt.hash('Plankton123', 10);
+
+  const newUser = await prisma.user.upsert({
+    where: { phoneNumber: '+66814266508' },
+    update: {
+      password: newUserPassword,
+      fullName: 'New User',
+      typeUser: 'NORMAL',
+      status: 'ACTIVE',
+      updatedAt: new Date()
+    },
     create: {
-      userId: user.id,
+      id: randomUUID(),
+      email: 'newuser@example.com',
+      phoneNumber: '+66814266508',
+      password: newUserPassword,
+      firebaseUid: 'firebase-uid-002',
+      fullName: 'New User',
+      typeUser: 'NORMAL',
+      status: 'ACTIVE',
+      updatedAt: new Date()
+    }
+  });
+
+  console.log('✅ New User ready:', newUser.phoneNumber);
+
+  return user;
+}
+
+async function seedStation() {
+  const now = new Date();
+
+  const station = await prisma.station.upsert({
+    where: { stationname: 'Central World EV Station' },
+    update: {
+      location: '999/9 Rama I Rd, Pathumwan, Bangkok',
+      latitude: new Prisma.Decimal('13.7463'),
+      longitude: new Prisma.Decimal('100.5388'),
+      onPeakRate: 12,
+      onPeakStartTime: '09:00',
+      onPeakEndTime: '22:00',
+      offPeakRate: 6,
+      offPeakStartTime: '22:00',
+      offPeakEndTime: '09:00',
+      updatedAt: now
+    },
+    create: {
+      stationname: 'Central World EV Station',
+      location: '999/9 Rama I Rd, Pathumwan, Bangkok',
+      latitude: new Prisma.Decimal('13.7463'),
+      longitude: new Prisma.Decimal('100.5388'),
+      onPeakRate: 12,
+      onPeakStartTime: '09:00',
+      onPeakEndTime: '22:00',
+      offPeakRate: 6,
+      offPeakStartTime: '22:00',
+      offPeakEndTime: '09:00',
+      createdAt: now,
+      updatedAt: now
+    }
+  });
+
+  console.log('✅ Station ready:', station.stationname);
+
+  return station;
+}
+
+async function seedChargePoint(userId: string, stationId: string) {
+  const now = new Date();
+
+  const chargePoint = await prisma.charge_points.upsert({
+    where: { chargePointIdentity: 'CP-TH-BKK-001' },
+    update: {
+      chargepointname: 'Central World AC Wallbox',
+      stationId,
+      openingHours: '06:00-22:00',
+      is24Hours: false,
+      brand: 'Autel MaxiCharger AC Wallbox',
+      serialNumber: 'SN-AUTEL-23-001234',
+      powerRating: 22,
+      powerSystem: 3,
+      connectorCount: 2,
+      protocol: OCPPVersion.OCPP16,
+      chargepointstatus: 'AVAILABLE',
+      ownerId: userId,
+      ownershipType: OwnershipType.PRIVATE,
+      isPublic: true,
+      updatedAt: now
+    },
+    create: {
+      id: 'cp-central-world-001',
+      chargepointname: 'Central World AC Wallbox',
+      stationId,
+      openingHours: '06:00-22:00',
+      is24Hours: false,
+      brand: 'Autel MaxiCharger AC Wallbox',
+      serialNumber: 'SN-AUTEL-23-001234',
+      powerRating: 22,
+      powerSystem: 3,
+      connectorCount: 2,
+      protocol: OCPPVersion.OCPP16,
+      chargePointIdentity: 'CP-TH-BKK-001',
+      ownerId: userId,
+      ownershipType: OwnershipType.PRIVATE,
+      isPublic: true,
+      createdAt: now,
+      updatedAt: now
+    }
+  });
+
+  console.log('✅ Charge point ready:', chargePoint.chargepointname);
+
+  return chargePoint;
+}
+
+async function seedConnectors(chargePointId: string) {
+  const connectorDefinitions = [
+    {
+      connectorId: 1,
+      type: ConnectorType.TYPE_2,
+      typeDescription: 'Type 2 Connector',
+      maxPower: 22,
+      maxCurrent: 32
+    },
+    {
+      connectorId: 2,
+      type: ConnectorType.CCS_COMBO_2,
+      typeDescription: 'CCS Combo 2 Connector',
+      maxPower: 50,
+      maxCurrent: 125
+    }
+  ];
+
+  for (const definition of connectorDefinitions) {
+    const connector = await prisma.connectors.upsert({
+      where: {
+        chargePointId_connectorId: {
+          chargePointId,
+          connectorId: definition.connectorId
+        }
+      },
+      update: {
+        type: definition.type,
+        typeDescription: definition.typeDescription,
+        maxPower: definition.maxPower,
+        maxCurrent: definition.maxCurrent,
+        connectorstatus: 'AVAILABLE'
+      },
+      create: {
+        chargePointId,
+        connectorId: definition.connectorId,
+        type: definition.type,
+        typeDescription: definition.typeDescription,
+        maxPower: definition.maxPower,
+        maxCurrent: definition.maxCurrent,
+        connectorstatus: 'AVAILABLE'
+      }
+    });
+
+    console.log(`  → Connector ${connector.connectorId} ready (${connector.type})`);
+  }
+}
+
+async function seedUserVehicle(userId: string) {
+  const vehicle = await prisma.user_vehicles.upsert({
+    where: { licensePlate: 'กข 1234 กรุงเทพ' },
+    update: {
+      userId,
+      make: 'Tesla',
+      model: 'Model 3',
+      type: 'ELECTRIC',
+      updatedAt: new Date()
+    },
+    create: {
+      id: randomUUID(),
+      userId,
       licensePlate: 'กข 1234 กรุงเทพ',
       make: 'Tesla',
       model: 'Model 3',
-      type: 'ELECTRIC'
+      type: 'ELECTRIC',
+      createdAt: new Date(),
+      updatedAt: new Date()
     }
-  })
-  console.log('Created/Updated vehicle:', vehicle)
+  });
 
-  // สร้าง/อัปเดต ChargePoint
-  const chargePoint = await prisma.chargePoint.upsert({
-    where: { id: 'CP_BKK_001' },
-    update: {
-      ownerId: user.id,
-      name: 'Central World EV Station',
-      stationName: 'Central World EV Station',
-      location: '999/9 Rama I Rd, Pathumwan, Bangkok',
-      latitude: 13.7463,
-      longitude: 100.5388,
-      openingHours: '06:00-22:00',
-      is24Hours: false,
-      brand: 'Autel MaxiCharger AC Wallbox',
-      serialNumber: 'SN-AUTEL-23-001234',
-      powerRating: 22.0,
-      powerSystem: 3,
-      connectorCount: 2,
-      protocol: 'OCPP16',
-      chargePointIdentity: 'CP001',
-      ownershipType: 'PRIVATE',
-      isPublic: true
-    },
-    create: {
-      id: 'CP_BKK_001',
-      name: 'Central World EV Station',
-      stationName: 'Central World EV Station',
-      location: '999/9 Rama I Rd, Pathumwan, Bangkok',
-      latitude: 13.7463,
-      longitude: 100.5388,
-      openingHours: '06:00-22:00',
-      is24Hours: false,
-      brand: 'Autel MaxiCharger AC Wallbox',
-      serialNumber: 'SN-AUTEL-23-001234',
-      powerRating: 22.0,
-      powerSystem: 3,
-      connectorCount: 2,
-      protocol: 'OCPP16',
-      chargePointIdentity: 'CP001',
-      ownerId: user.id,
-      ownershipType: 'PRIVATE',
-      isPublic: true
-    }
-  })
-  console.log('Created/Updated charge point:', chargePoint)
-
-  // สร้าง/อัปเดต Connector
-  const connector = await prisma.connector.upsert({
-    where: { id: 'connector-cp-bkk-001-1' },
-    update: {
-      chargePointId: chargePoint.id,
-      connectorId: 1,
-      type: 'TYPE_2',
-      typeDescription: 'Type 2 Connector',
-      maxPower: 22.0,
-      maxCurrent: 32.0
-    },
-    create: {
-      id: 'connector-cp-bkk-001-1',
-      chargePointId: chargePoint.id,
-      connectorId: 1,
-      type: 'TYPE_2',
-      typeDescription: 'Type 2 Connector',
-      maxPower: 22.0,
-      maxCurrent: 32.0
-    }
-  })
-  console.log('Created connector:', connector)
-
-  // สร้าง/อัปเดต RFID Cards สำหรับผู้ใช้
-  const primaryCard = await prisma.rfidCard.upsert({
-    where: { cardNumber: '1234567890ABCDEF' },
-    update: {
-      ownerId: user.id,
-      alias: 'บัตรหลัก',
-      isPrimary: true,
-      status: 'ACTIVE',
-      deletedAt: null
-    },
-    create: {
-      id: 'rfid-card-primary',
-      ownerId: user.id,
-      cardNumber: '1234567890ABCDEF',
-      alias: 'บัตรหลัก',
-      isPrimary: true,
-      status: 'ACTIVE',
-      activatedAt: new Date()
-    }
-  })
-  const secondaryCard = await prisma.rfidCard.upsert({
-    where: { cardNumber: 'ABCDEF1234567890' },
-    update: {
-      ownerId: user.id,
-      alias: 'บัตรแผน',
-      isPrimary: false,
-      status: 'ACTIVE',
-      deletedAt: null
-    },
-    create: {
-      id: 'rfid-card-secondary',
-      ownerId: user.id,
-      cardNumber: 'ABCDEF1234567890',
-      qrCodeValue: 'QR-ABCDEF1234567890',
-      alias: 'บัตรแผน',
-      isPrimary: false,
-      status: 'ACTIVE'
-    }
-  })
-  console.log('Seeded RFID cards:', { primaryCard, secondaryCard })
+  console.log('✅ Vehicle ready:', vehicle.licensePlate);
 }
 
-main()
-  .catch((e) => {
-    console.error(e)
-    throw new Error('Seed failed')
-  })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
+async function main() {
+  try {
+    const user = await seedAdminAndUser();
+    const station = await seedStation();
+    const chargePoint = await seedChargePoint(user.id, station.id);
+    await seedConnectors(chargePoint.id);
+    await seedUserVehicle(user.id);
 
+    console.log('\n🎉 Seed complete!');
+  } catch (error) {
+    console.error('❌ Seed failed:', error);
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
 
-
-
-
+void main();
