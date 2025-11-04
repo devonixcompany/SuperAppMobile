@@ -5,7 +5,7 @@ import {
   AdminChargePointService,
   CreateChargePointData,
   UpdateChargePointData
-} from './chargepoint.service';
+} from './controlchar.service';
 
 export const adminChargePointController = (jwtService: JWTService) => {
   console.log('🏭 Creating admin chargepoint controller with jwtService');
