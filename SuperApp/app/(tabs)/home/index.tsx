@@ -355,7 +355,7 @@ export default function HomeScreen() {
                 </View>
               </View>
               <View className="h-[2px] bg-white/90 mb-5 " />
-              <Text className="mb-5 ml-5 text-sm text-white/90">หมดอายุ : 30 ก.ย. 2568</Text>
+              <Text className="mb-5 ml-5 text-sm text-white/90"> ได้รับคะแนนคืน  10%  </Text>
             </LinearGradient>
            </TouchableScale>
           </View>
