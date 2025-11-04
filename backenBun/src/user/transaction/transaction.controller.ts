@@ -343,4 +343,63 @@ export const transactionController = (transactionService: TransactionService) =>
           transactionData: t.Optional(t.Array(t.Any())),
         }),
       }
+    )
+    .post(
+      '/:transactionId/payment',
+      async ({ params, body, user, set }: any) => {
+        try {
+          const bypassEnabled = isDevBypassEnabled();
+          
+          if (!user?.id && !bypassEnabled) {
+            set.status = 401;
+            return {
+              success: false,
+              message: 'Unauthorized',
+            };
+          }
+
+          const { transactionId } = params as { transactionId: string };
+          const { cardId } = body as { cardId?: string };
+
+          // Verify user owns the transaction (unless bypass enabled)
+          if (!bypassEnabled) {
+            const transaction = await transactionService.getTransactionSummary(transactionId, user.id);
+            if (!transaction) {
+              set.status = 404;
+              return {
+                success: false,
+                message: 'Transaction not found or access denied',
+              };
+            }
+          }
+
+          const paymentResult = await transactionService.processTransactionPayment(transactionId, cardId);
+
+          return {
+            success: true,
+            data: paymentResult,
+          };
+        } catch (error: any) {
+          console.error('Process transaction payment error:', error);
+          set.status = 400;
+          return {
+            success: false,
+            message: error?.message || 'Failed to process payment',
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['Transactions'],
+          summary: 'Process payment for transaction',
+          description: 'Process payment for a completed transaction using user\'s payment card.',
+          security: [{ bearerAuth: [] }],
+        },
+        params: t.Object({
+          transactionId: t.String(),
+        }),
+        body: t.Object({
+          cardId: t.Optional(t.String()),
+        }),
+      }
     );

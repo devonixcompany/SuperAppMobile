@@ -15,7 +15,7 @@ export class ChargePointService {
    */
   async updateConnectionStatus(chargePointIdentity: string, isConnected: boolean) {
     try {
-      const updatedChargePoint = await this.prisma.chargePoint.update({
+      const updatedChargePoint = await this.prisma.charge_points.update({
         where: { chargePointIdentity },
         data: {
           lastSeen: new Date(),
@@ -24,7 +24,7 @@ export class ChargePointService {
         },
         include: {
           connectors: true,
-          owner: true
+          User: true
         }
       });
 
@@ -39,23 +39,23 @@ export class ChargePointService {
    * ดึงข้อมูลเครื่องชาร์จทั้งหมดสำหรับ ws-gateway
    */
   async getAllChargePointsForWSGateway() {
-    const chargePoints = await this.prisma.chargePoint.findMany({
+    const chargePoints = await this.prisma.charge_points.findMany({
       include: {
-        station: {
-          select: {
-            stationname: true
-          }
-        }
+        Station: true
       }
     });
 
-    return chargePoints.map((cp) => ({
+    return chargePoints.map((cp: any) => ({
       id: cp.id,
       name: cp.chargepointname,
-      stationName: cp.station?.stationname ?? null,
-      location: cp.location,
-      latitude: cp.latitude ? Number(cp.latitude) : null,
-      longitude: cp.longitude ? Number(cp.longitude) : null,
+      stationName: cp.Station?.stationname ?? null,
+      location: cp.Station?.location ?? null,
+      latitude: cp.Station?.latitude
+        ? Number(cp.Station.latitude)
+        : null,
+      longitude: cp.Station?.longitude
+        ? Number(cp.Station.longitude)
+        : null,
       openingHours: cp.openingHours,
       is24Hours: cp.is24Hours,
       brand: cp.brand,
@@ -72,6 +72,12 @@ export class ChargePointService {
       model: cp.model,
       firmwareVersion: cp.firmwareVersion,
       ocppProtocolRaw: cp.ocppProtocolRaw,
+      onPeakRate: cp.Station?.onPeakRate ?? null,
+      onPeakStartTime: cp.Station?.onPeakStartTime ?? null,
+      onPeakEndTime: cp.Station?.onPeakEndTime ?? null,
+      offPeakRate: cp.Station?.offPeakRate ?? null,
+      offPeakStartTime: cp.Station?.offPeakStartTime ?? null,
+      offPeakEndTime: cp.Station?.offPeakEndTime ?? null,
       isWhitelisted: cp.isWhitelisted,
       ownerId: cp.ownerId,
       ownershipType: cp.ownershipType,
@@ -141,6 +147,93 @@ export class ChargePointService {
     return 'TYPE_2';
   }
 
+  private buildStationPayload(source: any) {
+    const payload: Record<string, any> = {};
+
+    if (typeof source?.stationName === 'string' && source.stationName.trim()) {
+      payload.stationname = source.stationName.trim();
+    }
+    if (typeof source?.stationname === 'string' && source.stationname.trim()) {
+      payload.stationname = source.stationname.trim();
+    }
+    if (source?.location !== undefined) {
+      payload.location =
+        typeof source.location === 'string' && source.location.trim()
+          ? source.location.trim()
+          : source.location ?? 'Unknown Location';
+    }
+    if (source?.latitude !== undefined) {
+      payload.latitude = source.latitude;
+    }
+    if (source?.longitude !== undefined) {
+      payload.longitude = source.longitude;
+    }
+    if (source?.onPeakRate !== undefined) {
+      payload.onPeakRate = source.onPeakRate;
+    }
+    if (source?.onPeakStartTime !== undefined) {
+      payload.onPeakStartTime = source.onPeakStartTime;
+    }
+    if (source?.onPeakEndTime !== undefined) {
+      payload.onPeakEndTime = source.onPeakEndTime;
+    }
+    if (source?.offPeakRate !== undefined) {
+      payload.offPeakRate = source.offPeakRate;
+    }
+    if (source?.offPeakStartTime !== undefined) {
+      payload.offPeakStartTime = source.offPeakStartTime;
+    }
+    if (source?.offPeakEndTime !== undefined) {
+      payload.offPeakEndTime = source.offPeakEndTime;
+    }
+
+    return payload;
+  }
+
+  private ensureStationDefaults(
+    payload: Record<string, any>,
+    fallbackLocation: string
+  ) {
+    const defaults = {
+      location:
+        typeof payload.location === 'string' && payload.location.trim()
+          ? payload.location
+          : fallbackLocation,
+      onPeakRate:
+        typeof payload.onPeakRate === 'number' ? payload.onPeakRate : 10,
+      onPeakStartTime:
+        typeof payload.onPeakStartTime === 'string'
+          ? payload.onPeakStartTime
+          : '10:00',
+      onPeakEndTime:
+        typeof payload.onPeakEndTime === 'string'
+          ? payload.onPeakEndTime
+          : '12:00',
+      offPeakRate:
+        typeof payload.offPeakRate === 'number' ? payload.offPeakRate : 20,
+      offPeakStartTime:
+        typeof payload.offPeakStartTime === 'string'
+          ? payload.offPeakStartTime
+          : '16:00',
+      offPeakEndTime:
+        typeof payload.offPeakEndTime === 'string'
+          ? payload.offPeakEndTime
+          : '22:00'
+    };
+
+    return { ...defaults, ...payload };
+  }
+
+  private hasStationUpdates(payload: Record<string, any>) {
+    return Object.keys(payload).length > 0;
+  }
+
+  private omitUndefined<T extends Record<string, any>>(source: T) {
+    return Object.fromEntries(
+      Object.entries(source).filter(([, value]) => value !== undefined)
+    ) as Partial<T>;
+  }
+
   /**
    * สร้างเครื่องชาร์จใหม่สำหรับ whitelist
    */
@@ -167,25 +260,84 @@ export class ChargePointService {
     const connectorCount = data.connectorCount || 2; // Default to 2 connectors for whitelist
 
     let stationId: string | undefined;
-    const normalizedStationName = data.stationName?.trim();
+    const stationPayload = this.buildStationPayload(data);
+    const { stationname: requestedStationName, ...stationFields } = stationPayload;
+    const normalizedStationName =
+      typeof requestedStationName === 'string' && requestedStationName.trim()
+        ? requestedStationName.trim()
+        : typeof data.stationName === 'string' && data.stationName.trim()
+          ? data.stationName.trim()
+          : undefined;
+    const fallbackLocation =
+      typeof stationFields.location === 'string' && stationFields.location.trim()
+        ? stationFields.location
+        : typeof data.location === 'string' && data.location.trim()
+          ? data.location.trim()
+          : 'Unknown Location';
 
     if (normalizedStationName) {
-      const station = await this.prisma.station.upsert({
-        where: { stationname: normalizedStationName },
-        update: {},
-        create: { stationname: normalizedStationName }
+      const existingStation = await this.prisma.station.findUnique({
+        where: { stationname: normalizedStationName }
       });
+
+      if (existingStation) {
+        const updateData = this.omitUndefined({
+          ...stationFields,
+          ...(requestedStationName &&
+          requestedStationName !== existingStation.stationname
+            ? { stationname: requestedStationName }
+            : {})
+        });
+
+        if (this.hasStationUpdates(updateData)) {
+          updateData.updatedAt = new Date();
+          await this.prisma.station.update({
+            where: { id: existingStation.id },
+            data: updateData
+          });
+        }
+
+        stationId = existingStation.id;
+      } else {
+        const baseData = this.ensureStationDefaults(
+          stationFields,
+          fallbackLocation
+        );
+
+        const station = await this.prisma.station.create({
+          data: this.omitUndefined({
+            id: randomUUID(),
+            stationname: normalizedStationName,
+            ...baseData,
+            updatedAt: new Date()
+          })
+        });
+
+        stationId = station.id;
+      }
+    } else {
+      const generatedName = `Station-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+      const baseData = this.ensureStationDefaults(stationFields, fallbackLocation);
+
+      const station = await this.prisma.station.create({
+        data: this.omitUndefined({
+          id: randomUUID(),
+          stationname: requestedStationName ?? generatedName,
+          ...baseData,
+          updatedAt: new Date()
+        })
+      });
+
       stationId = station.id;
     }
 
-    const newChargePoint = await this.prisma.chargePoint.create({
+    const newChargePoint = await this.prisma.charge_points.create({
       data: {
         id: chargePointId,
         chargepointname: data.name,
         stationId,
-        location: data.location,
-        latitude: data.latitude,
-        longitude: data.longitude,
         serialNumber: data.serialNumber,
         protocol,
         chargePointIdentity: data.chargePointIdentity,
@@ -196,7 +348,8 @@ export class ChargePointService {
         ownershipType: OwnershipType.PRIVATE,
         isWhitelisted: data.isWhitelisted ?? true,
         isPublic: data.isPublic ?? true,
-        chargepointstatus: ChargePointStatus.AVAILABLE
+        chargepointstatus: ChargePointStatus.AVAILABLE,
+        updatedAt: new Date()
       }
     });
 
@@ -207,10 +360,10 @@ export class ChargePointService {
     );
 
     // Fetch the charge point with connectors
-    return await this.prisma.chargePoint.findUnique({
+    return await this.prisma.charge_points.findUnique({
       where: { id: chargePointId },
       include: {
-        owner: true,
+        User: true,
         connectors: true,
         _count: {
           select: {
@@ -225,7 +378,7 @@ export class ChargePointService {
    * ค้นหาเครื่องชาร์จด้วย Serial Number และ Charge Point Identity
    */
   async findBySerialAndIdentity(serialNumber: string, chargePointIdentity: string) {
-    return await this.prisma.chargePoint.findFirst({
+    return await this.prisma.charge_points.findFirst({
       where: {
         AND: [
           { serialNumber },
@@ -239,7 +392,7 @@ export class ChargePointService {
    * ค้นหาเครื่องชาร์จด้วย Serial Number
    */
   async findBySerialNumber(serialNumber: string) {
-    return await this.prisma.chargePoint.findFirst({
+    return await this.prisma.charge_points.findFirst({
       where: {
         serialNumber
       }
@@ -250,7 +403,7 @@ export class ChargePointService {
    * ค้นหาเครื่องชาร์จด้วย Charge Point Identity
    */
   async findByChargePointIdentity(chargePointIdentity: string) {
-    return await this.prisma.chargePoint.findFirst({
+    return await this.prisma.charge_points.findFirst({
       where: {
         chargePointIdentity
       }
@@ -271,7 +424,7 @@ export class ChargePointService {
   }) {
     try {
       // ตรวจสอบว่าในฐานข้อมูลมี ChargePoint นี้อยู่แล้วหรือไม่
-      const existingChargePoint = await this.prisma.chargePoint.findUnique({
+      const existingChargePoint = await this.prisma.charge_points.findUnique({
         where: { chargePointIdentity }
       });
 
@@ -295,27 +448,25 @@ export class ChargePointService {
         const newChargePointData = {
           ...data,
           chargePointIdentity,
-          name: `Auto-created: ${chargePointIdentity}`,
-          status: 'AVAILABLE',
+          chargepointname: `Auto-created: ${chargePointIdentity}`,
+          chargepointstatus: 'AVAILABLE',
           isPublic: true,
           isWhitelisted: true,
           connectorCount: 2, // จำนวนหัวชาร์จเริ่มต้น
           powerRating: 22, // กำลังไฟเริ่มต้น (กิโลวัตต์)
-          ocppProtocol: updateData.ocppProtocolRaw || 'OCPP16',
-          ocppVersion: updateData.ocppProtocolRaw || 'OCPP16'
+          protocol: updateData.ocppProtocolRaw || 'OCPP16',
+          ocppProtocolRaw: updateData.ocppProtocolRaw || 'OCPP16'
         };
         
-        return await this.createChargePoint(newChargePointData);
+        return await this.prisma.charge_points.create({
+          data: newChargePointData
+        });
       }
 
       // อัปเดตข้อมูลเครื่องชาร์จที่มีอยู่แล้ว
-      return await this.prisma.chargePoint.update({
+      return await this.prisma.charge_points.update({
         where: { chargePointIdentity },
-        data,
-        include: {
-          connectors: true,
-          owner: true
-        }
+        data
       });
     } catch (error: any) {
       console.error('Error updating from boot notification:', error);
@@ -332,7 +483,7 @@ export class ChargePointService {
   async updateHeartbeat(chargePointIdentity: string, lastSeen: string) {
     try {
       // ตรวจสอบว่ามีข้อมูล ChargePoint นี้ในระบบหรือไม่
-      const existingChargePoint = await this.prisma.chargePoint.findUnique({
+      const existingChargePoint = await this.prisma.charge_points.findUnique({
         where: { chargePointIdentity }
       });
 
@@ -356,14 +507,16 @@ export class ChargePointService {
         return await this.createChargePoint(newChargePointData);
       }
 
-      const updatedChargePoint = await this.prisma.chargePoint.update({
+      const updatedChargePoint = await this.prisma.charge_points.update({
         where: { chargePointIdentity },
         data: {
           lastSeen: new Date(lastSeen)
         },
         include: {
           connectors: true,
-          owner: true
+          User: true,
+          Station: true,
+          transactions: true
         }
       });
 
@@ -391,8 +544,8 @@ export class ChargePointService {
   }) {
     try {
       // ขั้นแรกค้นหา ChargePoint ด้วย chargePointIdentity เพื่อดึงไอดี
-      const chargePoint = await this.prisma.chargePoint.findUnique({
-        where: { chargePointIdentity }
+      const chargePoint = await this.prisma.charge_points.findUnique({
+        where: { chargePointIdentity: chargePointIdentity }
       });
 
       if (!chargePoint) {
@@ -400,7 +553,7 @@ export class ChargePointService {
       }
 
       // ปรับปรุงเวลาที่เห็นล่าสุดของ ChargePoint
-      await this.prisma.chargePoint.update({
+      await this.prisma.charge_points.update({
         where: { id: chargePoint.id },
         data: {
           lastSeen: new Date()
@@ -408,7 +561,7 @@ export class ChargePointService {
       });
 
       // ค้นหาหรือสร้างหัวชาร์จตามหมายเลขที่ได้รับ
-      const connector = await this.prisma.connector.upsert({
+      const connector = await this.prisma.connectorss.upsert({
         where: {
           chargePointId_connectorId: {
             chargePointId: chargePoint.id,
@@ -420,6 +573,7 @@ export class ChargePointService {
           connectorstatus: this.mapOcppStatusToConnectorStatus(statusData.status)
         },
         create: {
+          id: randomUUID(),
           chargePointId: chargePoint.id,
           connectorId: statusData.connectorId,
           connectorstatus: this.mapOcppStatusToConnectorStatus(statusData.status),
@@ -527,12 +681,12 @@ export class ChargePointService {
 
     // ดึงข้อมูลเครื่องชาร์จพร้อมจัดหน้าแบ่งชุดข้อมูล
     const [chargePoints, total] = await Promise.all([
-      this.prisma.chargePoint.findMany({
+      this.prisma.charge_points.findMany({
         where,
         skip,
         take: limit,
         include: {
-          owner: {
+          User: {
             select: {
               id: true,
               email: true,
@@ -550,7 +704,7 @@ export class ChargePointService {
           createdAt: 'desc'
         }
       }),
-      this.prisma.chargePoint.count({ where })
+      this.prisma.charge_points.count({ where })
     ]);
 
     return {
@@ -570,7 +724,7 @@ export class ChargePointService {
   async validateOCPPConnection(chargePointId: string, ocppVersion: string): Promise<{ isValid: boolean; message?: string }> {
     try {
       // ค้นหาเครื่องชาร์จด้วย chargePointIdentity (ไม่ใช้ id)
-      const chargePoint = await this.prisma.chargePoint.findUnique({
+      const chargePoint = await this.prisma.charge_points.findUnique({
         where: { chargePointIdentity: chargePointId }
       });
 
@@ -634,8 +788,11 @@ export class ChargePointService {
   async updateChargePoint(chargePointIdentity: string, updateData: any) {
     try {
       // ตรวจสอบก่อนว่าเครื่องชาร์จนี้มีอยู่หรือไม่
-      const existingChargePoint = await this.prisma.chargePoint.findUnique({
-        where: { chargePointIdentity }
+      const existingChargePoint = await this.prisma.charge_points.findUnique({
+        where: { chargePointIdentity },
+        include: {
+          Station: true
+        }
       });
 
       if (!existingChargePoint) {
@@ -656,21 +813,213 @@ export class ChargePointService {
         });
       }
 
-      // หากมีอยู่แล้วให้อัปเดตข้อมูล
-      const updatedChargePoint = await this.prisma.chargePoint.update({
-        where: { chargePointIdentity },
-        data: updateData,
-        include: {
-          owner: true,
-          connectors: true,
-          _count: {
-            select: {
-              transactions: true
-            }
-          }
-        }
-      });
+      const stationFieldKeys = new Set([
+        'stationName',
+        'stationname',
+        'location',
+        'latitude',
+        'longitude',
+        'onPeakRate',
+        'onPeakStartTime',
+        'onPeakEndTime',
+        'offPeakRate',
+        'offPeakStartTime',
+        'offPeakEndTime'
+      ]);
 
+      const chargePointFieldSet = new Set([
+        'chargepointname',
+        'openingHours',
+        'is24Hours',
+        'brand',
+        'serialNumber',
+        'powerRating',
+        'powerSystem',
+        'connectorCount',
+        'protocol',
+        'csmsUrl',
+        'chargePointIdentity',
+        'chargepointstatus',
+        'maxPower',
+        'lastSeen',
+        'heartbeatIntervalSec',
+        'vendor',
+        'model',
+        'firmwareVersion',
+        'ocppProtocolRaw',
+        'ocppSessionId',
+        'isWhitelisted',
+        'ownerId',
+        'ownershipType',
+        'isPublic',
+        'urlwebSocket',
+        'stationId'
+      ]);
+
+      const fieldMappings: Record<string, string> = {
+        name: 'chargepointname',
+        status: 'chargepointstatus',
+        ocppProtocol: 'ocppProtocolRaw'
+      };
+
+      const stationPayload = this.buildStationPayload(updateData);
+      const { stationname: requestedStationName, ...stationFields } =
+        stationPayload;
+      const fallbackLocation =
+        typeof stationFields.location === 'string' &&
+        stationFields.location.trim()
+          ? stationFields.location
+          : typeof updateData.location === 'string' && updateData.location.trim()
+            ? updateData.location.trim()
+            : existingChargePoint.Station?.location ?? 'Unknown Location';
+
+      let targetStationId =
+        typeof updateData.stationId === 'string' && updateData.stationId.trim()
+          ? updateData.stationId.trim()
+          : existingChargePoint.stationId ?? undefined;
+
+      const normalizedStationName =
+        typeof requestedStationName === 'string' && requestedStationName.trim()
+          ? requestedStationName.trim()
+          : typeof updateData.stationName === 'string' && updateData.stationName.trim()
+            ? updateData.stationName.trim()
+            : existingChargePoint.Station?.stationname;
+
+      const processStationUpdate = async (stationId: string | undefined) => {
+        if (!stationId) {
+          return undefined;
+        }
+
+        const station = await this.prisma.station.findUnique({
+          where: { id: stationId }
+        });
+
+        if (!station) {
+          return undefined;
+        }
+
+        const updatePayload = this.omitUndefined({
+          ...stationFields,
+          ...(requestedStationName &&
+          requestedStationName !== station.stationname
+            ? { stationname: requestedStationName }
+            : {})
+        });
+
+        if (this.hasStationUpdates(updatePayload)) {
+          updatePayload.updatedAt = new Date();
+          await this.prisma.station.update({
+            where: { id: station.id },
+            data: updatePayload
+          });
+        }
+
+        return station.id;
+      };
+
+      let resolvedStationId = await processStationUpdate(targetStationId);
+
+      if (!resolvedStationId && normalizedStationName) {
+        const stationByName = await this.prisma.station.findUnique({
+          where: { stationname: normalizedStationName }
+        });
+
+        if (stationByName) {
+          const updatePayload = this.omitUndefined({
+            ...stationFields,
+            ...(requestedStationName &&
+            requestedStationName !== stationByName.stationname
+              ? { stationname: requestedStationName }
+              : {})
+          });
+
+          if (this.hasStationUpdates(updatePayload)) {
+            updatePayload.updatedAt = new Date();
+            await this.prisma.station.update({
+              where: { id: stationByName.id },
+              data: updatePayload
+            });
+          }
+
+          resolvedStationId = stationByName.id;
+        }
+      }
+
+      if (!resolvedStationId && this.hasStationUpdates(stationFields)) {
+        const baseData = this.ensureStationDefaults(
+          stationFields,
+          fallbackLocation
+        );
+
+        const newStation = await this.prisma.station.create({
+          data: this.omitUndefined({
+            id: randomUUID(),
+            stationname:
+              normalizedStationName ??
+              `Station-${Date.now().toString(36)}-${Math.random()
+                .toString(36)
+                .slice(2, 8)}`,
+            ...baseData,
+            updatedAt: new Date()
+          })
+        });
+
+        resolvedStationId = newStation.id;
+      }
+
+      const chargePointUpdate: Record<string, any> = {};
+
+      for (const [key, value] of Object.entries(updateData)) {
+        if (value === undefined || stationFieldKeys.has(key) || key === 'stationId') {
+          continue;
+        }
+
+        const mappedKey = fieldMappings[key] ?? key;
+        if (chargePointFieldSet.has(mappedKey)) {
+          chargePointUpdate[mappedKey] = value;
+        }
+      }
+
+      if (updateData.ownerId !== undefined) {
+        chargePointUpdate.ownerId = updateData.ownerId;
+      }
+
+      if (resolvedStationId) {
+        chargePointUpdate.stationId = resolvedStationId;
+      }
+
+      chargePointUpdate.updatedAt = new Date();
+
+      const updatedChargePoint = Object.keys(chargePointUpdate).length
+        ? await this.prisma.charge_points.update({
+            where: { chargePointIdentity },
+            data: chargePointUpdate,
+            include: {
+              User: true,
+              Station: true,
+              connectors: true,
+              _count: {
+                select: {
+                  transactions: true
+                }
+              }
+            }
+          })
+        : await this.prisma.charge_points.findUnique({
+            where: { chargePointIdentity },
+            include: {
+              User: true,
+              Station: true,
+              connectors: true,
+              _count: {
+                select: {
+                  transactions: true
+                }
+              }
+            }
+          });
+
+      // หากมีอยู่แล้วให้อัปเดตข้อมูล
       return updatedChargePoint;
     } catch (error: any) {
       console.error('Error updating charge point:', error);
@@ -684,7 +1033,7 @@ export class ChargePointService {
   async deleteChargePoint(chargePointIdentity: string) {
     try {
       // ตรวจสอบก่อนว่ามีเครื่องชาร์จนี้หรือไม่
-      const existingChargePoint = await this.prisma.chargePoint.findUnique({
+      const existingChargePoint = await this.prisma.charge_points.findUnique({
         where: { chargePointIdentity }
       });
 
@@ -696,7 +1045,7 @@ export class ChargePointService {
       }
 
       // หากพบให้เปลี่ยนสถานะเป็น UNAVAILABLE
-      const deletedChargePoint = await this.prisma.chargePoint.update({
+      const deletedChargePoint = await this.prisma.charge_points.update({
         where: { chargePointIdentity },
         data: {
           chargepointstatus: ChargePointStatus.UNAVAILABLE
@@ -720,8 +1069,11 @@ export class ChargePointService {
   async updatePricingSchedule(chargePointIdentity: string, pricingData: any) {
     try {
       // ตรวจสอบก่อนว่าเครื่องชาร์จนี้มีอยู่หรือไม่
-      const existingChargePoint = await this.prisma.chargePoint.findUnique({
-        where: { chargePointIdentity }
+      const existingChargePoint = await this.prisma.charge_points.findUnique({
+        where: { chargePointIdentity },
+        include: {
+          Station: true
+        }
       });
 
       if (!existingChargePoint) {
@@ -731,12 +1083,61 @@ export class ChargePointService {
         };
       }
 
-      // หากมีอยู่แล้วให้อัปเดตราคาตามข้อมูลใหม่
-      const updatedChargePoint = await this.prisma.chargePoint.update({
+      const stationPricingPayload = this.buildStationPayload(pricingData);
+      const { stationname: requestedStationName, ...stationFields } =
+        stationPricingPayload;
+
+      let stationId = existingChargePoint.stationId ?? undefined;
+
+      if (stationId) {
+        const updatePayload = this.omitUndefined({
+          ...stationFields,
+          ...(requestedStationName ? { stationname: requestedStationName } : {})
+        });
+
+        if (this.hasStationUpdates(updatePayload)) {
+          updatePayload.updatedAt = new Date();
+          await this.prisma.station.update({
+            where: { id: stationId },
+            data: updatePayload
+          });
+        }
+      } else if (this.hasStationUpdates(stationFields)) {
+        const baseData = this.ensureStationDefaults(
+          stationFields,
+          existingChargePoint.Station?.location ?? 'Unknown Location'
+        );
+
+        const newStation = await this.prisma.station.create({
+          data: this.omitUndefined({
+            id: randomUUID(),
+            stationname:
+              requestedStationName ??
+              existingChargePoint.Station?.stationname ??
+              `Station-${Date.now().toString(36)}-${Math.random()
+                .toString(36)
+                .slice(2, 8)}`,
+            ...baseData,
+            updatedAt: new Date()
+          })
+        });
+
+        stationId = newStation.id;
+
+        await this.prisma.charge_points.update({
+          where: { id: existingChargePoint.id },
+          data: {
+            stationId: newStation.id,
+            updatedAt: new Date()
+          }
+        });
+      }
+
+      const updatedChargePoint = await this.prisma.charge_points.findUnique({
         where: { chargePointIdentity },
-        data: pricingData,
         include: {
-          owner: true,
+          Station: true,
+          User: true,
           connectors: true
         }
       });
@@ -769,24 +1170,110 @@ export class ChargePointService {
           ? this.convertProtocolToEnum(data.protocol)
           : data.protocol ?? OCPPVersion.OCPP16;
 
-      let stationId: string | undefined;
-      const stationName =
+      const stationPayload = this.buildStationPayload(data);
+      const { stationname: requestedStationName, ...stationFields } =
+        stationPayload;
+      const fallbackLocation =
+        typeof stationFields.location === 'string' &&
+        stationFields.location.trim()
+          ? stationFields.location
+          : typeof data.location === 'string' && data.location.trim()
+            ? data.location.trim()
+            : 'Unknown Location';
+      const fallbackStationName =
         typeof data.stationName === 'string' && data.stationName.trim()
           ? data.stationName.trim()
           : undefined;
+      const stationIdCandidate =
+        typeof data.stationId === 'string' && data.stationId.trim()
+          ? data.stationId.trim()
+          : undefined;
 
-      if (stationName) {
-        const station = await this.prisma.station.upsert({
-          where: { stationname: stationName },
-          update: {},
-          create: { stationname: stationName }
+      let stationId: string | undefined;
+
+      if (stationIdCandidate) {
+        const stationById = await this.prisma.station.findUnique({
+          where: { id: stationIdCandidate }
         });
+
+        if (stationById) {
+          const updateData = this.omitUndefined({
+            ...stationFields,
+            ...(requestedStationName &&
+            requestedStationName !== stationById.stationname
+              ? { stationname: requestedStationName }
+              : {})
+          });
+
+          if (this.hasStationUpdates(updateData)) {
+            updateData.updatedAt = new Date();
+            await this.prisma.station.update({
+              where: { id: stationById.id },
+              data: updateData
+            });
+          }
+
+          stationId = stationById.id;
+        }
+      }
+
+      const normalizedStationName =
+        typeof requestedStationName === 'string' && requestedStationName.trim()
+          ? requestedStationName.trim()
+          : fallbackStationName;
+
+      if (!stationId && normalizedStationName) {
+        const existingStation = await this.prisma.station.findUnique({
+          where: { stationname: normalizedStationName }
+        });
+
+        if (existingStation) {
+          const updateData = this.omitUndefined({
+            ...stationFields,
+            ...(requestedStationName &&
+            requestedStationName !== existingStation.stationname
+              ? { stationname: requestedStationName }
+              : {})
+          });
+
+          if (this.hasStationUpdates(updateData)) {
+            updateData.updatedAt = new Date();
+            await this.prisma.station.update({
+              where: { id: existingStation.id },
+              data: updateData
+            });
+          }
+
+          stationId = existingStation.id;
+        }
+      }
+
+      if (!stationId) {
+        const generatedName = `Station-${Date.now()
+          .toString(36)
+          .slice(2)}-${Math.random().toString(36).slice(2, 6)}`;
+        const baseData = this.ensureStationDefaults(
+          stationFields,
+          fallbackLocation
+        );
+
+        const station = await this.prisma.station.create({
+          data: this.omitUndefined({
+            id: randomUUID(),
+            stationname: normalizedStationName ?? generatedName,
+            ...baseData,
+            updatedAt: new Date()
+          })
+        });
+
         stationId = station.id;
       }
 
       const chargePointData: any = {
-        chargepointname: data.name || `Auto-created: ${data.chargePointIdentity || 'Unknown'}`,
-        location: data.location || 'Unknown Location',
+        chargepointname:
+          data.name ||
+          `Auto-created: ${data.chargePointIdentity || 'Unknown'}`,
+        stationId,
         brand: data.brand || 'Unknown Brand',
         serialNumber: data.serialNumber || `SN-${Date.now()}`,
         powerRating: data.powerRating ?? 22,
@@ -798,23 +1285,9 @@ export class ChargePointService {
         ownershipType: data.ownershipType ?? OwnershipType.PUBLIC,
         isWhitelisted: data.isWhitelisted ?? true,
         isPublic: data.isPublic ?? true,
-        onPeakRate: data.onPeakRate ?? 10,
-        onPeakStartTime: data.onPeakStartTime ?? '10:00',
-        onPeakEndTime: data.onPeakEndTime ?? '12:00',
-        offPeakRate: data.offPeakRate ?? 20,
-        offPeakStartTime: data.offPeakStartTime ?? '16:00',
-        offPeakEndTime: data.offPeakEndTime ?? '22:00'
+        updatedAt: new Date()
       };
 
-      if (stationId) {
-        chargePointData.stationId = stationId;
-      }
-      if (data.latitude !== undefined) {
-        chargePointData.latitude = data.latitude;
-      }
-      if (data.longitude !== undefined) {
-        chargePointData.longitude = data.longitude;
-      }
       if (data.openingHours !== undefined) {
         chargePointData.openingHours = data.openingHours;
       }
@@ -858,10 +1331,10 @@ export class ChargePointService {
         chargePointData.ownerId = data.ownerId;
       }
 
-      const newChargePoint = await this.prisma.chargePoint.create({
+      const newChargePoint = await this.prisma.charge_points.create({
         data: chargePointData,
         include: {
-          owner: true,
+          User: true,
           connectors: true,
           _count: {
             select: {
@@ -880,10 +1353,10 @@ export class ChargePointService {
       }
 
       // Fetch the charge point again with connectors included
-      const chargePointWithConnectors = await this.prisma.chargePoint.findUnique({
+      const chargePointWithConnectors = await this.prisma.charge_points.findUnique({
         where: { id: newChargePoint.id },
         include: {
-          owner: true,
+          User: true,
           connectors: true,
           _count: {
             select: {
@@ -905,8 +1378,8 @@ export class ChargePointService {
    */
   async hasConnectorData(chargePointIdentity: string): Promise<{ hasConnectors: boolean; connectorCount: number; connectors?: any[] }> {
     try {
-      const chargePoint = await this.prisma.chargePoint.findUnique({
-        where: { chargePointIdentity },
+      const chargePoint = await this.prisma.charge_points.findUnique({
+        where: { chargePointIdentity: chargePointIdentity },
         include: {
           connectors: true
         }
@@ -944,7 +1417,7 @@ export class ChargePointService {
     connectorDetails: Array<{ connectorId: number; type?: string; maxCurrent?: number }> = []
   ): Promise<any[]> {
     try {
-      let chargePoint = await this.prisma.chargePoint.findUnique({
+      let chargePoint = await this.prisma.charge_points.findUnique({
         where: { chargePointIdentity }
       });
 
@@ -1033,6 +1506,9 @@ export class ChargePointService {
           connectorstatus: ConnectorStatus.AVAILABLE
         };
 
+        // Prisma schema requires a string ID for each connector; generate one for new records
+        createData.id = randomUUID();
+
         if (typeof detail?.maxCurrent === 'number') {
           createData.maxCurrent = detail.maxCurrent;
         }
@@ -1050,7 +1526,7 @@ export class ChargePointService {
           updateData.maxCurrent = detail.maxCurrent;
         }
 
-        const connector = await this.prisma.connector.upsert({
+        const connector = await this.prisma.connectors.upsert({
           where: {
             chargePointId_connectorId: {
               chargePointId: chargePoint!.id,
@@ -1065,7 +1541,7 @@ export class ChargePointService {
       }
 
       if (chargePoint!.connectorCount !== totalConnectorSlots) {
-        await this.prisma.chargePoint.update({
+        await this.prisma.charge_points.update({
           where: { id: chargePoint!.id },
           data: { connectorCount: totalConnectorSlots }
         });
@@ -1091,13 +1567,13 @@ export class ChargePointService {
         throw new Error(`User with ID '${userId}' not found`);
       }
       // ค้นหา ChargePoint จาก chargePointIdentity
-      const chargePoint = await this.prisma.chargePoint.findUnique({
+      const chargePoint = await this.prisma.charge_points.findUnique({
         where: { chargePointIdentity },
         include: {
           connectors: {
             where: { connectorId }
           },
-          station: true
+          Station: true
         }
       });
 
@@ -1126,14 +1602,20 @@ export class ChargePointService {
           id: chargePoint.id,
           chargePointIdentity: chargePoint.chargePointIdentity,
           name: chargePoint.chargepointname,
-          stationName: chargePoint.station ? chargePoint.station.stationname : undefined,
-          location: chargePoint.location,
+          stationName: chargePoint.Station?.stationname,
+          location: chargePoint.Station?.location,
           openingHours: chargePoint.openingHours,
           is24Hours: chargePoint.is24Hours,
           protocol: chargePoint.protocol,
           powerRating: chargePoint.powerRating,
           brand: chargePoint.brand,
-          status: chargePoint.chargepointstatus
+          status: chargePoint.chargepointstatus,
+          onPeakRate: chargePoint.Station?.onPeakRate,
+          onPeakStartTime: chargePoint.Station?.onPeakStartTime,
+          onPeakEndTime: chargePoint.Station?.onPeakEndTime,
+          offPeakRate: chargePoint.Station?.offPeakRate,
+          offPeakStartTime: chargePoint.Station?.offPeakStartTime,
+          offPeakEndTime: chargePoint.Station?.offPeakEndTime
         },
         connector: {
           id: connector.id,

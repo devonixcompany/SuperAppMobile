@@ -260,6 +260,8 @@ export const app = new Elysia()
     return adminChargePointCtrl;
   })())
   .use(serviceContainer.getTransactionController())
+  .use(serviceContainer.getPaymentController())
+  .use(serviceContainer.getWebhookController())
   .use(serviceContainer.getSsTaxInvoiceProfileController())
   .guard(
     ({ user }: any) => {
