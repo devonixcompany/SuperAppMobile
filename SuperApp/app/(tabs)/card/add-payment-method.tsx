@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { paymentService } from "@/services/api/payment.service";
+import { createCardToken } from "@/services/omise";
 
 export default function AddPaymentMethodScreen() {
   const [loading, setLoading] = useState(false);
@@ -24,7 +25,7 @@ export default function AddPaymentMethodScreen() {
 
   // Format card number with spaces
   const formatCardNumber = (text: string) => {
-    const cleaned = text.replace(/\s/g, '');
+    const cleaned = text.replace(/\D/g, '');
     const formatted = cleaned.replace(/(.{4})/g, '$1 ').trim();
     return formatted.substring(0, 19); // Max 16 digits + 3 spaces
   };
@@ -59,13 +60,31 @@ export default function AddPaymentMethodScreen() {
 
     setLoading(true);
     try {
-      // In a real implementation, you would use Omise SDK to tokenize the card
-      // For now, we'll simulate the token creation
-      const mockToken = `card_${Date.now()}`;
-      
-      const response = await paymentService.addPaymentMethod({
-        token: mockToken,
-        is_default: isDefault,
+      const cleanCardNumber = cardNumber.replace(/\s/g, '');
+      const month = Number.parseInt(expiryMonth, 10);
+      const year = Number.parseInt(expiryYear, 10);
+
+      if (!Number.isFinite(month) || month < 1 || month > 12) {
+        Alert.alert('ข้อผิดพลาด', 'เดือนหมดอายุต้องอยู่ระหว่าง 01 ถึง 12');
+        return;
+      }
+
+      if (!Number.isFinite(year) || expiryYear.length !== 4) {
+        Alert.alert('ข้อผิดพลาด', 'กรุณากรอกปีหมดอายุเป็นตัวเลข 4 หลัก');
+        return;
+      }
+
+      const token = await createCardToken({
+        number: cleanCardNumber,
+        expirationMonth: month,
+        expirationYear: year,
+        securityCode: cvv,
+        name: cardholderName.trim(),
+      });
+
+      const response = await paymentService.addPaymentCard({
+        token: token.id,
+        setDefault: isDefault,
       });
 
       if (response.success) {
@@ -73,9 +92,13 @@ export default function AddPaymentMethodScreen() {
           { text: 'ตกลง', onPress: () => router.back() }
         ]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding payment method:', error);
-      Alert.alert('ข้อผิดพลาด', 'ไม่สามารถเพิ่มวิธีการชำระเงินได้');
+      const message =
+        error?.message ??
+        error?.response?.data?.message ??
+        'ไม่สามารถเพิ่มวิธีการชำระเงินได้';
+      Alert.alert('ข้อผิดพลาด', message);
     } finally {
       setLoading(false);
     }
@@ -180,7 +203,7 @@ export default function AddPaymentMethodScreen() {
                 </Text>
                 <TextInput
                   value={cvv}
-                  onChangeText={setCvv}
+                  onChangeText={(text) => setCvv(text.replace(/\D/g, ''))}
                   placeholder="123"
                   keyboardType="numeric"
                   secureTextEntry

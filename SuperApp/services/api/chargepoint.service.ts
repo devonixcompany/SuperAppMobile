@@ -33,15 +33,14 @@ export interface ChargepointWebSocketResponse {
 
 export interface ChargepointApiParams {
   userId: string;
-  accessToken: string;
 }
 
 class ChargepointService {
   /**
-   * Get WebSocket URL for chargepoint
-   * @param chargePointIdentity - Chargepoint identity
-   * @param connectorId - Connector ID
-   * @param params - API parameters including userId and accessToken
+   * ขอ WebSocket URL สำหรับเครื่องชาร์จที่สแกนได้
+   * @param chargePointIdentity - รหัสเครื่องชาร์จ
+   * @param connectorId - หมายเลขหัวชาร์จ
+   * @param params - ข้อมูลอ้างอิงผู้ใช้ (ใช้เฉพาะ userId)
    */
   async getWebSocketUrl(
     chargePointIdentity: string,
@@ -51,19 +50,13 @@ class ChargepointService {
     try {
       console.log('Chargepoint Service - ChargePoint Identity:', chargePointIdentity);
       console.log('Chargepoint Service - Connector ID:', connectorId);
-      console.log('Chargepoint Service - Params:', { userId: params.userId, hasToken: !!params.accessToken });
+      console.log('Chargepoint Service - Params:', { userId: params.userId });
       
       // Construct the API endpoint
       const endpoint = `/api/chargepoints/${encodeURIComponent(chargePointIdentity)}/${connectorId}/websocket-url?userId=${encodeURIComponent(params.userId)}`;
       
       const response = await http.get<ChargepointWebSocketResponse>(
-        endpoint,
-        {
-          headers: {
-            'Authorization': `Bearer ${params.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        endpoint
       );
 
       console.log('Chargepoint Service - Response:', response);
@@ -76,10 +69,9 @@ class ChargepointService {
   }
 
   /**
-   * Get chargepoint status
-   * @param chargePointIdentity - Chargepoint identity
-   * @param params - User ID and access token
-   * @returns Promise with chargepoint status
+   * ขอข้อมูลสถานะของเครื่องชาร์จ
+   * @param chargePointIdentity - รหัสเครื่องชาร์จ
+   * @param params - ข้อมูลอ้างอิงผู้ใช้ (ใช้เฉพาะ userId)
    */
   async getStatus(
     chargePointIdentity: string,
@@ -87,13 +79,7 @@ class ChargepointService {
   ): Promise<ApiResponse<any>> {
     try {
       const response = await http.get(
-        `/api/chargepoints/${encodeURIComponent(chargePointIdentity)}/status?userId=${params.userId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${params.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        `/api/chargepoints/${encodeURIComponent(chargePointIdentity)}/status?userId=${params.userId}`
       );
 
       return response;
@@ -104,11 +90,10 @@ class ChargepointService {
   }
 
   /**
-   * Start charging session
-   * @param chargePointIdentity - Chargepoint identity
-   * @param connectorId - Connector ID
-   * @param params - User ID and access token
-   * @returns Promise with charging session data
+   * เริ่มต้นเซสชันการชาร์จ
+   * @param chargePointIdentity - รหัสเครื่องชาร์จ
+   * @param connectorId - หมายเลขหัวชาร์จ
+   * @param params - ข้อมูลอ้างอิงผู้ใช้ (ใช้เฉพาะ userId)
    */
   async startCharging(
     chargePointIdentity: string,
@@ -118,13 +103,7 @@ class ChargepointService {
     try {
       const response = await http.post(
         `/api/chargepoints/${encodeURIComponent(chargePointIdentity)}/${connectorId}/start`,
-        { userId: params.userId },
-        {
-          headers: {
-            'Authorization': `Bearer ${params.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        { userId: params.userId }
       );
 
       return response;
@@ -135,11 +114,10 @@ class ChargepointService {
   }
 
   /**
-   * Stop charging session
-   * @param chargePointIdentity - Chargepoint identity
-   * @param connectorId - Connector ID
-   * @param params - User ID and access token
-   * @returns Promise with stop charging result
+   * หยุดเซสชันการชาร์จ
+   * @param chargePointIdentity - รหัสเครื่องชาร์จ
+   * @param connectorId - หมายเลขหัวชาร์จ
+   * @param params - ข้อมูลอ้างอิงผู้ใช้ (ใช้เฉพาะ userId)
    */
   async stopCharging(
     chargePointIdentity: string,
@@ -149,13 +127,7 @@ class ChargepointService {
     try {
       const response = await http.post(
         `/api/chargepoints/${encodeURIComponent(chargePointIdentity)}/${connectorId}/stop`,
-        { userId: params.userId },
-        {
-          headers: {
-            'Authorization': `Bearer ${params.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        { userId: params.userId }
       );
 
       return response;

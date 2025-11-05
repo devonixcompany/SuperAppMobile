@@ -1,8 +1,8 @@
+import { Prisma } from "@prisma/client";
 import { JWTService } from "../../lib/jwt";
 import { logAuthEvent, logger } from "../../lib/logger";
 import { hashPassword, verifyPassword } from "../../lib/password";
 import { prisma } from "../../lib/prisma";
-import { Prisma } from "@prisma/client";
 
 export interface RefreshTokenResponse {
   success: boolean;
@@ -649,10 +649,10 @@ export class AdminService {
 
   private buildConnectorPayload = (
     connectors: unknown,
-  ): Array<Prisma.ConnectorCreateWithoutChargePointInput> => {
+  ): Array<Prisma.connectorsCreateWithoutCharge_pointsInput> => {
     if (!Array.isArray(connectors)) return [];
 
-    const payload: Array<Prisma.ConnectorCreateWithoutChargePointInput> = [];
+    const payload: Array<Prisma.connectorsCreateWithoutCharge_pointsInput> = [];
 
     for (const entry of connectors) {
       if (!entry || typeof entry !== "object") continue;
@@ -662,19 +662,19 @@ export class AdminService {
         continue;
       }
 
-      const record: Prisma.ConnectorCreateWithoutChargePointInput = {
+      const record: Prisma.connectorsCreateWithoutCharge_pointsInput = {
         connectorId: Number(connector.connectorId),
       };
 
       if (connector.type !== undefined) {
         record.type =
-          connector.type as Prisma.ConnectorCreateWithoutChargePointInput["type"];
+          connector.type as Prisma.connectorsCreateWithoutCharge_pointsInput["type"];
       }
       const connectorStatus =
         (connector as any).connectorstatus ?? (connector as any).status;
       if (connectorStatus !== undefined) {
         record.connectorstatus =
-          connectorStatus as Prisma.ConnectorCreateWithoutChargePointInput["connectorstatus"];
+          connectorStatus as Prisma.connectorsCreateWithoutCharge_pointsInput["connectorstatus"];
       }
       if (connector.maxPower !== undefined) {
         record.maxPower =

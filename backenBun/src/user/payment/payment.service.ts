@@ -1,8 +1,6 @@
-import { Prisma } from '@prisma/client';
+import { PaymentStatus } from '@prisma/client';
 import Omise from 'omise';
 import { prisma } from '../../lib/prisma';
-
-const { PaymentStatus } = Prisma;
 
 // Initialize Omise client
 const omise = Omise({
@@ -12,12 +10,16 @@ const omise = Omise({
 
 export class PaymentService {
   // Add payment card to user
-  static async addPaymentCard(userId: string, token: string) {
+  static async addPaymentCard(userId: string, token: string, setDefault?: boolean) {
     try {
       // Get or create Omise customer
       let user = await prisma.user.findUnique({
         where: { id: userId },
-        include: { paymentCards: true }
+        include: {
+          paymentCards: {
+            where: { deletedAt: null }
+          }
+        }
       });
 
       if (!user) {
@@ -52,6 +54,8 @@ export class PaymentService {
         customer = await omise.customers.retrieve(customer.id);
       }
 
+      const shouldSetDefault = Boolean(setDefault) || user.paymentCards.length === 0;
+
       // Get the latest card from customer
       const cards = customer.cards.data;
       if (!cards || cards.length === 0) {
@@ -59,6 +63,16 @@ export class PaymentService {
       }
 
       const latestCard = cards[cards.length - 1];
+
+      if (shouldSetDefault && user.paymentCards.length > 0) {
+        await prisma.paymentCard.updateMany({
+          where: {
+            userId,
+            deletedAt: null
+          },
+          data: { isDefault: false }
+        });
+      }
 
       // Save PaymentCard
       const paymentCard = await prisma.paymentCard.create({
@@ -70,9 +84,15 @@ export class PaymentService {
           lastDigits: latestCard.last_digits || null,
           expirationMonth: latestCard.expiration_month || null,
           expirationYear: latestCard.expiration_year || null,
-          isDefault: user.paymentCards.length === 0 // First card is default
+          isDefault: shouldSetDefault
         }
       });
+
+      if (shouldSetDefault) {
+        await omise.customers.update(customer.id, {
+          default_card: latestCard.id
+        });
+      }
 
       return paymentCard;
     } catch (error) {
@@ -85,13 +105,17 @@ export class PaymentService {
   static async getPaymentCards(userId: string) {
     try {
       const cards = await prisma.paymentCard.findMany({
-        where: { 
+        where: {
           userId,
+          deletedAt: null
         },
-        orderBy: { createdAt: 'desc' }
+        orderBy: [
+          { isDefault: 'desc' },
+          { createdAt: 'desc' }
+        ]
       });
 
-      return cards;
+      return cards.map(({ deletedAt, ...card }) => card);
     } catch (error) {
       console.error('Error getting payment cards:', error);
       throw error;
@@ -105,6 +129,7 @@ export class PaymentService {
         where: { 
           id: cardId,
           userId,
+          deletedAt: null
         }
       });
 
@@ -124,6 +149,29 @@ export class PaymentService {
         where: { id: cardId }
       });
 
+      if (card.isDefault) {
+        const nextDefault = await prisma.paymentCard.findFirst({
+          where: {
+            userId,
+            deletedAt: null
+          },
+          orderBy: [
+            { createdAt: 'desc' }
+          ]
+        });
+
+        if (nextDefault) {
+          await prisma.paymentCard.update({
+            where: { id: nextDefault.id },
+            data: { isDefault: true }
+          });
+
+          await omise.customers.update(card.omiseCustomerId, {
+            default_card: nextDefault.omiseCardId
+          });
+        }
+      }
+
       return { success: true };
     } catch (error) {
       console.error('Error removing payment card:', error);
@@ -134,10 +182,23 @@ export class PaymentService {
   // Set default payment card
   static async setDefaultCard(userId: string, cardId: string) {
     try {
+      const targetCard = await prisma.paymentCard.findFirst({
+        where: {
+          id: cardId,
+          userId,
+          deletedAt: null
+        }
+      });
+
+      if (!targetCard) {
+        throw new Error('Card not found');
+      }
+
       // Unset all cards as default
       await prisma.paymentCard.updateMany({
         where: { 
           userId,
+          deletedAt: null
         },
         data: { isDefault: false }
       });
@@ -145,7 +206,7 @@ export class PaymentService {
       // Set the selected card as default
       const updatedCard = await prisma.paymentCard.update({
         where: { 
-          id: cardId,
+          id: targetCard.id,
         },
         data: { isDefault: true }
       });
@@ -155,14 +216,14 @@ export class PaymentService {
         where: { id: userId },
         include: { 
           paymentCards: {
-            where: { id: cardId }
+            where: { id: targetCard.id }
           }
         }
       });
 
-      if (user?.omiseCustomerId && user.paymentCards.length > 0) {
+      if (user?.omiseCustomerId) {
         await omise.customers.update(user.omiseCustomerId, {
-          default_card: user.paymentCards[0].omiseCardId
+          default_card: targetCard.omiseCardId
         });
       }
 
@@ -176,11 +237,22 @@ export class PaymentService {
   // Process payment for transaction
   static async processPayment(transactionId: string, cardId?: string) {
     try {
-      const transaction = await prisma.transaction.findUnique({
-        where: { id: transactionId },
+      const normalizedId = transactionId.trim();
+      const transaction = await prisma.transactions.findFirst({
+        where: {
+          OR: [
+            { id: normalizedId },
+            { transactionId: normalizedId },
+            { ocppTransactionId: normalizedId }
+          ]
+        },
         include: { 
-          user: {
-            include: { paymentCards: true }
+          User: {
+            include: { 
+              paymentCards: {
+                where: { deletedAt: null }
+              }
+            }
           }
         }
       });
@@ -196,23 +268,23 @@ export class PaymentService {
       // Get payment card
       let paymentCard;
       if (cardId) {
-        paymentCard = transaction.user.paymentCards.find(card => card.id === cardId);
+        paymentCard = transaction.User.paymentCards.find(card => card.id === cardId);
       } else {
-        paymentCard = transaction.user.paymentCards.find(card => card.isDefault);
+        paymentCard = transaction.User.paymentCards.find(card => card.isDefault);
       }
 
       if (!paymentCard) {
         throw new Error('No payment card found');
       }
 
-      if (!transaction.user.omiseCustomerId) {
+      if (!transaction.User.omiseCustomerId) {
         throw new Error('User is missing Omise customer ID');
       }
 
       // Create payment record
       const payment = await prisma.payment.create({
         data: {
-          transactionId,
+          transactionId: transaction.id,
           userId: transaction.userId,
           amount: transaction.totalCost,
           status: PaymentStatus.PENDING,
@@ -223,7 +295,7 @@ export class PaymentService {
       const charge = await omise.charges.create({
         amount: Math.round(transaction.totalCost * 100), // Convert to satang
         currency: 'THB',
-        customer: transaction.user.omiseCustomerId,
+        customer: transaction.User.omiseCustomerId,
         card: paymentCard.omiseCardId,
         description: `Payment for transaction ${transaction.transactionId}`,
         return_uri: `${process.env.BASE_URL}/api/payment/3ds/return`,
@@ -399,8 +471,8 @@ export class PaymentService {
         include: {
           transaction: {
             include: {
-              chargePoint: true,
-              connector: true
+              charge_points: true,
+              connectors: true
             }
           }
         },

@@ -194,11 +194,19 @@ export class AuthService {
         throw new Error("Refresh token is required");
       }
 
-      // Find user by refresh token
-      const user = await this.userService.findUserByRefreshToken(refreshToken);
+      // ถอดรหัส refresh token เพื่อดูว่ามี userId ถูกต้องหรือไม่
+      const decoded = await this.jwtService.verifyRefreshToken(refreshToken);
+
+      if (!decoded || decoded.type !== "refresh") {
+        console.log("⚠️ [AUTH] Refresh token verification failed");
+        throw new Error("Invalid refresh token");
+      }
+
+      // ใช้ userId จาก token เพื่อตรวจสอบผู้ใช้ในฐานข้อมูล
+      const user = await this.userService.findUserById(decoded.userId);
 
       if (!user) {
-        console.log("⚠️ [AUTH] Invalid refresh token");
+        console.log("⚠️ [AUTH] User not found for refresh token:", decoded.userId);
         throw new Error("Invalid refresh token");
       }
 

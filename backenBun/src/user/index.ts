@@ -1,5 +1,6 @@
 import { AdminService } from "../admin/service/admin.service";
 import { JWTService } from "../lib/jwt";
+import { prisma } from "../lib/prisma";
 import { authController } from "./auth/auth.controller";
 import { AuthService } from "./auth/auth.service";
 import { chargePointController } from "./chargepoint/chargepoint.controller";
@@ -40,7 +41,7 @@ export class ServiceContainer {
     this.chargePointService = new ChargePointService();
     this.ssTaxInvoiceProfileService = new SsTaxInvoiceProfileService();
     this.adminService = new AdminService(this.jwtService);
-    this.transactionService = new TransactionService();
+    this.transactionService = new TransactionService(prisma);
     this.paymentService = new PaymentService();
     this.authService = new AuthService(
       this.jwtService,

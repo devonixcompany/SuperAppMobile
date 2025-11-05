@@ -58,7 +58,7 @@ export class TransactionService {
   private async generateTransactionId(): Promise<string> {
     for (let attempt = 0; attempt < 5; attempt++) {
       const candidate = randomInt(100000, 999999).toString();
-      const existing = await this.prisma.transaction.findUnique({
+      const existing = await this.prisma.transactions.findUnique({
         where: { transactionId: candidate },
         select: { id: true },
       });
@@ -68,7 +68,7 @@ export class TransactionService {
     }
 
     const largeCandidate = `${randomInt(100000, 999999)}${randomInt(100, 999)}`;
-    const existing = await this.prisma.transaction.findUnique({
+    const existing = await this.prisma.transactions.findUnique({
       where: { transactionId: largeCandidate },
       select: { id: true },
     });
@@ -103,7 +103,7 @@ export class TransactionService {
       throw new Error(`Charge point ${chargePointIdentity} not found`);
     }
 
-    const connector = await this.prisma.connector.upsert({
+    const connector = await this.prisma.connectors.upsert({
       where: {
         chargePointId_connectorId: {
           chargePointId: chargePoint.id,
@@ -120,7 +120,7 @@ export class TransactionService {
     const transactionId = await this.generateTransactionId();
     const startTime = requestedAt ? new Date(requestedAt) : new Date();
 
-    const transaction = await this.prisma.transaction.create({
+    const transaction = await this.prisma.transactions.create({
       data: {
         transactionId,
         userId,
@@ -140,11 +140,11 @@ export class TransactionService {
    * Verify an idTag (transactionId) originated from our system and is still active.
    */
   async authorizeTransaction(idTag: string) {
-    const transaction = await this.prisma.transaction.findUnique({
+    const transaction = await this.prisma.transactions.findUnique({
       where: { transactionId: idTag },
       include: {
-        user: { select: { id: true, status: true } },
-        chargePoint: { select: { id: true, chargePointIdentity: true } },
+        User: { select: { id: true, status: true } },
+        charge_points: { select: { id: true, chargePointIdentity: true } },
       },
     });
 
@@ -162,7 +162,7 @@ export class TransactionService {
       } as const;
     }
 
-    if (!transaction.user || transaction.user.status !== 'ACTIVE') {
+    if (!transaction.User || transaction.User.status !== 'ACTIVE') {
       return {
         authorized: false,
         reason: 'USER_NOT_ACTIVE',
@@ -181,7 +181,7 @@ export class TransactionService {
   async recordStartTransaction(params: StartTransactionParams) {
     const { transactionId, ocppTransactionId, meterStart, timestamp } = params;
 
-    const transaction = await this.prisma.transaction.findUnique({
+    const transaction = await this.prisma.transactions.findUnique({
       where: { transactionId },
     });
 
@@ -197,7 +197,7 @@ export class TransactionService {
       scale
     );
 
-    return await this.prisma.transaction.update({
+    return await this.prisma.transactions.update({
       where: { id: transaction.id },
       data: {
         ocppTransactionId: String(ocppTransactionId),
@@ -218,7 +218,7 @@ export class TransactionService {
     const ocppId = String(ocppTransactionId);
 
     const transactionInclude = {
-      chargePoint: {
+      charge_points: {
         select: {
           chargePointIdentity: true,
           Station: {
@@ -235,13 +235,13 @@ export class TransactionService {
       },
     } as const;
 
-    let transaction = await this.prisma.transaction.findFirst({
+    let transaction = await this.prisma.transactions.findFirst({
       where: { ocppTransactionId: ocppId },
       include: transactionInclude,
     });
 
     if (!transaction && idTag) {
-      transaction = await this.prisma.transaction.findUnique({
+      transaction = await this.prisma.transactions.findUnique({
         where: { transactionId: idTag },
         include: transactionInclude,
       });
@@ -284,7 +284,7 @@ export class TransactionService {
 
     const resolvedEnergy = totalEnergy ?? transaction.totalEnergy ?? null;
     const rateFromSchedule =
-      this.resolveRateForTimestamp(stopTime, transaction.chargePoint?.Station) ?? null;
+      this.resolveRateForTimestamp(stopTime, transaction.charge_points?.Station ?? undefined) ?? null;
     const appliedRate = rateFromSchedule ?? transaction.appliedRate ?? null;
     const computedCost =
       resolvedEnergy !== null && appliedRate !== null
@@ -292,7 +292,7 @@ export class TransactionService {
         : null;
     const totalCost = computedCost ?? transaction.totalCost ?? null;
 
-    const updatedTransaction = await this.prisma.transaction.update({
+    const updatedTransaction = await this.prisma.transactions.update({
       where: { id: transaction.id },
       data: {
         endTime: stopTime,
@@ -325,11 +325,22 @@ export class TransactionService {
    */
   async processTransactionPayment(transactionId: string, cardId?: string) {
     try {
-      const transaction = await this.prisma.transaction.findUnique({
-        where: { id: transactionId },
+      const normalizedId = transactionId.trim();
+      const transaction = await this.prisma.transactions.findFirst({
+        where: { 
+          OR: [
+            { id: normalizedId },
+            { transactionId: normalizedId },
+            { ocppTransactionId: normalizedId }
+          ]
+        },
         include: { 
-          user: {
-            include: { paymentCards: true }
+          User: {
+            include: { 
+              paymentCards: {
+                where: { deletedAt: null }
+              }
+            }
           }
         }
       });
@@ -358,7 +369,7 @@ export class TransactionService {
         throw new Error('Payment already exists for this transaction');
       }
 
-      return await PaymentService.processPayment(transactionId, cardId);
+      return await PaymentService.processPayment(transaction.id, cardId);
     } catch (error) {
       console.error('Error processing transaction payment:', error);
       throw error;
@@ -620,13 +631,13 @@ export class TransactionService {
    * Get all transactions for a specific user with charge point information
    */
   async getTransactionsByUserId(userId: string) {
-    const transactions = await this.prisma.transaction.findMany({
+    const transactions = await this.prisma.transactions.findMany({
       where: { 
         userId,
         status: TransactionStatus.ACTIVE 
       },
       include: {
-        chargePoint: {
+        charge_points: {
           select: {
             id: true,
             chargepointname: true,
@@ -656,7 +667,7 @@ export class TransactionService {
             }
           }
         },
-        connector: {
+        connectors: {
           select: {
             id: true,
             connectorId: true,
@@ -667,7 +678,7 @@ export class TransactionService {
             maxCurrent: true
           }
         },
-        vehicle: {
+        user_vehicles: {
           select: {
             id: true,
             licensePlate: true,
@@ -683,8 +694,8 @@ export class TransactionService {
     });
 
     return transactions.map((transaction: any) => {
-      if (transaction.chargePoint?.Station) {
-        const { Station, ...restChargePoint } = transaction.chargePoint;
+      if (transaction.charge_points?.Station) {
+        const { Station, ...restChargePoint } = transaction.charge_points;
         const latitude =
           Station.latitude !== null && Station.latitude !== undefined
             ? Number(Station.latitude)
@@ -708,11 +719,18 @@ export class TransactionService {
             onPeakEndTime: Station.onPeakEndTime,
             offPeakStartTime: Station.offPeakStartTime,
             offPeakEndTime: Station.offPeakEndTime
-          }
+          },
+          connector: transaction.connectors,
+          vehicle: transaction.user_vehicles
         };
       }
 
-      return transaction;
+      return {
+        ...transaction,
+        chargePoint: transaction.charge_points,
+        connector: transaction.connectors,
+        vehicle: transaction.user_vehicles
+      };
     });
   }
 
@@ -723,7 +741,7 @@ export class TransactionService {
     const normalizedId = transactionId.trim();
     const isNumericId = /^\d+$/.test(normalizedId);
 
-    const transaction = await this.prisma.transaction.findFirst({
+    const transaction = await this.prisma.transactions.findFirst({
       where: {
         AND: [
           ...(userId ? [{ userId }] : []),
@@ -736,7 +754,7 @@ export class TransactionService {
         ]
       },
       include: {
-        chargePoint: {
+        charge_points: {
           select: {
             chargePointIdentity: true,
             Station: {
@@ -746,7 +764,7 @@ export class TransactionService {
             }
           }
         },
-        connector: {
+        connectors: {
           select: {
             connectorId: true
           }
@@ -784,7 +802,7 @@ export class TransactionService {
 
     const appliedRate =
       transaction.appliedRate ??
-      transaction.chargePoint?.Station?.onPeakRate ??
+      transaction.charge_points?.Station?.onPeakRate ??
       null;
 
     let totalCost = transaction.totalCost ?? null;
@@ -799,8 +817,8 @@ export class TransactionService {
 
     return {
       transactionId: transaction.transactionId,
-      chargePointIdentity: transaction.chargePoint?.chargePointIdentity ?? null,
-      connectorNumber: transaction.connector?.connectorId ?? null,
+      chargePointIdentity: transaction.charge_points?.chargePointIdentity ?? null,
+      connectorNumber: transaction.connectors?.connectorId ?? null,
       startTime,
       endTime,
       durationSeconds,

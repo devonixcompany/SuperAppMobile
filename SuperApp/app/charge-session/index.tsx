@@ -184,6 +184,21 @@ export default function ChargeSessionScreen() {
     return Number.isFinite(parsed) ? parsed : undefined;
   }, [params.baseRate]);
 
+  // คำนวณข้อความกำลังไฟด้วย useMemo เพื่อป้องกันการคำนวณซ้ำในทุกการ render
+  const powerLabel = useMemo(() => {
+    if (!params.powerRating) {
+      return params.protocol ?? "ข้อมูลเครื่องชาร์จ";
+    }
+
+    const powerValue = Number(params.powerRating);
+    if (Number.isFinite(powerValue)) {
+      const powerType = powerValue >= 50 ? "DC" : "AC";
+      return `${powerType} ${powerValue.toFixed(0)} kW`;
+    }
+
+    return params.powerRating;
+  }, [params.powerRating, params.protocol]);
+
   const wsRef = useRef<WebSocket | null>(null);
   const lastSummaryAttemptRef = useRef<{ id: string | null; timestamp: number }>({
     id: null,
@@ -1195,15 +1210,6 @@ export default function ChargeSessionScreen() {
       },
     );
   }
-
-  const powerLabel = useMemo(() => {
-    if (!params.powerRating) return params.protocol ?? "ข้อมูลเครื่องชาร์จ";
-    const powerValue = Number(params.powerRating);
-    if (Number.isFinite(powerValue)) {
-      return `${powerValue >= 50 ? "DC" : "AC"} ${powerValue.toFixed(0)} kW`;
-    }
-    return params.powerRating;
-  }, [params.powerRating, params.protocol]);
 
   const rateLabel = baseRate
     ? `${baseRate.toFixed(2)} ${params.currency ?? "บาท"}/kWh`

@@ -10,8 +10,6 @@ import {
 export const adminChargePointController = (jwtService: JWTService) => {
   console.log('🏭 Creating admin chargepoint controller with jwtService');
   const authMiddleware = requireAdminAuth(jwtService);
-  console.log('🔧 Admin auth middleware created:', authMiddleware);
-  
   console.log('🎯 Admin chargepoint controller created with middleware');
   return new Elysia({ prefix: '/api/admin/chargepoint' })
     .use(authMiddleware)
