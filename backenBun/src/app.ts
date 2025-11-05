@@ -325,7 +325,7 @@ export const app = new Elysia()
   })())
   .use((() => {
     console.log('🔧 Registering admin chargepoint controller');
-    const adminChargePointCtrl = adminServiceContainer.getChargePointController();
+    const adminChargePointCtrl = adminServiceContainer.getChargePointsCrudController();
     console.log('✅ Admin chargepoint controller registered');
     return adminChargePointCtrl;
   })())
