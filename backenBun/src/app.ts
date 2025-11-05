@@ -329,6 +329,19 @@ export const app = new Elysia()
     console.log('✅ Admin chargepoint controller registered');
     return adminChargePointCtrl;
   })())
+  .use((() => {
+    console.log('Registering admin station controller');
+    const adminStationCtrl = adminServiceContainer.getStationController();
+    console.log('Admin station controller registered');
+    return adminStationCtrl;
+  })())
+  .use((() => {
+    console.log('Registering admin connector controller');
+    const adminConnectorCtrl =
+      adminServiceContainer.getChargePointConnectorController();
+    console.log('Admin connector controller registered');
+    return adminConnectorCtrl;
+  })())
   .derive(({ request }: any) => {
     // Extract user from request and make it available in context
     const user = (request as any).user;

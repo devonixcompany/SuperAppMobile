@@ -1,12 +1,10 @@
-import type { PrismaConfig } from '@prisma/client'
+import { defineConfig } from '@prisma/config'
 
-const config: PrismaConfig = {
+export default defineConfig({
   seed: {
     engine: {
       // Using tsx to run the TypeScript seed file
       cmd: 'npx tsx prisma/seed.ts'
     }
   }
-}
-
-export default config
+})
