@@ -457,9 +457,6 @@ export default function CardScreen() {
               )}
             </View>
           </View>
-
-          {/* เพิ่มพื้นที่ด้านล่างเพื่อไม่ให้ถูก tab bar บัง */}
-          <View className="h-20" />
         </View>
       </ScrollView>
     </SafeAreaView>

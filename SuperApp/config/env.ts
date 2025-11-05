@@ -18,7 +18,7 @@ const getEnvVars = (): EnvConfig => {
   if (!apiUrl) {
     console.warn("API_URL not set in environment variables, using default");
     return {
-      apiUrl: "http://localhost:8080/api",
+      apiUrl: "http://localhost:8080",
       appEnv: "development",
       omisePublicKey,
     };

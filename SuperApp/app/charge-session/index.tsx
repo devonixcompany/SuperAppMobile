@@ -479,14 +479,15 @@ export default function ChargeSessionScreen() {
         }
 
         if (payload.status) {
+          const statusValue = payload.status;
           setStatus((prev) =>
             prev
-              ? { ...prev, status: payload.status }
+              ? { ...prev, status: statusValue }
               : {
                   chargePointId:
                     params.chargePointIdentity ?? "unknown-chargepoint",
                   connectorId: payload.connectorId,
-                  status: payload.status,
+                  status: statusValue,
                   isOnline: true,
                 },
           );

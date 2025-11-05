@@ -1,7 +1,6 @@
 // นำเข้า Tabs และ useRouter จาก expo-router สำหรับจัดการการนำทางแบบ tab
 import { Tabs, useRouter } from "expo-router";
 import React from "react";
-import { View } from "react-native";
 // นำเข้า component BottomNavigation ที่เราสร้างเองสำหรับแสดงแถบเมนูด้านล่าง
 import BottomNavigation from "../../components/ui/bottom-navigation";
 
