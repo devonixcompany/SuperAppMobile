@@ -6,9 +6,7 @@ import { gatewaySessionManager } from './handlers/gatewaySessionManager';
 import { sessionMonitor } from './handlers/sessionMonitor';
 import { subprotocolToVersion } from './handlers/versionNegotiation';
 import { UserConnectionManager } from './services/UserConnectionManager';
-
-const WS_GATEWAY_API_KEY = process.env.WS_GATEWAY_API_KEY || 'adsadadw12';
-const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL || 'http://localhost:8080';
+import { BACKEND_BASE_URL, WS_GATEWAY_API_KEY } from './config/env';
 
 // ฟังก์ชันจัดการ RemoteStartTransaction
 async function handleRemoteStartTransaction(chargePoint: any, data: any, userWs: WebSocket) {
@@ -447,7 +445,6 @@ export function getAllCacheData(): Map<string, any> {
 async function initializeCache() {
   try {
     console.log('Initializing charge point cache...');
-    
     // Step 1: เรียก API เพื่อดึงข้อมูล charge points
     const response = await fetch(`${BACKEND_BASE_URL}/api/chargepoints/ws-gateway/chargepoints`, {
       headers: {
@@ -593,19 +590,35 @@ userWss.on('connection', async (ws: WebSocket, request: IncomingMessage) => {
     });
     
     // ส่งข้อมูลสถานะเริ่มต้น
+    const parsedConnectorId = Number(connectorId);
+    const connectorStatus =
+      Number.isFinite(parsedConnectorId) && chargePoint
+        ? chargePoint.connectors.find(
+            (connector) => connector.connectorId === parsedConnectorId
+          )?.status
+        : undefined;
+
+    const resolvedStatus = connectorStatus ?? (chargePoint ? 'Available' : 'OFFLINE');
+
     const initialStatus = {
       type: 'status',
       timestamp: new Date().toISOString(),
       data: {
         chargePointId: chargePointId,
         connectorId: parseInt(connectorId),
-        status: chargePoint ? 'Available' : 'OFFLINE', // ถ้ามี charge point ที่เชื่อมต่ออยู่ให้แสดง AVAILABLE ไม่งั้นแสดง OFFLINE
+        status: resolvedStatus,
         isOnline: !!chargePoint, // true ถ้า charge point เชื่อมต่ออยู่
-        message: chargePoint ? 'เชื่อมต่อสำเร็จ - Charge Point พร้อมใช้งาน' : 'เชื่อมต่อสำเร็จ - Charge Point ออฟไลน์',
-        chargePointInfo: cachedChargePoint ? {
-          serialNumber: cachedChargePoint.serialNumber,
-          identity: cachedChargePoint.chargePointIdentity
-        } : undefined
+        message: chargePoint
+          ? connectorStatus
+            ? `เชื่อมต่อสำเร็จ - หัวชาร์จอยู่ในสถานะ ${connectorStatus}`
+            : 'เชื่อมต่อสำเร็จ - Charge Point พร้อมใช้งาน'
+          : 'เชื่อมต่อสำเร็จ - Charge Point ออฟไลน์',
+        chargePointInfo: cachedChargePoint
+          ? {
+              serialNumber: cachedChargePoint.serialNumber,
+              identity: cachedChargePoint.chargePointIdentity
+            }
+          : undefined
       }
     };
     console.log('ส่งสถานะเริ่มต้นให้ผู้ใช้:', initialStatus);

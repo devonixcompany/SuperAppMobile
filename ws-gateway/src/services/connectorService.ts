@@ -1,6 +1,26 @@
-import axios from 'axios';
+import axios, { AxiosHeaders } from 'axios';
+import { BACKEND_URL, WS_GATEWAY_API_KEY } from '../config/env';
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8080';
+const httpClient = axios.create({
+  baseURL: BACKEND_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+httpClient.interceptors.request.use((config) => {
+  if (!config.headers) {
+    config.headers = new AxiosHeaders();
+  }
+
+  if (config.headers instanceof AxiosHeaders) {
+    config.headers.set('X-Api-Key', WS_GATEWAY_API_KEY);
+  } else {
+    (config.headers as Record<string, unknown>)['X-Api-Key'] = WS_GATEWAY_API_KEY;
+  }
+
+  return config;
+});
 
 export interface ConnectorCheckResult {
   hasConnectors: boolean;
@@ -27,8 +47,8 @@ export interface CreateConnectorsResult {
  */
 export async function checkConnectorData(chargePointIdentity: string): Promise<ConnectorCheckResult> {
   try {
-    const response = await axios.get(
-      `${BACKEND_URL}/api/chargepoints/check-connectors/${chargePointIdentity}`
+    const response = await httpClient.get(
+      `/api/chargepoints/check-connectors/${chargePointIdentity}`
     );
     
     if (response.data.success) {
@@ -65,8 +85,8 @@ export async function createConnectors(
       payload.connectorDetails = connectorDetails;
     }
 
-    const response = await axios.post(
-      `${BACKEND_URL}/api/chargepoints/create-connectors`,
+    const response = await httpClient.post(
+      `/api/chargepoints/create-connectors`,
       payload
     );
     

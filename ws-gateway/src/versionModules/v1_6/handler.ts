@@ -1,6 +1,13 @@
 // OCPP 1.6 Message Handler
 // Implements logic specific to OCPP 1.6 messages
 
+import { BACKEND_URL, WS_GATEWAY_API_KEY } from '../../config/env';
+
+const withGatewayHeaders = (headers: Record<string, string> = {}) => ({
+  'X-Api-Key': WS_GATEWAY_API_KEY,
+  ...headers
+});
+
 export interface OCPP16StatusNotificationRequest {
   connectorId: number;
   errorCode: string;
@@ -38,6 +45,17 @@ export interface OCPP16BootNotificationRequest {
   imsi?: string;
   meterType?: string;
   meterSerialNumber?: string;
+}
+
+// Backend API Response Interfaces
+export interface BackendApiResponse {
+  data?: {
+    status?: string;
+    reason?: string;
+    transaction?: {
+      transactionId?: number | string;
+    };
+  };
 }
 
 /**
@@ -82,18 +100,16 @@ export async function handleStatusNotification(
     }
 
     // Update connector status in backend database
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     console.log(
       `📤 [OCPP] กำลังอัพเดทฐานข้อมูล: connector=${payload.connectorId}, status=${payload.status} ของ ${chargePointId}`
     );
     
     try {
-      const updateResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/status`, {
+      const updateResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/status`, {
         method: 'POST',
-        headers: {
+        headers: withGatewayHeaders({
           'Content-Type': 'application/json',
-        },
+        }),
         body: JSON.stringify({
           connectorId: payload.connectorId,
           status: payload.status,
@@ -116,6 +132,72 @@ export async function handleStatusNotification(
       console.error(`💥 [DB] เกิดข้อผิดพลาดในการเรียก API ฐานข้อมูล:`, dbError);
     }
 
+    const statusUpper = typeof payload.status === 'string' ? payload.status.toString() : '';
+    const shouldAutoStop =
+      statusUpper === 'SuspendedEV' || statusUpper === 'SuspendedEVSE';
+
+    if (shouldAutoStop) {
+      const connectorNumericId = Number(payload.connectorId ?? 0);
+
+      if (Number.isFinite(connectorNumericId) && connectorNumericId > 0) {
+        const activeTransactionId = gatewaySessionManager.getActiveTransactionId(
+          chargePointId,
+          connectorNumericId
+        );
+
+        if (typeof activeTransactionId === 'number' && Number.isFinite(activeTransactionId)) {
+          const wasMarked = gatewaySessionManager.markRemoteStopRequested(
+            chargePointId,
+            connectorNumericId
+          );
+
+          if (wasMarked) {
+            const messageId = `auto-stop-${chargePointId}-${Date.now()}`;
+            const remoteStopRequest = [
+              2,
+              messageId,
+              'RemoteStopTransaction',
+              {
+                transactionId: Number(activeTransactionId)
+              }
+            ];
+
+            if (gatewaySessionManager.sendMessage(chargePointId, remoteStopRequest)) {
+              console.log(
+                `🤖 [AutoStop] ส่ง RemoteStopTransaction สำหรับ ${chargePointId} หัวชาร์จ ${connectorNumericId} (transaction ${activeTransactionId})`
+              );
+
+              gatewaySessionManager.emit('chargePointUpdated', {
+                chargePointId,
+                type: 'remoteStop',
+                connectorId: connectorNumericId,
+                transactionId: activeTransactionId,
+                initiatedBy: 'auto',
+                reason: statusUpper,
+                requestedAt: new Date().toISOString()
+              });
+            } else {
+              console.warn(
+                `⚠️ [AutoStop] ส่ง RemoteStopTransaction ไปยัง ${chargePointId} ไม่สำเร็จ`
+              );
+            }
+          } else {
+            console.log(
+              `ℹ️ [AutoStop] มีการร้องขอ RemoteStopTransaction สำหรับ ${chargePointId} หัวชาร์จ ${connectorNumericId} ไปก่อนแล้ว`
+            );
+          }
+        } else {
+          console.log(
+            `ℹ️ [AutoStop] ไม่พบ activeTransactionId สำหรับ ${chargePointId} หัวชาร์จ ${connectorNumericId} ขณะสถานะ ${statusUpper}`
+          );
+        }
+      } else {
+        console.warn(
+          `⚠️ [AutoStop] ไม่สามารถระบุหมายเลขหัวชาร์จจากค่า ${payload.connectorId}`
+        );
+      }
+    }
+
     console.log(`✅ [OCPP] ประมวลผล StatusNotification ของ ${chargePointId} หัวชาร์จ ${payload.connectorId} เสร็จสิ้น`);
 
     // Send response acknowledging receipt
@@ -132,8 +214,6 @@ export async function handleStatusNotification(
  */
 async function updateConnectorStatus(chargePointId: string, payload: OCPP16StatusNotificationRequest): Promise<void> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     const updateData = {
       connectorId: payload.connectorId,
       status: payload.status,
@@ -146,11 +226,11 @@ async function updateConnectorStatus(chargePointId: string, payload: OCPP16Statu
 
     console.log(`กำลังอัปเดตสถานะหัวชาร์จ ${payload.connectorId} ของ ${chargePointId}:`, updateData);
 
-    const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/status`, {
+    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/status`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify(updateData)
     });
 
@@ -221,15 +301,13 @@ export async function handleBootNotification(
     }
 
     // Update Charge Point information in backend
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     console.log(`📤 กำลังอัปเดตข้อมูล Charge Point ในระบบหลังบ้านสำหรับ ${chargePointId}`);
     
-    const updateResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/update-from-boot`, {
+    const updateResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/update-from-boot`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         vendor: payload.chargePointVendor,
         model: payload.chargePointModel,
@@ -271,8 +349,6 @@ export async function handleBootNotification(
  */
 async function updateChargePointFromBootNotification(chargePointId: string, payload: OCPP16BootNotificationRequest): Promise<void> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     const updateData = {
       vendor: payload.chargePointVendor,
       model: payload.chargePointModel,
@@ -285,11 +361,11 @@ async function updateChargePointFromBootNotification(chargePointId: string, payl
 
     console.log(`กำลังอัปเดตข้อมูล Charge Point ${chargePointId} จาก BootNotification:`, updateData);
 
-    const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/update-from-boot`, {
+    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/update-from-boot`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify(updateData)
     });
 
@@ -374,15 +450,11 @@ export function handleGetConfiguration(payload: { key?: string[] }, chargePointI
  */
 async function fetchChargePointConfiguration(chargePointId: string): Promise<void> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     console.log(`กำลังดึงข้อมูลการตั้งค่าสำหรับ Charge Point ${chargePointId}`);
 
-    const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}`, {
+    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      }
+      headers: withGatewayHeaders()
     });
 
     if (!response.ok) {
@@ -422,7 +494,6 @@ export async function handleHeartbeat(
 
   // Try to update backend if available (optional operation)
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
     const skipBackendUpdate = process.env.SKIP_BACKEND_UPDATE === 'true';
     
     if (skipBackendUpdate) {
@@ -437,11 +508,11 @@ export async function handleHeartbeat(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
     
-    const heartbeatResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/heartbeat`, {
+    const heartbeatResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/heartbeat`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         lastSeen: heartbeatTimestamp
       }),
@@ -477,19 +548,17 @@ export async function handleHeartbeat(
  */
 async function updateChargePointLastSeen(chargePointId: string): Promise<void> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     const updateData = {
       lastSeen: new Date().toISOString()
     };
 
     console.log(`กำลังอัปเดตเวลาที่เห็นล่าสุด (lastSeen) สำหรับ Charge Point ${chargePointId}`);
 
-    const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/heartbeat`, {
+    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/heartbeat`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify(updateData)
     });
 
@@ -506,20 +575,61 @@ async function updateChargePointLastSeen(chargePointId: string): Promise<void> {
   }
 }
 
-export function handleAuthorize(payload: { idTag: string }): any {
+export async function handleAuthorize(payload: { idTag: string }): Promise<any> {
   console.log('OCPP 1.6 - กำลังประมวลผล Authorize:', payload);
   
   if (!payload.idTag) {
     throw new Error('Missing idTag in Authorize request');
   }
 
-  // TODO: Validate ID tag against database
-  
-  return {
-    idTagInfo: {
-      status: 'Accepted'
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/transactions/authorize`, {
+      method: 'POST',
+      headers: withGatewayHeaders({
+        'Content-Type': 'application/json',
+      }),
+      body: JSON.stringify({ idTag: payload.idTag }),
+    });
+
+    if (!response.ok) {
+      console.error(
+        `Authorize ตรวจสอบ idTag ไม่สำเร็จ: ${response.status} ${response.statusText}`
+      );
+      return {
+        idTagInfo: {
+          status: 'Invalid',
+        },
+      };
     }
-  };
+
+    const result = await response.json() as BackendApiResponse;
+    const backendStatus =
+      result?.data?.status && typeof result.data.status === 'string'
+        ? result.data.status
+        : 'Rejected';
+
+    const ocppStatus = backendStatus === 'Accepted' ? 'Accepted' : 'Invalid';
+
+    if (ocppStatus !== 'Accepted') {
+      const reason = result?.data?.reason || 'NOT_AUTHORIZED';
+      console.warn(
+        `รหัส idTag ${payload.idTag} ไม่ผ่านการตรวจสอบ (${backendStatus}) - เหตุผล: ${reason}`
+      );
+    }
+
+    return {
+      idTagInfo: {
+        status: ocppStatus,
+      },
+    };
+  } catch (error) {
+    console.error('เกิดข้อผิดพลาดขณะตรวจสอบ idTag กับ backend:', error);
+    return {
+      idTagInfo: {
+        status: 'Invalid',
+      },
+    };
+  }
 }
 
 export async function handleStartTransaction(
@@ -538,9 +648,97 @@ export async function handleStartTransaction(
     throw new Error('Missing required fields in StartTransaction');
   }
 
-  // TODO: Create transaction in database
-  
-  const transactionId = Math.floor(Math.random() * 1000000);
+  let transactionId = Math.floor(Math.random() * 1000000);
+  let authorized = false;
+
+  try {
+    const authResponse = await fetch(`${BACKEND_URL}/api/transactions/authorize`, {
+      method: 'POST',
+      headers: withGatewayHeaders({
+        'Content-Type': 'application/json',
+      }),
+      body: JSON.stringify({ idTag: payload.idTag }),
+    });
+
+    if (!authResponse.ok) {
+      console.warn(
+        `ไม่สามารถยืนยันธุรกรรมก่อนเริ่มจาก backend ได้: ${authResponse.status}`
+      );
+      return {
+        idTagInfo: {
+          status: 'Invalid',
+        },
+        transactionId: 0,
+      };
+    }
+
+    const authResult = await authResponse.json() as BackendApiResponse;
+    const backendStatus =
+      authResult?.data?.status && typeof authResult.data.status === 'string'
+        ? authResult.data.status
+        : 'Rejected';
+
+    const isAccepted = backendStatus === 'Accepted';
+
+    if (!isAccepted) {
+      const reason = authResult?.data?.reason || 'NOT_AUTHORIZED';
+      console.warn(
+        `ธุรกรรม idTag ${payload.idTag} ไม่ได้รับอนุญาต: ${backendStatus} (reason=${reason})`
+      );
+      return {
+        idTagInfo: {
+          status: 'Invalid',
+        },
+        transactionId: 0,
+      };
+    }
+
+    authorized = true;
+    const backendTransactionId = authResult?.data?.transaction?.transactionId;
+    const parsedId = backendTransactionId ? Number(backendTransactionId) : NaN;
+
+    if (Number.isFinite(parsedId)) {
+      transactionId = parsedId;
+    } else {
+      console.warn(
+        `transactionId จาก backend ไม่สามารถแปลงเป็นตัวเลขได้: ${backendTransactionId}`
+      );
+    }
+  } catch (authError) {
+    console.error('เกิดข้อผิดพลาดระหว่างตรวจสอบธุรกรรมก่อนเริ่ม:', authError);
+    return {
+      idTagInfo: {
+        status: 'Invalid',
+      },
+      transactionId: 0,
+    };
+  }
+
+  try {
+    const startResponse = await fetch(
+      `${BACKEND_URL}/api/transactions/${encodeURIComponent(payload.idTag)}/start`,
+      {
+        method: 'POST',
+        headers: withGatewayHeaders({
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({
+          ocppTransactionId: transactionId,
+          meterStart: payload.meterStart,
+          timestamp: payload.timestamp,
+        }),
+      }
+    );
+
+    if (!startResponse.ok && authorized) {
+      const errorText = await startResponse.text();
+      console.error(
+        `ไม่สามารถอัปเดตธุรกรรมเริ่มต้นใน backend ได้: ${startResponse.status} - ${errorText}`
+      );
+    }
+  } catch (error) {
+    console.error('เกิดข้อผิดพลาดระหว่างบันทึก StartTransaction ไปยัง backend:', error);
+  }
 
   try {
     const { gatewaySessionManager } = await import('../../handlers/gatewaySessionManager');
@@ -583,7 +781,34 @@ export async function handleStopTransaction(
     throw new Error('Missing required fields in StopTransaction');
   }
 
-  // TODO: Update transaction in database
+  try {
+    const stopResponse = await fetch(
+      `${BACKEND_URL}/api/transactions/ocpp/${encodeURIComponent(String(payload.transactionId))}/stop`,
+      {
+        method: 'POST',
+        headers: withGatewayHeaders({
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({
+          meterStop: payload.meterStop,
+          timestamp: payload.timestamp,
+          idTag: payload.idTag,
+          reason: payload.reason,
+          transactionData: payload.transactionData,
+        }),
+      }
+    );
+
+    if (!stopResponse.ok) {
+      const errorText = await stopResponse.text();
+      console.error(
+        `ไม่สามารถอัปเดตธุรกรรมสิ้นสุดใน backend ได้: ${stopResponse.status} - ${errorText}`
+      );
+    }
+  } catch (error) {
+    console.error('เกิดข้อผิดพลาดระหว่างบันทึก StopTransaction ไปยัง backend:', error);
+  }
+
   try {
     const { gatewaySessionManager } = await import('../../handlers/gatewaySessionManager');
     gatewaySessionManager.stopConnectorTransaction(

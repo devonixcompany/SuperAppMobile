@@ -65,6 +65,7 @@ export default {
 
       // API configuration
       apiUrl: process.env.EXPO_PUBLIC_API_URL,
+      omisePublicKey: process.env.EXPO_PUBLIC_OMISE_PUBLIC_KEY,
 
       // App environment
       appEnv: process.env.EXPO_PUBLIC_APP_ENV || "development",

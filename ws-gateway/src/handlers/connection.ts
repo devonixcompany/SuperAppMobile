@@ -1,10 +1,16 @@
 import { URL } from 'url';
 import { WebSocket } from 'ws';
+import { BACKEND_URL, WS_GATEWAY_API_KEY } from '../config/env';
 import { getAllCacheData, getChargePointFromCache } from '../index';
-import { ensureConnectorData, ConnectorDetail } from '../services/connectorService';
+import { ConnectorDetail, ensureConnectorData } from '../services/connectorService';
 import { getConnectorConfiguration } from '../utils/getConfiguration';
-import { handleWebSocketMessage } from './messageRouter';
 import { gatewaySessionManager } from './gatewaySessionManager';
+import { handleWebSocketMessage } from './messageRouter';
+
+const withGatewayHeaders = (headers: Record<string, string> = {}) => ({
+  'X-Api-Key': WS_GATEWAY_API_KEY,
+  ...headers
+});
 
 // การติดตามการเชื่อมต่อ (legacy - เก็บไว้เพื่อความเข้ากันได้แบบย้อนหลัง)
 // Connection tracking (legacy - kept for backward compatibility)
@@ -53,16 +59,14 @@ function validateSerialId(serialNumber: string): boolean {
  */
 async function validateChargePointWhitelist(serialNumber: string, chargePointIdentity: string): Promise<{ isValid: boolean; chargePointId?: string }> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     console.log(`🔍 Checking whitelist - Serial: ${serialNumber}, Identity: ${chargePointIdentity}`);
     
     // Step 1: เรียก backend API เพื่อตรวจสอบ whitelist
-    const response = await fetch(`${backendUrl}/api/chargepoints/validate-whitelist`, {
+    const response = await fetch(`${BACKEND_URL}/api/chargepoints/validate-whitelist`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         serialNumber,
         chargePointIdentity
@@ -133,19 +137,17 @@ function extractSerialId(request: any, chargePointId: string): string | null {
  */
 async function validateChargePoint(chargePointId: string, ocppVersion: string): Promise<boolean> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     // Step 1: แปลงรูปแบบ version หากจำเป็น (1.6 -> ocpp1.6)
     const formattedVersion = ocppVersion.startsWith('ocpp') ? ocppVersion : `ocpp${ocppVersion}`;
     
     console.log(`🔍 Validating Charge Point - ID: ${chargePointId}, OCPP Version: ${formattedVersion}`);
     
     // Step 2: เรียก backend API เพื่อตรวจสอบ Charge Point และ OCPP version
-    const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/validate-ocpp`, {
+    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/validate-ocpp`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         ocppVersion: formattedVersion
       })
@@ -178,16 +180,14 @@ async function validateChargePoint(chargePointId: string, ocppVersion: string): 
  */
 async function updateConnectionStatus(chargePointId: string, isConnected: boolean): Promise<void> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     console.log(`🔄 Updating connection status - ID: ${chargePointId}, Connected: ${isConnected}`);
     
     // Step 1 & 2: เรียก backend API เพื่ออัปเดตสถานะการเชื่อมต่อ
-    const response = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}/connection-status`, {
+    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/connection-status`, {
       method: 'PUT',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         isConnected
       })
@@ -217,16 +217,12 @@ async function updateConnectionStatus(chargePointId: string, isConnected: boolea
  */
 async function registerChargePoint(chargePointId: string, ocppVersion: string): Promise<boolean> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
     console.log(`🔍 Checking Charge Point existence - ID: ${chargePointId}`);
     
     // Step 1: ตรวจสอบว่า Charge Point มีอยู่แล้วหรือไม่
-    const checkResponse = await fetch(`${backendUrl}/api/chargepoints/${chargePointId}`, {
+    const checkResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      }
+      headers: withGatewayHeaders()
     });
 
     if (checkResponse.ok) {
@@ -252,11 +248,11 @@ async function registerChargePoint(chargePointId: string, ocppVersion: string): 
     }
 
     // Step 3: ลงทะเบียน Charge Point ใหม่
-    const response = await fetch(`${backendUrl}/api/chargepoints`, {
+    const response = await fetch(`${BACKEND_URL}/api/chargepoints`, {
       method: 'POST',
-      headers: {
+      headers: withGatewayHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         id: chargePointId,
         name: `Charge Point ${chargePointId}`,
@@ -371,7 +367,7 @@ export async function handleConnection(ws: WebSocket, request: any, chargePointI
   }
 
   activeConnections.set(chargePointId, connectionInfo);
-  console.log("activeConnections:", activeConnections)
+
   console.log(`🎉 Charge Point ${chargePointId} connected successfully with OCPP ${ocppVersion}`);
 
   // Step 4: ข้าม backend update สำหรับการทดสอบ

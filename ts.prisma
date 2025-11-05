@@ -1,0 +1,279 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+// -------------------------
+// schema.prisma
+// =========================
+// Models
+// =========================
+
+// =========================
+// Enums
+// =========================
+enum Role {
+  
+  ORGANIZER
+  PLAYER
+}
+
+enum PlayType {
+  SINGLE
+  DOUBLE
+
+}
+
+enum TeamType {
+  SINGLE
+  DOUBLE
+  
+}
+
+enum RegisterStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  FINISHED
+  CANCELLED
+}
+
+enum BracketStage {
+  GROUP
+  KNOCKOUT
+  QUARTER_FINAL
+  SEMI_FINAL
+  FINAL
+}
+
+enum MatchResult {
+  WIN
+  LOSS
+  DRAW
+}
+
+// =========================
+// Models
+// =========================
+
+// 1) Users
+model User {
+  id         Int        @id @default(autoincrement())
+  userName   String?
+  firstName  String
+  lastName   String
+  email      String     @unique
+  password   String
+  age        Int?
+  role       Role       @default(PLAYER)
+  updatedAt  DateTime   @updatedAt
+  createdAt  DateTime   @default(now())
+  rank       Int?
+  playType   PlayType?
+
+  // Relations
+  organizedTournaments Tournament[] @relation("OrganizerTournaments")
+  registrations        Register[]
+  confirmedPayments    Payment[]     @relation("PaymentConfirmedBy")
+
+  histories            History[]
+  // Indexes
+  @@index([firstName, lastName])
+  @@index([email])
+  @@map("users")
+}
+
+// 2) Teams
+model Team {
+  id        Int       @id @default(autoincrement())
+  teamName  String
+  teamType  TeamType?
+  createdAt DateTime  @default(now())
+
+  // Relations
+  registrations Register[]
+  matchesAsTeam1 Match[] @relation("MatchTeam1")
+  matchesAsTeam2 Match[] @relation("MatchTeam2")
+  matchesAsWinner Match[] @relation("MatchWinnerTeam")
+
+  @@unique([teamName, teamType])
+  @@map("teams")
+}
+
+// 3) Tournament
+model Tournament {
+  id          Int       @id @default(autoincrement())
+  organizerId Int
+  name        String
+  description String?
+  location    String?
+  startDate   DateTime?
+  endDate     DateTime?
+  entryFee    Decimal?  @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now())
+
+  // บางภาพมี field ชื่อซ้ำ/พิมพ์คล้ายกัน จึงแมปไว้เป็นคอลัมน์เดิม
+  adPoster    String?
+  addPoster   String?
+
+  maxPlayers  Int?
+  status      String?
+
+  // Relations
+  organizer   User      @relation("OrganizerTournaments", fields: [organizerId], references: [id])
+  registrations Register[]
+  matches       Match[]
+  brackets      Bracket[]
+  histories     History[]
+
+  @@index([organizerId])
+  @@map("tournament")
+}
+
+// 4) Register
+model Register {
+  id            Int            @id @default(autoincrement())
+  tournamentId  Int
+  playerId      Int
+  status        RegisterStatus @default(PENDING)
+  paymentProof  String?
+  createdAt     DateTime       @default(now())
+
+  rankScore     Int?
+  teamId        Int?
+  birthday      DateTime?
+  video         String?
+  groupNo       Int?
+  groupRank     Int?
+  manager       Boolean?       @default(false)
+
+  // Relations
+  tournament Tournament @relation(fields: [tournamentId], references: [id])
+  player     User       @relation(fields: [playerId], references: [id])
+  team       Team?      @relation(fields: [teamId], references: [id])
+  payments   Payment[]
+
+  @@index([tournamentId])
+  @@index([playerId])
+  @@index([teamId])
+  @@map("register")
+}
+
+// 5) Payment
+model Payment {
+  id           Int           @id @default(autoincrement())
+  registerId   Int
+  amount       Decimal       @db.Decimal(10, 2)
+  status       PaymentStatus @default(PENDING)
+  payAt        DateTime?
+  confirmedBy  Int?
+
+  // Relations
+  register     Register      @relation(fields: [registerId], references: [id])
+  confirmedByUser User?      @relation("PaymentConfirmedBy", fields: [confirmedBy], references: [id])
+
+  @@index([registerId])
+  @@index([confirmedBy])
+  @@map("payment")
+}
+
+// 6) Matches
+model Match {
+  id            Int         @id @default(autoincrement())
+  tournamentId  Int
+  round         Int?
+  team1Id       Int?
+  team2Id       Int?
+  winnerTeamId  Int?
+  scheduledTime DateTime?
+  createdAt     DateTime    @default(now())
+  scorePlayer1  Int?
+  scorePlayer2  Int?
+  statusMatch   MatchStatus @default(SCHEDULED)
+
+  // Relations
+  tournament Tournament @relation(fields: [tournamentId], references: [id])
+  team1      Team?      @relation("MatchTeam1", fields: [team1Id], references: [id])
+  team2      Team?      @relation("MatchTeam2", fields: [team2Id], references: [id])
+  winnerTeam Team?      @relation("MatchWinnerTeam", fields: [winnerTeamId], references: [id])
+
+  shuttleUsages ShuttleUsage[]
+  brackets       Bracket[]
+  histories      History[]
+
+  @@index([tournamentId])
+  @@index([team1Id])
+  @@index([team2Id])
+  @@index([winnerTeamId])
+  @@map("matches")
+}
+
+// 7) Shuttle_Usage
+model ShuttleUsage {
+  id          Int      @id @default(autoincrement())
+  matchId     Int
+  usedCount   Int      @default(0)
+  brokenCount Int      @default(0)
+  shuttlePrice Decimal? @db.Decimal(10, 2)
+
+  // Relations
+  match Match @relation(fields: [matchId], references: [id])
+
+  @@index([matchId])
+  @@map("shuttle_usage")
+}
+
+// 8) Brackets
+model Bracket {
+  id           Int          @id @default(autoincrement())
+  tournamentId Int
+  round        Int?
+  matchId      Int?
+  position     Int?
+  bracketStage BracketStage
+
+  // Relations
+  tournament Tournament @relation(fields: [tournamentId], references: [id])
+  match      Match?     @relation(fields: [matchId], references: [id])
+
+  @@index([tournamentId])
+  @@index([matchId])
+  @@map("brackets")
+}
+
+// 9) History
+model History {
+  id           Int         @id @default(autoincrement())
+  playerId     Int
+  tournamentId Int
+  matchId      Int?
+  result       MatchResult?
+  score        Int?
+  playedAt     DateTime?
+
+  // Relations
+  player     User       @relation(fields: [playerId], references: [id])
+  tournament Tournament @relation(fields: [tournamentId], references: [id])
+  match      Match?     @relation(fields: [matchId], references: [id])
+
+  @@index([playerId])
+  @@index([tournamentId])
+  @@index([matchId])
+  @@map("history")
+}

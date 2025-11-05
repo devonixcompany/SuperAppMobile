@@ -15,6 +15,9 @@ export default function CardLayout() {
       {/* กำหนดหน้า index (หน้าหลักของ card) */}
       {/* name="index" หมายถึงไฟล์ index.tsx */}
       <Stack.Screen name="index" />
+      <Stack.Screen name="payment-methods" />
+      <Stack.Screen name="add-payment-method" />
+      <Stack.Screen name="payment-history" />
 
       {/* ในอนาคตสามารถเพิ่มหน้าย่อยได้ เช่น:
         <Stack.Screen name="add-card" />          // เพิ่มบัตรใหม่

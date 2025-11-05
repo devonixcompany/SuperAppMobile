@@ -1,11 +1,16 @@
 /**
- * HTTP Client Configuration
- * Centralized API client with automatic token handling
+ * โมดูล client สำหรับเรียก API ด้วย axios
+ * ดูแลการแนบ access token และรีเฟรช token ให้อัตโนมัติ
  */
 
 import API_CONFIG from '@/config/api.config';
 import type { AuthTokens } from '@/utils/keychain';
 import { clearTokens, getTokens, storeTokens } from '@/utils/keychain';
+import axios, {
+    AxiosError,
+    AxiosHeaders,
+    AxiosRequestConfig,
+} from 'axios';
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -20,21 +25,24 @@ export interface ApiError {
   data?: any;
 }
 
-export interface ApiRequestOptions extends RequestInit {
+export interface ApiRequestConfig<T = any>
+  extends AxiosRequestConfig<T> {
   /**
-   * Skip attaching Authorization header even if tokens exist
+   * ระบุให้ข้ามการแนบ Authorization header
    */
   skipAuth?: boolean;
-
   /**
-   * Disable automatic refresh handling for 401 responses
+   * ระบุว่าให้ลองรีเฟรช token เมื่อเจอ 401 หรือไม่ (ค่าเริ่มต้น: true)
    */
   retryOnAuthError?: boolean;
-
-  headers?: Record<string, string>;
+  /**
+   * ธงภายในเพื่อป้องกันการวนรีเฟรชซ้ำ
+   */
+  _retry?: boolean;
 }
 
-const PUBLIC_ENDPOINTS = new Set<string>([
+// เก็บชุด endpoint ที่ไม่ต้องแนบ token
+const PUBLIC_ENDPOINTS = new Set([
   API_CONFIG.ENDPOINTS.AUTH.LOGIN,
   API_CONFIG.ENDPOINTS.AUTH.REGISTER,
   API_CONFIG.ENDPOINTS.AUTH.REFRESH_TOKEN,
@@ -47,21 +55,44 @@ const PUBLIC_ENDPOINTS = new Set<string>([
 let cachedTokens: AuthTokens | null = null;
 let refreshPromise: Promise<AuthTokens | null> | null = null;
 
-const resolveEndpoint = (endpoint: string) => {
-  if (/^https?:\/\//i.test(endpoint)) {
-    return endpoint;
-  }
+// สร้าง axios instance กลางสำหรับเรียก API หลัก
+const api = axios.create({
+  baseURL: API_CONFIG.BASE_URL,
+  timeout: API_CONFIG.REQUEST.TIMEOUT,
+  headers: {
+    ...API_CONFIG.HEADERS.DEFAULT,
+  },
+});
 
-  return `${API_CONFIG.BASE_URL}${endpoint}`;
-};
+// สร้าง instance แยกสำหรับเรียก refresh token เพื่อเลี่ยง interceptor
+const refreshClient = axios.create({
+  baseURL: API_CONFIG.BASE_URL,
+  timeout: API_CONFIG.REQUEST.TIMEOUT,
+  headers: {
+    ...API_CONFIG.HEADERS.DEFAULT,
+  },
+});
 
 const normalizeEndpoint = (endpoint: string) => {
-  const cleaned = endpoint.split('?')[0];
-  if (!cleaned.startsWith('/')) {
-    return `/${cleaned}`;
+  if (!endpoint) {
+    return '/';
   }
 
-  return cleaned;
+  const [rawPath] = endpoint.split('?');
+
+  if (/^https?:\/\//i.test(rawPath)) {
+    try {
+      const { pathname } = new URL(rawPath);
+      if (!pathname) {
+        return '/';
+      }
+      return pathname.startsWith('/') ? pathname : `/${pathname}`;
+    } catch {
+      return '/';
+    }
+  }
+
+  return rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
 };
 
 const shouldSkipAuth = (endpoint: string, skipAuth?: boolean) => {
@@ -91,69 +122,73 @@ const persistTokens = async (tokens: AuthTokens | null) => {
   }
 };
 
-const safeParseResponse = async (response: Response) => {
-  const contentType = response.headers.get('content-type');
-  if (!contentType || !contentType.includes('application/json')) {
-    return null;
+const ensureHeadersObject = (config: ApiRequestConfig) => {
+  if (!config.headers) {
+    config.headers = {};
   }
 
-  const text = await response.text();
-  if (!text) {
-    return null;
+  if (config.headers instanceof AxiosHeaders) {
+    const plainHeaders = config.headers.toJSON();
+    config.headers = { ...plainHeaders };
   }
 
-  try {
-    return JSON.parse(text);
-  } catch (error) {
-    console.warn('Failed to parse JSON response', error);
-    return null;
-  }
+  return config.headers as Record<string, string>;
 };
 
-const refreshAccessToken = async (refreshToken: string): Promise<AuthTokens | null> => {
+const isFormDataPayload = (payload: unknown) =>
+  typeof FormData !== 'undefined' && payload instanceof FormData;
+
+const refreshAccessToken = async (refreshToken: string) => {
   if (!refreshToken) {
+    console.log('❌ [HTTP] No refresh token available');
     return null;
   }
 
   if (!refreshPromise) {
+    console.log('🔄 [HTTP] Starting token refresh process...');
     refreshPromise = (async () => {
       try {
-        const response = await fetch(resolveEndpoint(API_CONFIG.ENDPOINTS.AUTH.REFRESH_TOKEN), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-          body: JSON.stringify({ refreshToken }),
+        const response = await refreshClient.post<ApiResponse<AuthTokens>>(
+          API_CONFIG.ENDPOINTS.AUTH.REFRESH_TOKEN,
+          { refreshToken }
+        );
+
+        console.log('📡 [HTTP] Refresh token response:', {
+          status: response.status,
+          success: response.data?.success
         });
 
-        const payload = await safeParseResponse(response);
-
-        if (!response.ok) {
-          throw {
-            message: payload?.message || 'Failed to refresh token',
-            status: response.status,
-            data: payload,
-          } as ApiError;
-        }
-
+        const payload = response.data;
         const tokens: AuthTokens = {
-          accessToken: payload?.data?.accessToken ?? payload?.accessToken,
-          refreshToken: payload?.data?.refreshToken ?? payload?.refreshToken,
+          accessToken: payload?.data?.accessToken ?? (payload as any)?.accessToken,
+          refreshToken: payload?.data?.refreshToken ?? (payload as any)?.refreshToken ?? refreshToken,
         };
 
         if (!tokens.accessToken || !tokens.refreshToken) {
-          throw {
-            message: 'Invalid token payload received from refresh endpoint',
-            status: response.status,
-            data: payload,
-          } as ApiError;
+          throw new Error('Invalid token payload received');
+        }
+
+        // ตรวจสอบ token ใหม่
+        try {
+          const newPayload = JSON.parse(atob(tokens.accessToken.split('.')[1]));
+          const expTime = new Date(newPayload.exp * 1000);
+          console.log('✅ [HTTP] New token received:', {
+            expTime: expTime.toLocaleTimeString(),
+            userId: newPayload.userId
+          });
+        } catch (error) {
+          console.log('⚠️ [HTTP] Could not decode new token:', error);
         }
 
         await persistTokens(tokens);
+        
+        // ✅ CRITICAL: Update cached tokens immediately so subsequent requests use the new tokens
+        cachedTokens = tokens;
+        console.log('✅ [HTTP] Cached tokens updated after refresh');
+        
         return tokens;
       } catch (error) {
-        console.error('Token refresh failed', error);
+        console.error('❌ [HTTP] Token refresh failed:', error);
         await persistTokens(null);
         return null;
       } finally {
@@ -165,161 +200,220 @@ const refreshAccessToken = async (refreshToken: string): Promise<AuthTokens | nu
   return refreshPromise;
 };
 
-const prepareHeaders = (
-  baseHeaders: Record<string, string>,
-  customHeaders?: Record<string, string>
-) => ({
-  ...baseHeaders,
-  ...(customHeaders || {}),
+const normalizeApiError = (error: unknown): ApiError => {
+  if (axios.isAxiosError(error)) {
+    const responseData = error.response?.data as ApiResponse | undefined;
+    const messageFromResponse =
+      (responseData?.message && typeof responseData.message === 'string'
+        ? responseData.message
+        : undefined) ||
+      (responseData?.error && typeof responseData.error === 'string'
+        ? responseData.error
+        : undefined);
+
+    return {
+      message: messageFromResponse || error.message || 'เกิดข้อผิดพลาดจากการเชื่อมต่อ',
+      status: error.response?.status,
+      data: responseData,
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      status: 0,
+    };
+  }
+
+  return {
+    message: 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ',
+    status: 0,
+    data: error,
+  };
+};
+
+// Interceptor ก่อนส่งคำขอเพื่อแนบ token
+api.interceptors.request.use(async (config) => {
+  const requestConfig = config as ApiRequestConfig;
+  requestConfig.skipAuth = shouldSkipAuth(requestConfig.url ?? '', requestConfig.skipAuth);
+
+  console.log(`📡 [HTTP] Request: ${requestConfig.method?.toUpperCase()} ${requestConfig.url}`);
+
+  const headers = ensureHeadersObject(requestConfig);
+
+  if (!headers.Accept) {
+    headers.Accept = API_CONFIG.HEADERS.DEFAULT.Accept;
+  }
+
+  if (isFormDataPayload(requestConfig.data)) {
+    if (headers['Content-Type']) {
+      delete headers['Content-Type'];
+    }
+  } else if (!headers['Content-Type']) {
+    headers['Content-Type'] = API_CONFIG.HEADERS.DEFAULT['Content-Type'];
+  }
+
+  if (!requestConfig.skipAuth) {
+    // ✅ CRITICAL: Check if this is a retry with fresh token
+    if (requestConfig._retry && headers.Authorization) {
+      console.log('🔄 [HTTP] Using fresh token from retry:', {
+        tokenPreview: headers.Authorization.substring(0, 27) + '...'
+      });
+    } else if (headers.Authorization) {
+      console.log('🎫 [HTTP] Using existing Authorization header');
+    } else {
+      // Load tokens from cache/storage only if header not already set
+      const tokens = await loadTokens();
+      if (tokens?.accessToken) {
+        headers.Authorization = `Bearer ${tokens.accessToken}`;
+        
+        // ตรวจสอบ token expiration
+        try {
+          const payload = JSON.parse(atob(tokens.accessToken.split('.')[1]));
+          const currentTime = Math.floor(Date.now() / 1000);
+          const timeLeft = payload.exp - currentTime;
+          
+          console.log(`🎫 [HTTP] Using token:`, {
+            tokenLength: tokens.accessToken.length,
+            tokenPreview: `${tokens.accessToken.substring(0, 20)}...`,
+            expTime: new Date(payload.exp * 1000).toLocaleTimeString(),
+            timeLeft: timeLeft > 0 ? `${timeLeft} seconds` : 'EXPIRED'
+          });
+        } catch (error) {
+          console.log('❌ [HTTP] Error checking token expiration:', error);
+        }
+      } else {
+        console.log('❌ [HTTP] No access token available');
+      }
+    }
+  } else {
+    console.log('🌐 [HTTP] Public endpoint, skipping auth');
+  }
+
+  if (typeof requestConfig.retryOnAuthError === 'undefined') {
+    requestConfig.retryOnAuthError = true;
+  }
+
+  return requestConfig;
 });
 
-const prepareBody = (body?: any) => {
-  const hasFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+// Interceptor หลังรับคำตอบเพื่อจัดการ 401 และโยน error ที่เหมาะสม
+api.interceptors.response.use(
+  (response) => {
+    console.log(`✅ [HTTP] Response: ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}`);
+    return response;
+  },
+  async (error: AxiosError) => {
+    const requestConfig = (error.config || {}) as ApiRequestConfig;
+    const status = error.response?.status;
 
-  if (body === undefined || body === null) {
-    return { payload: undefined, isFormData: false };
-  }
+    console.log(`❌ [HTTP] Error: ${status} ${requestConfig.method?.toUpperCase()} ${requestConfig.url}`);
 
-  if (hasFormData) {
-    return { payload: body, isFormData: true };
-  }
+    const shouldAttemptRefresh =
+      status === API_CONFIG.STATUS_CODES.UNAUTHORIZED &&
+      !requestConfig.skipAuth &&
+      requestConfig.retryOnAuthError !== false &&
+      !requestConfig._retry;
 
-  if (typeof body === 'string') {
-    return { payload: body, isFormData: false };
-  }
+    if (shouldAttemptRefresh) {
+      console.log('🔄 [HTTP] 401 Unauthorized, attempting token refresh...');
+      requestConfig._retry = true;
 
-  // Assume JSON payload for objects
-  return { payload: JSON.stringify(body), isFormData: false };
-};
+      try {
+        const tokens = await loadTokens();
+        console.log('🔍 [HTTP] Current tokens:', {
+          hasAccessToken: !!tokens?.accessToken,
+          hasRefreshToken: !!tokens?.refreshToken
+        });
 
-const executeRequest = async <T>(
-  endpoint: string,
-  options: ApiRequestOptions,
-  attachAuth: boolean,
-  attemptRefresh: boolean,
-  isFormData: boolean
-): Promise<ApiResponse<T>> => {
-  const url = resolveEndpoint(endpoint);
-  const defaultHeaders = API_CONFIG.HEADERS.DEFAULT;
-  const headers = prepareHeaders(defaultHeaders, options.headers);
+        const refreshed = await refreshAccessToken(tokens?.refreshToken ?? '');
 
-  let tokens = attachAuth ? await loadTokens() : null;
-
-  if (attachAuth && tokens?.accessToken) {
-    headers.Authorization = `Bearer ${tokens.accessToken}`;
-  }
-
-  if (isFormData && headers['Content-Type']) {
-    delete headers['Content-Type'];
-  }
-
-  const requestInit: RequestInit = {
-    ...options,
-    headers,
-  };
-
-  const response = await fetch(url, requestInit);
-  const data = await safeParseResponse(response);
-
-  if (response.status === API_CONFIG.STATUS_CODES.UNAUTHORIZED && attachAuth && attemptRefresh) {
-    tokens = await loadTokens();
-    const refreshed = await refreshAccessToken(tokens?.refreshToken ?? '');
-
-    if (refreshed?.accessToken) {
-      const retryHeaders = prepareHeaders(defaultHeaders, options.headers);
-      retryHeaders.Authorization = `Bearer ${refreshed.accessToken}`;
-
-      if (isFormData && retryHeaders['Content-Type']) {
-        delete retryHeaders['Content-Type'];
+        if (refreshed?.accessToken) {
+          console.log('✅ [HTTP] Token refreshed successfully, retrying request');
+          
+          // ✅ CRITICAL: Create completely fresh headers to avoid any cached Authorization
+          const freshHeaders = {
+            ...API_CONFIG.HEADERS.DEFAULT,
+            Authorization: `Bearer ${refreshed.accessToken}`,
+          };
+          
+          // Remove any existing headers that might interfere
+          delete freshHeaders['authorization']; // lowercase
+          freshHeaders.Authorization = `Bearer ${refreshed.accessToken}`; // Set fresh token
+          
+          const retryConfig = {
+            ...requestConfig,
+            headers: freshHeaders,
+            _retry: true, // Mark as retry to prevent infinite loops
+          };
+          
+          console.log('🔄 [HTTP] Retrying with completely fresh token:', {
+            tokenPreview: `${refreshed.accessToken.substring(0, 20)}...`,
+            url: retryConfig.url,
+            method: retryConfig.method,
+            hasAuthHeader: !!retryConfig.headers.Authorization
+          });
+          
+          return api(retryConfig);
+        } else {
+          console.log('❌ [HTTP] Token refresh failed');
+        }
+      } catch (refreshError) {
+        console.error('❌ [HTTP] Error during token refresh:', refreshError);
       }
 
-      const retryInit: RequestInit = {
-        ...options,
-        headers: retryHeaders,
-      };
-
-      const retryResponse = await fetch(url, retryInit);
-      const retryData = await safeParseResponse(retryResponse);
-
-      if (!retryResponse.ok) {
-        throw {
-          message: retryData?.message || 'Request failed',
-          status: retryResponse.status,
-          data: retryData,
-        } as ApiError;
-      }
-
-      return retryData ?? ({} as ApiResponse<T>);
+      await persistTokens(null);
+      console.log('🗑️ [HTTP] Tokens cleared due to refresh failure');
     }
+
+    return Promise.reject(error);
   }
+);
 
-  if (!response.ok) {
-    throw {
-      message: data?.message || 'Request failed',
-      status: response.status,
-      data,
-    } as ApiError;
-  }
-
-  return data ?? ({} as ApiResponse<T>);
-};
-
-/**
- * Base fetch wrapper with automatic token handling
- */
+// ฟังก์ชันเรียก API หลักที่แปลงเป็น ApiResponse<T>
 export async function apiClient<T = any>(
   endpoint: string,
-  options: ApiRequestOptions = {}
+  config: ApiRequestConfig = {}
 ): Promise<ApiResponse<T>> {
-  const { skipAuth, retryOnAuthError = true, body, ...rest } = options;
-  const attachAuth = !shouldSkipAuth(endpoint, skipAuth);
-
-  const { payload, isFormData } = prepareBody(body);
-
-  const prepared: ApiRequestOptions = {
-    ...rest,
-    body: payload,
+  const finalConfig: ApiRequestConfig = {
+    ...config,
+    url: endpoint,
   };
 
-  try {
-    return await executeRequest<T>(endpoint, prepared, attachAuth, retryOnAuthError, isFormData);
-  } catch (error: any) {
-    if (error?.status) {
-      throw error;
-    }
+  if (typeof finalConfig.retryOnAuthError === 'undefined') {
+    finalConfig.retryOnAuthError = true;
+  }
 
-    throw {
-      message: error?.message || 'Network error occurred',
-      status: 0,
-    } as ApiError;
+  try {
+    const response = await api.request<ApiResponse<T>>(finalConfig);
+    return response.data ?? ({} as ApiResponse<T>);
+  } catch (error) {
+    throw normalizeApiError(error);
   }
 }
 
-/**
- * HTTP Methods helpers
- */
+// helper สำหรับ method ยอดนิยม
 export const http = {
-  get: <T = any>(endpoint: string, options: ApiRequestOptions = {}) =>
-    apiClient<T>(endpoint, { ...options, method: 'GET' }),
+  get: <T = any>(endpoint: string, config: ApiRequestConfig = {}) =>
+    apiClient<T>(endpoint, { ...config, method: 'GET' }),
 
-  post: <T = any>(endpoint: string, body?: any, options: ApiRequestOptions = {}) =>
-    apiClient<T>(endpoint, { ...options, method: 'POST', body }),
+  post: <T = any>(endpoint: string, data?: any, config: ApiRequestConfig = {}) =>
+    apiClient<T>(endpoint, { ...config, method: 'POST', data }),
 
-  put: <T = any>(endpoint: string, body?: any, options: ApiRequestOptions = {}) =>
-    apiClient<T>(endpoint, { ...options, method: 'PUT', body }),
+  put: <T = any>(endpoint: string, data?: any, config: ApiRequestConfig = {}) =>
+    apiClient<T>(endpoint, { ...config, method: 'PUT', data }),
 
-  patch: <T = any>(endpoint: string, body?: any, options: ApiRequestOptions = {}) =>
-    apiClient<T>(endpoint, { ...options, method: 'PATCH', body }),
+  patch: <T = any>(endpoint: string, data?: any, config: ApiRequestConfig = {}) =>
+    apiClient<T>(endpoint, { ...config, method: 'PATCH', data }),
 
-  delete: <T = any>(endpoint: string, options: ApiRequestOptions = {}) =>
-    apiClient<T>(endpoint, { ...options, method: 'DELETE' }),
+  delete: <T = any>(endpoint: string, config: ApiRequestConfig = {}) =>
+    apiClient<T>(endpoint, { ...config, method: 'DELETE' }),
 };
 
 export const authTokens = {
-  /**
-   * Manually prime the in-memory token cache
-   */
+  // ใช้ prime เพื่อเก็บ token ในหน่วยความจำล่วงหน้า
   prime: (tokens: AuthTokens | null) => {
     cachedTokens = tokens;
+    console.log('✅ [HTTP] Tokens primed in cache:', tokens ? 'Available' : 'Cleared');
   },
 };

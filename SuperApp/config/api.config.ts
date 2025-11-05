@@ -50,10 +50,12 @@ export const API_CONFIG = {
     
     // Payment
     PAYMENT: {
-      METHODS: '/api/payment/methods',
-      ADD_METHOD: '/api/payment/methods',
-      REMOVE_METHOD: (methodId: string) => 
-        `/api/payment/methods/${methodId}`,
+      CARDS: '/api/payment/cards',
+      ADD_CARD: '/api/payment/cards',
+      REMOVE_CARD: (cardId: string) => 
+        `/api/payment/cards/${cardId}`,
+      SET_DEFAULT_CARD: (cardId: string) =>
+        `/api/payment/cards/${cardId}/default`,
       PROCESS_PAYMENT: '/api/payment/process',
       PAYMENT_HISTORY: '/api/payment/history',
     },
@@ -65,6 +67,16 @@ export const API_CONFIG = {
         `/api/notifications/${notificationId}/read`,
       MARK_ALL_READ: '/api/notifications/read-all',
       SETTINGS: '/api/notifications/settings',
+    },
+    
+    // Transactions
+    TRANSACTIONS: {
+      CREATE: '/api/transactions',
+      SUMMARY: (transactionId: string) => 
+        `/api/transactions/${encodeURIComponent(transactionId)}/summary`,
+      LIST: '/api/transactions',
+      USER_TRANSACTIONS: (userId: string) => 
+        `/api/transactions/user/${encodeURIComponent(userId)}`,
     },
   },
   

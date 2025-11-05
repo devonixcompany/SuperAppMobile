@@ -28,6 +28,7 @@ export interface ConnectorMetrics {
   energyDeliveredKWh?: number;  // พลังงานที่ส่งไปแล้ว (kWh)
   energyBaselineKWh?: number;   // ค่าเริ่มต้นของมิเตอร์ (ใช้หักลบ)
   rawEnergyReadingKWh?: number; // ค่ามิเตอร์แบบ absolute ล่าสุด (kWh)
+  connectorStatus?: string;     // สถานะล่าสุดของหัวชาร์จ
   stateOfChargePercent?: number; // เปอร์เซ็นต์แบตเตอรี่รถ (SoC)
   powerKw?: number;             // กำลังไฟฟ้า (kW)
   voltage?: number;             // แรงดันไฟฟ้า (V)
@@ -37,6 +38,8 @@ export interface ConnectorMetrics {
   transactionIdTag?: string;    // ID Tag ที่ใช้ในธุรกรรมล่าสุด
   meterStart?: number;          // ค่ามิเตอร์ตอนเริ่มธุรกรรม
   lastTransactionCompletedAt?: Date; // เวลาปิดธุรกรรมล่าสุด
+  remoteStopRequested?: boolean;     // ระบุว่ามีการร้องขอ RemoteStop แล้วหรือยัง
+  remoteStopRequestedAt?: Date;      // เวลาในการร้องขอ RemoteStop ล่าสุด
 }
 
 export interface GatewayConnectorInfo {
@@ -676,12 +679,19 @@ export class GatewaySessionManager extends EventEmitter {
       );
       chargePoint.connectors.push({
         connectorId,
-        status
+        status,
+        metrics: {
+          connectorStatus: status
+        }
       });
     } else {
       // อัปเดตสถานะของ connector ที่มีอยู่
       const oldStatus = chargePoint.connectors[connectorIndex].status;
       chargePoint.connectors[connectorIndex].status = status;
+      const metrics = chargePoint.connectors[connectorIndex].metrics;
+      if (metrics) {
+        metrics.connectorStatus = status;
+      }
       console.log(
         `🧭 [GatewaySession] หัวชาร์จ ${connectorId} ของ ${chargePointId}: ${oldStatus ?? 'ยังไม่มีข้อมูล'} -> ${status} (errorCode: ${errorCode || 'ไม่มี'})`
       );
@@ -737,6 +747,9 @@ export class GatewaySessionManager extends EventEmitter {
     }
 
     const metrics = connector.metrics!;
+    if (connector.status) {
+      metrics.connectorStatus = connector.status;
+    }
     let updated = false;
     let latestTimestamp = metrics.lastMeterTimestamp ? metrics.lastMeterTimestamp.getTime() : 0;
 
@@ -911,6 +924,8 @@ export class GatewaySessionManager extends EventEmitter {
     const metrics = connector.metrics!;
     metrics.activeTransactionId = transactionId;
     metrics.transactionIdTag = options?.idTag;
+    metrics.remoteStopRequested = false;
+    metrics.remoteStopRequestedAt = undefined;
     if (typeof options?.meterStart === 'number' && Number.isFinite(options.meterStart)) {
       metrics.meterStart = options.meterStart;
       const meterStartKWh = options.meterStart / 1000;
@@ -998,6 +1013,8 @@ export class GatewaySessionManager extends EventEmitter {
     metrics.transactionStartedAt = undefined;
     metrics.transactionIdTag = undefined;
     metrics.meterStart = undefined;
+    metrics.remoteStopRequested = false;
+    metrics.remoteStopRequestedAt = undefined;
 
     const now = new Date();
     this.session.lastActivity = now;
@@ -1055,6 +1072,8 @@ export class GatewaySessionManager extends EventEmitter {
     metrics.transactionStartedAt = undefined;
     metrics.transactionIdTag = undefined;
     metrics.lastTransactionCompletedAt = undefined;
+    metrics.remoteStopRequested = false;
+    metrics.remoteStopRequestedAt = undefined;
 
     const now = new Date();
     this.session!.lastActivity = now;
@@ -1090,6 +1109,43 @@ export class GatewaySessionManager extends EventEmitter {
 
     const connector = chargePoint.connectors.find(c => c.connectorId === connectorId);
     return connector?.metrics?.activeTransactionId;
+  }
+
+  markRemoteStopRequested(chargePointId: string, connectorId: number): boolean {
+    const chargePoint = this.getChargePoint(chargePointId);
+    if (!chargePoint) {
+      return false;
+    }
+
+    const connector = chargePoint.connectors.find(c => c.connectorId === connectorId);
+    if (!connector) {
+      return false;
+    }
+
+    if (!connector.metrics) {
+      connector.metrics = {};
+    }
+
+    const metrics = connector.metrics;
+
+    if (metrics.remoteStopRequested) {
+      return false;
+    }
+
+    metrics.remoteStopRequested = true;
+    metrics.remoteStopRequestedAt = new Date();
+
+    return true;
+  }
+
+  hasRemoteStopBeenRequested(chargePointId: string, connectorId: number): boolean {
+    const chargePoint = this.getChargePoint(chargePointId);
+    if (!chargePoint) {
+      return false;
+    }
+
+    const connector = chargePoint.connectors.find(c => c.connectorId === connectorId);
+    return Boolean(connector?.metrics?.remoteStopRequested);
   }
 
   getSession(): GatewaySession | null {

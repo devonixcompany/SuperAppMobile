@@ -24,28 +24,17 @@ export interface ChangePasswordRequest {
   confirmPassword: string;
 }
 
-export interface UserApiParams {
-  accessToken: string;
-}
-
 class UserService {
   /**
-   * Get user profile
-   * @param params - Access token for authentication
-   * @returns Promise with user profile data
+   * ดึงข้อมูลโปรไฟล์ของผู้ใช้ปัจจุบัน
+   * @returns ผลลัพธ์โปรไฟล์จาก API
    */
-  async getProfile(params: UserApiParams): Promise<ApiResponse<UserProfile>> {
+  async getProfile(): Promise<ApiResponse<UserProfile>> {
     try {
       console.log('User Service - Getting profile');
       
       const response = await http.get<UserProfile>(
-        '/api/user/profile',
-        {
-          headers: {
-            'Authorization': `Bearer ${params.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        '/api/user/profile'
       );
 
       console.log('User Service - Profile response:', response);
@@ -57,27 +46,19 @@ class UserService {
   }
 
   /**
-   * Update user profile
-   * @param data - Profile data to update
-   * @param params - Access token for authentication
-   * @returns Promise with updated user profile
+   * อัปเดตข้อมูลโปรไฟล์ของผู้ใช้
+   * @param data - ข้อมูลที่ต้องการแก้ไข
+   * @returns ผลลัพธ์โปรไฟล์ใหม่จาก API
    */
   async updateProfile(
-    data: UpdateUserProfileRequest,
-    params: UserApiParams
+    data: UpdateUserProfileRequest
   ): Promise<ApiResponse<UserProfile>> {
     try {
       console.log('User Service - Updating profile:', data);
       
       const response = await http.put<UserProfile>(
         '/api/user/profile',
-        data,
-        {
-          headers: {
-            'Authorization': `Bearer ${params.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        data
       );
 
       console.log('User Service - Update profile response:', response);
@@ -89,27 +70,19 @@ class UserService {
   }
 
   /**
-   * Change user password
-   * @param data - Password change data
-   * @param params - Access token for authentication
-   * @returns Promise with success response
+   * เปลี่ยนรหัสผ่านของผู้ใช้
+   * @param data - ชุดข้อมูลรหัสผ่านเดิมและใหม่
+   * @returns ข้อความแจ้งผลสำเร็จจาก API
    */
   async changePassword(
-    data: ChangePasswordRequest,
-    params: UserApiParams
+    data: ChangePasswordRequest
   ): Promise<ApiResponse<{ message: string }>> {
     try {
       console.log('User Service - Changing password');
       
       const response = await http.post<{ message: string }>(
         '/api/user/change-password',
-        data,
-        {
-          headers: {
-            'Authorization': `Bearer ${params.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        data
       );
 
       console.log('User Service - Change password response:', response);
@@ -121,22 +94,15 @@ class UserService {
   }
 
   /**
-   * Delete user account
-   * @param params - Access token for authentication
-   * @returns Promise with success response
+   * ลบบัญชีผู้ใช้แบบถาวร
+   * @returns ข้อความแจ้งผลสำเร็จจาก API
    */
-  async deleteAccount(params: UserApiParams): Promise<ApiResponse<{ message: string }>> {
+  async deleteAccount(): Promise<ApiResponse<{ message: string }>> {
     try {
       console.log('User Service - Deleting account');
       
       const response = await http.delete<{ message: string }>(
-        '/api/user/account',
-        {
-          headers: {
-            'Authorization': `Bearer ${params.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        '/api/user/account'
       );
 
       console.log('User Service - Delete account response:', response);
@@ -148,22 +114,15 @@ class UserService {
   }
 
   /**
-   * Get user charging history
-   * @param params - Access token for authentication
-   * @returns Promise with charging history data
+   * ดึงประวัติการชาร์จของผู้ใช้
+   * @returns รายการธุรกรรมการชาร์จ
    */
-  async getChargingHistory(params: UserApiParams): Promise<ApiResponse<any[]>> {
+  async getChargingHistory(): Promise<ApiResponse<any[]>> {
     try {
       console.log('User Service - Getting charging history');
       
       const response = await http.get<any[]>(
-        '/api/user/charging-history',
-        {
-          headers: {
-            'Authorization': `Bearer ${params.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        '/api/user/charging-history'
       );
 
       console.log('User Service - Charging history response:', response);
@@ -175,22 +134,15 @@ class UserService {
   }
 
   /**
-   * Get user payment methods
-   * @param params - Access token for authentication
-   * @returns Promise with payment methods data
+   * ดึงข้อมูลวิธีชำระเงินของผู้ใช้
+   * @returns รายการวิธีชำระเงินที่ผูกไว้
    */
-  async getPaymentMethods(params: UserApiParams): Promise<ApiResponse<any[]>> {
+  async getPaymentMethods(): Promise<ApiResponse<any[]>> {
     try {
       console.log('User Service - Getting payment methods');
       
       const response = await http.get<any[]>(
-        '/api/user/payment-methods',
-        {
-          headers: {
-            'Authorization': `Bearer ${params.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        '/api/user/payment-methods'
       );
 
       console.log('User Service - Payment methods response:', response);
