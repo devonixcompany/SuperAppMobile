@@ -4,14 +4,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 // นำเข้า components พื้นฐานจาก React Native
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ฟังก์ชันหลักของหน้า Card (บัตรและกระเป๋าเงิน)
 export default function CardScreen() {
   const insets = useSafeAreaInsets();
-  const bottomPadding = insets.bottom + 180;
+  const bottomSpace = insets.bottom + 220;
 
   // ข้อมูลธุรกรรมทั้งหมด (ในโปรเจคจริงจะดึงจาก API)
   const transactions = [
@@ -88,7 +88,9 @@ export default function CardScreen() {
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: bottomPadding }}
+        contentContainerStyle={{ paddingBottom: bottomSpace }}
+        scrollIndicatorInsets={{ bottom: bottomSpace }}
+        contentInset={Platform.OS === "ios" ? { bottom: bottomSpace } : undefined}
       >
         <View className="px-6">
           {/* === BALANCE CARD SECTION === */}
