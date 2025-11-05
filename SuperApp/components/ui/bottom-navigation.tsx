@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useMemo, useState } from "react";
 // นำเข้า components พื้นฐานจาก React Native
 import { LayoutChangeEvent, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 // Interface กำหนด props ที่ component นี้รับ
@@ -19,8 +20,9 @@ export default function BottomNavigation({
   onTabPress,
   onQRPress,
 }: BottomNavigationProps) { // เทคนิค: Custom Clipping / Custom Painter / Custom Shape
+  const insets = useSafeAreaInsets();
+
   // สีที่ใช้ใน navigation bar
-  const BACKGROUND_COLOR = "#E9EDF5";
   const CARD_BACKGROUND = "#FFFFFF";
   const ACTIVE_COLOR = "#51BC8E";
   const INACTIVE_COLOR = "#1F274B";
@@ -29,6 +31,8 @@ export default function BottomNavigation({
   const NOTCH_DEPTH = 50; //ปรับความลึก
   const CORNER_RADIUS = 32;
   const FLOATING_BUTTON_SIZE = 88;
+  const horizontalPadding = 16;
+  const bottomOffset = Math.max(insets.bottom, 16);
 
   type TabItem = {
     id: string;
@@ -167,11 +171,19 @@ export default function BottomNavigation({
 
   return (
     <View
-      style={{ backgroundColor: BACKGROUND_COLOR }}
-      className="pt-6 pb-3"
+      pointerEvents="box-none"
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        paddingHorizontal: horizontalPadding,
+        paddingBottom: bottomOffset,
+        paddingTop: FLOATING_BUTTON_SIZE - NOTCH_DEPTH,
+      }}
     >
       <View
-        className="relative mx-4"
+        className="relative"
         style={{
           shadowColor: "#111827",
           shadowOpacity: 0.12,

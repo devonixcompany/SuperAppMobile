@@ -6,10 +6,13 @@ import React from "react";
 // นำเข้า components พื้นฐานจาก React Native
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ฟังก์ชันหลักของหน้า Card (บัตรและกระเป๋าเงิน)
 export default function CardScreen() {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = insets.bottom + 180;
+
   // ข้อมูลธุรกรรมทั้งหมด (ในโปรเจคจริงจะดึงจาก API)
   const transactions = [
     {
@@ -82,7 +85,11 @@ export default function CardScreen() {
       </View>
 
       {/* ScrollView: ทำให้เนื้อหาเลื่อนได้ */}
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: bottomPadding }}
+      >
         <View className="px-6">
           {/* === BALANCE CARD SECTION === */}
           {/* การ์ดแสดงยอดเงินคงเหลือ */}
@@ -283,9 +290,6 @@ export default function CardScreen() {
               ))}
             </View>
           </View>
-
-          {/* เพิ่มพื้นที่ด้านล่างเพื่อไม่ให้ถูก tab bar บัง */}
-          <View className="h-20" />
         </View>
       </ScrollView>
     </SafeAreaView>
