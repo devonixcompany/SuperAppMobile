@@ -5,34 +5,41 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 // นำเข้า components พื้นฐานจาก React Native
-import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator, Alert, RefreshControl } from "react-native";
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
+import { paymentService, type PaymentCard, type PaymentHistoryEntry } from "@/services/api/payment.service";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { paymentService, type PaymentMethod, type PaymentHistory } from "@/services/api/payment.service";
 
 // ฟังก์ชันหลักของหน้า Card (บัตรและกระเป๋าเงิน)
 export default function CardScreen() {
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-  const [recentPayments, setRecentPayments] = useState<PaymentHistory[]>([]);
+  const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
+  const [recentPayments, setRecentPayments] = useState<PaymentHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [balance] = useState(1250.00); // Mock balance for now
+  const [selectedCard, setSelectedCard] = useState<PaymentCard | null>(null);
+  const [isDeducting, setIsDeducting] = useState(false);
 
   // Load data
   const loadData = async () => {
     try {
       const [methodsResponse, historyResponse] = await Promise.all([
-        paymentService.getPaymentMethods(),
+        paymentService.getPaymentCards(),
         paymentService.getPaymentHistory()
       ]);
 
       if (methodsResponse.success && methodsResponse.data) {
-        setPaymentMethods(methodsResponse.data);
+        setPaymentCards(methodsResponse.data);
+        // Set default selected card (first card or default card)
+        const defaultCard = methodsResponse.data.find(card => card.isDefault) || methodsResponse.data[0];
+        if (defaultCard) {
+          setSelectedCard(defaultCard);
+        }
       }
 
-      if (historyResponse.success && historyResponse.data) {
+      if (historyResponse.success && historyResponse.data?.payments) {
         // Get only recent 4 transactions
-        setRecentPayments(historyResponse.data.slice(0, 4));
+        setRecentPayments(historyResponse.data.payments.slice(0, 4));
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -47,6 +54,39 @@ export default function CardScreen() {
     setRefreshing(true);
     await loadData();
     setRefreshing(false);
+  };
+
+  // Deduct 200 baht from selected card
+  const deduct200Baht = async () => {
+    if (!selectedCard) {
+      Alert.alert('ข้อผิดพลาด', 'กรุณาเลือกบัตรที่ต้องการหักเงิน');
+      return;
+    }
+
+    setIsDeducting(true);
+    try {
+      // Create a mock transaction for 200 baht
+      const mockTransactionId = `mock_${Date.now()}`;
+      
+      // Process payment with the selected card
+      const result = await paymentService.processPayment({
+        transactionId: mockTransactionId,
+        cardId: selectedCard.id
+      });
+
+      if (result.success) {
+        Alert.alert('สำเร็จ', 'หักเงิน 200 บาท สำเร็จ');
+        // Refresh data to show updated balance/history
+        await loadData();
+      } else {
+        Alert.alert('ข้อผิดพลาด', result.message || 'ไม่สามารถหักเงินได้');
+      }
+    } catch (error: any) {
+      console.error('Error deducting 200 baht:', error);
+      Alert.alert('ข้อผิดพลาด', error.message || 'เกิดข้อผิดพลาดในการหักเงิน');
+    } finally {
+      setIsDeducting(false);
+    }
   };
 
   useEffect(() => {
@@ -143,7 +183,7 @@ export default function CardScreen() {
           </Text>
           {/* ปุ่มเพิ่ม (เพิ่มบัตรใหม่) */}
           <TouchableOpacity 
-            onPress={() => router.push('./add-payment-method')}
+            onPress={() => router.push('/(tabs)/card/add-payment-method')}
             className="w-10 h-10 rounded-full bg-white items-center justify-center shadow-sm"
           >
             <Ionicons name="add-outline" size={24} color="#1F2937" />
@@ -253,38 +293,50 @@ export default function CardScreen() {
               <Text className="text-lg font-semibold text-[#1F2937]">
                 วิธีการชำระเงิน
               </Text>
-              <TouchableOpacity onPress={() => router.push('./payment-methods')}>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/card/payment-methods')}>
                 <Text className="text-[#51BC8E] font-medium">ดูทั้งหมด</Text>
               </TouchableOpacity>
             </View>
 
-            {paymentMethods.length > 0 ? (
-               paymentMethods.slice(0, 2).map((method) => (
-                 <TouchableOpacity key={method.id} className="bg-white rounded-xl p-4 mb-3 shadow-sm">
+            {paymentCards.length > 0 ? (
+               paymentCards.slice(0, 2).map((card) => (
+                 <TouchableOpacity 
+                   key={card.id} 
+                   className={`bg-white rounded-xl p-4 mb-3 shadow-sm ${selectedCard?.id === card.id ? 'border-2 border-[#51BC8E]' : ''}`}
+                   onPress={() => setSelectedCard(card)}
+                 >
                    <View className="flex-row items-center justify-between">
                      <View className="flex-row items-center">
+                       {/* Radio button for selection */}
+                       <View className="mr-3">
+                         <View className={`w-6 h-6 rounded-full border-2 ${selectedCard?.id === card.id ? 'border-[#51BC8E] bg-[#51BC8E]' : 'border-gray-300'} items-center justify-center`}>
+                           {selectedCard?.id === card.id && (
+                             <Ionicons name="checkmark" size={16} color="white" />
+                           )}
+                         </View>
+                       </View>
                        {/* ไอคอนบัตร */}
                        <View className="w-12 h-12 bg-blue-100 rounded-lg items-center justify-center mr-3">
                          <Ionicons 
-                           name={method.type === 'card' ? 'card' : 'business'} 
+                           name="card" 
                            size={24} 
-                           color={method.type === 'card' ? '#3B82F6' : '#10B981'} 
+                           color="#3B82F6"
                          />
                        </View>
                        <View>
                          <Text className="font-semibold text-[#1F2937]">
-                           {method.type === 'card' ? method.brand?.toUpperCase() : 'บัญชีธนาคาร'}
+                           {card.brand?.toUpperCase() ?? 'บัตรเครดิต'}
                          </Text>
                          {/* แสดงเลขบัตรแบบปิดบางส่วน */}
                          <Text className="text-sm text-[#6B7280]">
-                           {method.type === 'card' ? `**** **** **** ${method.last_digits}` : method.name}
+                           {card.lastDigits ? `**** **** **** ${card.lastDigits}` : 'ไม่มีข้อมูลหมายเลข'}
                          </Text>
                        </View>
                      </View>
                      {/* แสดงว่าเป็นบัตรหลัก */}
                      <View className="flex-row items-center">
-                       <View className={`w-2 h-2 rounded-full mr-2 ${method.is_default ? 'bg-green-500' : 'bg-gray-300'}`} />
-                       <Text className="text-sm text-[#6B7280]">{method.is_default ? 'หลัก' : ''}</Text>
+                       <View className={`w-2 h-2 rounded-full mr-2 ${card.isDefault ? 'bg-green-500' : 'bg-gray-300'}`} />
+                       <Text className="text-sm text-[#6B7280]">{card.isDefault ? 'หลัก' : ''}</Text>
                      </View>
                    </View>
                  </TouchableOpacity>
@@ -292,9 +344,9 @@ export default function CardScreen() {
              ) : (
               <View className="bg-white rounded-xl p-6 items-center shadow-sm">
                 <Ionicons name="card-outline" size={48} color="#9CA3AF" />
-                <Text className="text-[#6B7280] mt-2 mb-4">ยังไม่มีวิธีการชำระเงิน</Text>
-                <TouchableOpacity 
-                  onPress={() => router.push('./add-payment-method')}
+                <Text className="text-[#6B7280] mt-2 mb-4">ยังไม่มีบัตรที่ผูกไว้</Text>
+                <TouchableOpacity
+                  onPress={() => router.push('/(tabs)/card/add-payment-method')}
                   className="px-4 py-2 bg-[#51BC8E] rounded-lg"
                 >
                   <Text className="text-white font-medium">เพิ่มบัตร</Text>
@@ -302,6 +354,29 @@ export default function CardScreen() {
               </View>
             )}
           </View>
+
+          {/* ปุ่มหักเงิน 200 บาท */}
+          <TouchableOpacity 
+            onPress={deduct200Baht}
+            disabled={!selectedCard || isDeducting}
+            className={`rounded-xl p-4 items-center mb-6 ${
+              selectedCard && !isDeducting ? 'bg-red-500' : 'bg-gray-300'
+            }`}
+          >
+            {isDeducting ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <>
+                <Ionicons name="cash" size={24} color="white" />
+                <Text className="text-white font-semibold mt-1">หักเงิน 200 บาท</Text>
+                {selectedCard && (
+                  <Text className="text-white text-sm mt-1">
+                    จากบัตร {selectedCard.brand?.toUpperCase()} ****{selectedCard.lastDigits}
+                  </Text>
+                )}
+              </>
+            )}
+          </TouchableOpacity>
 
           {/* === RECENT TRANSACTIONS SECTION === */}
           {/* แสดงธุรกรรมล่าสุด */}
@@ -311,7 +386,7 @@ export default function CardScreen() {
               <Text className="text-lg font-semibold text-[#1F2937]">
                 ธุรกรรมล่าสุด
               </Text>
-              <TouchableOpacity onPress={() => router.push('./payment-history')}>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/card/payment-history')}>
                 <Text className="text-sm text-[#51BC8E] font-medium">
                   ดูทั้งหมด
                 </Text>
@@ -321,58 +396,59 @@ export default function CardScreen() {
             {/* กล่องรายการธุรกรรม */}
             <View className="bg-white rounded-xl shadow-sm">
               {recentPayments.length > 0 ? (
-                recentPayments.map((payment, index) => (
-                  <TouchableOpacity
-                    key={payment.id}
-                    className={`p-4 ${index !== recentPayments.length - 1 ? "border-b border-gray-100" : ""}`}
-                  >
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center flex-1">
-                        {/* ไอคอนธุรกรรม */}
-                        <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${
-                          payment.status === 'successful' ? 'bg-green-100' : 
-                          payment.status === 'failed' ? 'bg-red-100' : 'bg-yellow-100'
-                        }`}>
-                          <Ionicons
-                            name={
-                              payment.status === 'successful' ? 'checkmark' : 
-                              payment.status === 'failed' ? 'close' : 'time'
-                            }
-                            size={20}
-                            color={
-                              payment.status === 'successful' ? '#10B981' : 
-                              payment.status === 'failed' ? '#EF4444' : '#F59E0B'
-                            }
-                          />
+                recentPayments.map((payment, index) => {
+                  const status = payment.status?.toLowerCase() ?? 'pending';
+                  const isSuccess = status === 'success' || status === 'paid';
+                  const isFailed = status === 'failed' || status === 'canceled';
+                  const statusColorClass = isSuccess
+                    ? 'bg-green-100'
+                    : isFailed
+                      ? 'bg-red-100'
+                      : 'bg-yellow-100';
+                  const iconName = isSuccess ? 'checkmark' : isFailed ? 'close' : 'time';
+                  const iconColor = isSuccess ? '#10B981' : isFailed ? '#EF4444' : '#F59E0B';
+                  const amountColor = isSuccess
+                    ? 'text-green-600'
+                    : isFailed
+                      ? 'text-red-600'
+                      : 'text-yellow-600';
+
+                  return (
+                    <TouchableOpacity
+                      key={payment.id}
+                      className={`p-4 ${index !== recentPayments.length - 1 ? "border-b border-gray-100" : ""}`}
+                    >
+                      <View className="flex-row items-center justify-between">
+                        <View className="flex-row items-center flex-1">
+                          {/* ไอคอนธุรกรรม */}
+                          <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${statusColorClass}`}>
+                            <Ionicons name={iconName} size={20} color={iconColor} />
+                          </View>
+                          {/* รายละเอียดธุรกรรม */}
+                          <View className="flex-1">
+                            <Text className="font-medium text-[#1F2937]">
+                              {payment.transaction?.transactionId
+                                ? `ธุรกรรม #${payment.transaction.transactionId}`
+                                : 'การชำระเงิน'}
+                            </Text>
+                            <Text className="text-sm text-[#6B7280]">
+                              {formatDate(payment.createdAt)}
+                            </Text>
+                          </View>
                         </View>
-                        {/* รายละเอียดธุรกรรม */}
-                        <View className="flex-1">
-                          <Text className="font-medium text-[#1F2937]">
-                            {payment.description || 'การชำระเงิน'}
+                        {/* จำนวนเงินและสถานะ */}
+                        <View className="items-end">
+                          <Text className={`font-semibold ${amountColor}`}>
+                            {formatAmount(payment.amount, payment.currency)}
                           </Text>
-                          <Text className="text-sm text-[#6B7280]">
-                            {formatDate(payment.created_at)}
+                          <Text className="text-[#6B7280] text-xs">
+                            {isSuccess ? 'สำเร็จ' : isFailed ? 'ล้มเหลว' : 'รอดำเนินการ'}
                           </Text>
                         </View>
                       </View>
-                      {/* จำนวนเงินและสถานะ */}
-                      <View className="items-end">
-                        <Text
-                          className={`font-semibold ${
-                            payment.status === 'successful' ? 'text-green-600' : 
-                            payment.status === 'failed' ? 'text-red-600' : 'text-yellow-600'
-                          }`}
-                        >
-                          {formatAmount(payment.amount, payment.currency)}
-                        </Text>
-                        <Text className="text-[#6B7280] text-xs">
-                          {payment.status === 'successful' ? 'สำเร็จ' : 
-                           payment.status === 'failed' ? 'ล้มเหลว' : 'รอดำเนินการ'}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                ))
+                    </TouchableOpacity>
+                  );
+                })
               ) : (
                 <View className="items-center py-8">
                   <Ionicons name="receipt-outline" size={48} color="#9CA3AF" />

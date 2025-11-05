@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun run --watch src/app.ts",
-    "start": "bun run src/app.ts"
+    "start": "bun run src/app.ts",
+    "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
     "@elysiajs/cookie": "^0.8.0",

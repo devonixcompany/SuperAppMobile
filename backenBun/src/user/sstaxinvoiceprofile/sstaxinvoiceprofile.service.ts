@@ -1,8 +1,8 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
-  BranchType,
-  SsTaxInvoiceProfile,
-  TaxpayerType,
+    BranchType,
+    SsTaxInvoiceProfile,
+    TaxpayerType,
 } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { prisma } from "../../lib/prisma";
@@ -118,6 +118,7 @@ export class SsTaxInvoiceProfileService {
       subdistrictId: data.subdistrictId,
       postalCode: data.postalCode,
       isDefault: data.isDefault ?? false,
+      updatedAt: new Date(),
     };
   }
 

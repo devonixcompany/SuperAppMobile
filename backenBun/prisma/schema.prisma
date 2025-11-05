@@ -42,7 +42,6 @@ model SsTaxInvoiceProfile {
   @@unique([userId, taxId, branchCode])
   @@index([userId])
 }
-
 model Station {
   id                   String           @id @default(uuid())
   stationname          String           @unique
@@ -98,42 +97,41 @@ model admin_refresh_tokens {
 
 model charge_points {
   id              String  @id @default(uuid())
-  chargepointname String                                          // ชื่อจุดชาร์จ
-  stationId       String?                                         // รหัสสถานีที่ตั้งจุดชาร์จ
+  chargepointname String
+  stationId       String?
 
   openingHours   String?
-  is24Hours      Boolean     @default(false)                      // เปิด 24 ชั่วโมงหรือไม่
-  brand          String                                           // ยี่ห้อของอุปกรณ์ชาร์จ
-  serialNumber   String      @unique                              // หมายเลขประจำอุปกรณ์  
-  powerRating    Float                                            // กำลังไฟของจุดชาร์จ
-  powerSystem    Int         @default(1)                          // ประเภทระบบไฟฟ้า
-  connectorCount Int         @default(1)                          // จำนวนคอนเน็กเตอร์ที่มีให้ใช้งาน
-  protocol       OCPPVersion                                      // เวอร์ชัน OCPP ที่อุปกรณ์รองรับ
-  csmsUrl        String?                                          // ที่อยู่ของ CSMS (Charge Station Management System)
+  is24Hours      Boolean     @default(false)
+  brand          String
+  serialNumber   String      @unique
+  powerRating    Float
+  powerSystem    Int         @default(1)
+  connectorCount Int         @default(1)
+  protocol       OCPPVersion
+  csmsUrl        String?
 
+  chargePointIdentity  String            @unique
+  chargepointstatus    ChargePointStatus @default(AVAILABLE)
+  maxPower             Float?
+  lastSeen             DateTime?
+  heartbeatIntervalSec Int?
+  vendor               String?
+  model                String?
+  firmwareVersion      String?
+  ocppProtocolRaw      String?
+  ocppSessionId        String?
+  isWhitelisted        Boolean           @default(true)
+  ownerId              String?
+  ownershipType        OwnershipType     @default(PUBLIC)
+  isPublic             Boolean           @default(true)
 
-  chargePointIdentity  String            @unique                  // รหัสประจำจุดชาร์จ (Charge Point Identity)
-  chargepointstatus    ChargePointStatus @default(AVAILABLE)      // สถานะปัจจุบันของจุดชาร์จ
-  maxPower             Float?                                     // กำลังไฟสูงสุดที่จุดชาร์จสามารถจ่ายได้
-  lastSeen             DateTime?                                  // เวลาที่อุปกรณ์ติดต่อครั้งล่าสุด
-  heartbeatIntervalSec Int?                                       // ช่วงเวลาการส่งสัญญาณหัวใจ (heartbeat) เป็นวินาที
-  vendor               String?                                    // ผู้ผลิตอุปกรณ์
-  model                String?                                    // รุ่นของอุปกรณ์
-  firmwareVersion      String?                                    // เวอร์ชันเฟิร์มแวร์ของอุปกรณ์
-  ocppProtocolRaw      String?                                    // ข้อมูลดิบเกี่ยวกับโปรโตคอล OCPP ที่อุปกรณ์ใช้
-  ocppSessionId        String?                                    // รหัสเซสชัน OCPP ปัจจุบัน
-  isWhitelisted        Boolean           @default(true)           // ระบุว่าจุดชาร์จนี้อยู่ในรายการอนุญาตหรือไม่
-  ownerId              String?                                    // รหัสเจ้าของจุดชาร์จ (ถ้าเป็นส่วนตัว)
-  ownershipType        OwnershipType     @default(PUBLIC)         // ประเภทความเป็นเจ้าของของจุดชาร์จ
-  isPublic             Boolean           @default(true)           // ระบุว่าจุดชาร์จนี้เป็นสาธารณะหรือไม่
-
-  createdAt    DateTime       @default(now())                     // เวลาที่สร้างข้อมูล
-  updatedAt    DateTime                                           // เวลาที่อัปเดตข้อมูลล่าสุด
-  urlwebSocket String?                                            // ที่อยู่ WebSocket สำหรับการสื่อสารกับจุดชาร์จ
-  User         User?          @relation(fields: [ownerId], references: [id])         // ความสัมพันธ์กับผู้ใช้เจ้าของจุดชาร์จ
-  Station      Station?       @relation(fields: [stationId], references: [id])       // ความสัมพันธ์กับสถานีที่ตั้งจุดชาร์จ
-  connectors   connectors[]                                                          // ความสัมพันธ์กับคอนเน็กเตอร์ที่เชื่อมต่อกับจุดชาร์จ
-  transactions transactions[]                                                        // ความสัมพันธ์กับธุรกรรมการชาร์จที่เกิดขึ้นที่จุดชาร์จนี้
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime
+  urlwebSocket String?
+  User         User?          @relation(fields: [ownerId], references: [id])
+  Station      Station?       @relation(fields: [stationId], references: [id])
+  connectors   connectors[]
+  transactions transactions[]
 }
 
 model connectors {

@@ -231,7 +231,7 @@ export class ChargePointService {
   private omitUndefined<T extends Record<string, any>>(source: T) {
     return Object.fromEntries(
       Object.entries(source).filter(([, value]) => value !== undefined)
-    ) as Partial<T>;
+    ) as T;
   }
 
   /**
@@ -290,10 +290,10 @@ export class ChargePointService {
         });
 
         if (this.hasStationUpdates(updateData)) {
-          updateData.updatedAt = new Date();
+          const updateWithTimestamp = { ...updateData, updatedAt: new Date() };
           await this.prisma.station.update({
             where: { id: existingStation.id },
-            data: updateData
+            data: updateWithTimestamp
           });
         }
 
@@ -321,10 +321,11 @@ export class ChargePointService {
         .slice(2, 8)}`;
       const baseData = this.ensureStationDefaults(stationFields, fallbackLocation);
 
+      const stationNameForCreate = (requestedStationName ?? generatedName) as string;
       const station = await this.prisma.station.create({
         data: this.omitUndefined({
           id: randomUUID(),
-          stationname: requestedStationName ?? generatedName,
+          stationname: stationNameForCreate,
           ...baseData,
           updatedAt: new Date()
         })
@@ -561,7 +562,7 @@ export class ChargePointService {
       });
 
       // ค้นหาหรือสร้างหัวชาร์จตามหมายเลขที่ได้รับ
-      const connector = await this.prisma.connectorss.upsert({
+      const connector = await this.prisma.connectors.upsert({
         where: {
           chargePointId_connectorId: {
             chargePointId: chargePoint.id,

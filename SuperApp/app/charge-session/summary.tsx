@@ -1,7 +1,14 @@
+import { paymentService, type PaymentCard } from "@/services/api/payment.service";
+import { transactionService } from "@/services/api/transaction.service";
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useMemo } from "react";
+import * as WebBrowser from "expo-web-browser";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -9,7 +16,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 
 const COLORS = {
   primary: "#1D2144",
@@ -104,6 +110,31 @@ export default function ChargeSummaryScreen() {
   const currencyParam = resolveParam(params.currency);
   const rateParam = resolveParam(params.rate);
 
+  const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [isPaymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [isProcessingPayment, setProcessingPayment] = useState(false);
+  const [isLoadingCards, setLoadingCards] = useState(true);
+
+  const loadPaymentCards = useCallback(async () => {
+    setLoadingCards(true);
+    try {
+      const response = await paymentService.getPaymentCards();
+      if (response.success && response.data) {
+        setPaymentCards(response.data);
+        const defaultCard = response.data.find((card) => card.isDefault);
+        setSelectedCardId(
+          (defaultCard ?? response.data[0])?.id ?? null
+        );
+      }
+    } catch (error) {
+      console.error('Error loading payment cards:', error);
+      Alert.alert('ข้อผิดพลาด', 'ไม่สามารถโหลดบัตรชำระเงินได้');
+    } finally {
+      setLoadingCards(false);
+    }
+  }, []);
+
   const energyKWh = useMemo(() => {
     const parsed = Number(energyParam);
     return Number.isFinite(parsed) ? parsed : null;
@@ -134,10 +165,92 @@ export default function ChargeSummaryScreen() {
     return Number.isFinite(parsed) ? parsed : null;
   }, [rateParam]);
 
+  useEffect(() => {
+    loadPaymentCards();
+  }, [loadPaymentCards]);
+
+  const selectedCard = useMemo(
+    () => paymentCards.find((card) => card.id === selectedCardId) ?? null,
+    [paymentCards, selectedCardId]
+  );
+
   const currencyLabel = currencyParam ?? "บาท";
   const connectorLabel = connectorIdParam
     ? `หัวชาร์จ ${connectorIdParam}`
     : "-";
+
+  const canInitiatePayment =
+    Boolean(transactionId) && totalCost != null && totalCost > 0;
+
+  const handleOpenPaymentModal = useCallback(() => {
+    if (!canInitiatePayment) {
+      Alert.alert('ไม่สามารถชำระเงินได้', 'ไม่พบข้อมูลค่าชาร์จที่ต้องชำระ');
+      return;
+    }
+
+    if (paymentCards.length === 0) {
+      Alert.alert('ยังไม่มีบัตร', 'กรุณาเพิ่มบัตรก่อนทำการชำระเงิน', [
+        { text: 'ยกเลิก', style: 'cancel' },
+        {
+          text: 'เพิ่มบัตร',
+          onPress: () => router.push('/(tabs)/card/add-payment-method'),
+        },
+      ]);
+      return;
+    }
+
+    setPaymentModalVisible(true);
+  }, [canInitiatePayment, paymentCards.length]);
+
+  const handleAddNewCard = useCallback(() => {
+    setPaymentModalVisible(false);
+    router.push('/(tabs)/card/add-payment-method');
+  }, []);
+
+  const handleProcessPayment = useCallback(async () => {
+    if (!transactionId) {
+      Alert.alert('ไม่พบข้อมูลธุรกรรม', 'ไม่สามารถระบุธุรกรรมสำหรับการชำระเงินได้');
+      return;
+    }
+
+    setProcessingPayment(true);
+    try {
+      const response = await transactionService.processTransactionPayment(transactionId, {
+        cardId: selectedCardId ?? undefined,
+      });
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'ไม่สามารถชำระเงินได้');
+      }
+
+      const result = response.data;
+
+      if (!result.success) {
+        Alert.alert('ชำระเงินไม่สำเร็จ', result.error ?? 'ไม่สามารถชำระเงินได้');
+        return;
+      }
+
+      setPaymentModalVisible(false);
+
+      if (result.requiresAction && result.authorizeUri) {
+        await WebBrowser.openBrowserAsync(result.authorizeUri);
+        Alert.alert('ต้องยืนยันเพิ่มเติม', 'กรุณาทำตามขั้นตอนกับธนาคารของคุณเพื่อยืนยันการชำระเงิน');
+        return;
+      }
+
+      await loadPaymentCards();
+      Alert.alert('ชำระเงินสำเร็จ', 'บันทึกการชำระเงินเรียบร้อยแล้ว');
+    } catch (error: any) {
+      console.error('Process payment error:', error);
+      const message =
+        error?.message ??
+        error?.response?.data?.message ??
+        'ไม่สามารถชำระเงินได้';
+      Alert.alert('ข้อผิดพลาด', message);
+    } finally {
+      setProcessingPayment(false);
+    }
+  }, [loadPaymentCards, selectedCardId, transactionId]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -226,7 +339,68 @@ export default function ChargeSummaryScreen() {
             <InfoRow label="เหตุผลการหยุด" value={stopReasonParam || "AUTO"} />
           </View>
 
+          {paymentCards.length > 0 ? (
+            <View style={styles.paymentCardSection}>
+              <View style={styles.paymentCardHeader}>
+                <Text style={styles.paymentCardTitle}>บัตรสำหรับการชำระเงิน</Text>
+                <TouchableOpacity onPress={handleOpenPaymentModal}>
+                  <Text style={styles.paymentCardAction}>เปลี่ยนบัตร</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.paymentCardBody}>
+                <View style={styles.paymentCardIcon}>
+                  <Ionicons name="card" size={22} color="#FFFFFF" />
+                </View>
+                <View style={styles.paymentCardInfo}>
+                  <Text style={styles.paymentCardBrand}>
+                    {selectedCard?.brand?.toUpperCase() ?? "บัตรเครดิต"}
+                  </Text>
+                  <Text style={styles.paymentCardNumber}>
+                    {selectedCard?.lastDigits
+                      ? `**** **** **** ${selectedCard.lastDigits}`
+                      : "เลือกบัตรสำหรับชำระเงิน"}
+                  </Text>
+                  {selectedCard?.isDefault && (
+                    <Text style={styles.paymentCardBadge}>บัตรหลัก</Text>
+                  )}
+                </View>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.paymentCardEmpty}
+              activeOpacity={0.85}
+              onPress={handleOpenPaymentModal}
+            >
+              <Ionicons name="card-outline" size={20} color={COLORS.textSecondary} />
+              <View style={styles.paymentCardEmptyTextWrapper}>
+                <Text style={styles.paymentCardEmptyTitle}>เพิ่มบัตรเพื่อชำระเงิน</Text>
+                <Text style={styles.paymentCardEmptySubtitle}>
+                  ผูกบัตรเครดิตเพื่อชำระค่าชาร์จได้รวดเร็ว
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
           <View style={styles.actions}>
+            {canInitiatePayment && (
+              <TouchableOpacity
+                style={styles.paymentButton}
+                activeOpacity={0.85}
+                onPress={handleOpenPaymentModal}
+              >
+                <LinearGradient
+                  colors={["#4ADE80", "#22D3EE"]}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={styles.paymentButtonGradient}
+                >
+                  <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.paymentButtonText}>ชำระค่าใช้จ่าย</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.primaryButton}
               activeOpacity={0.85}
@@ -253,6 +427,106 @@ export default function ChargeSummaryScreen() {
             </TouchableOpacity>
           </View>
         </ScrollView>
+
+        <Modal
+          visible={isPaymentModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setPaymentModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>เลือกบัตรสำหรับชำระเงิน</Text>
+              <View style={styles.modalCardList}>
+                {isLoadingCards ? (
+                  <View style={styles.modalLoader}>
+                    <ActivityIndicator color="#2563EB" />
+                  </View>
+                ) : paymentCards.length === 0 ? (
+                  <TouchableOpacity
+                    style={styles.modalEmptyState}
+                    onPress={handleAddNewCard}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="card-outline" size={24} color="#2563EB" />
+                    <Text style={styles.modalEmptyStateText}>
+                      ยังไม่มีบัตรที่ผูกไว้
+                    </Text>
+                    <Text style={styles.modalEmptyStateHint}>
+                      แตะเพื่อเพิ่มบัตรใหม่
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  paymentCards.map((card) => {
+                    const isSelected = card.id === selectedCardId;
+                    return (
+                      <TouchableOpacity
+                        key={card.id}
+                        style={[
+                          styles.modalCardRow,
+                          isSelected && styles.modalCardRowSelected,
+                        ]}
+                        onPress={() => setSelectedCardId(card.id)}
+                        activeOpacity={0.85}
+                      >
+                        <View style={styles.modalCardIconWrapper}>
+                          <Ionicons name="card" size={20} color="#2563EB" />
+                        </View>
+                        <View style={styles.modalCardInfo}>
+                          <Text style={styles.modalCardBrand}>
+                            {card.brand?.toUpperCase() ?? "บัตรเครดิต"}
+                          </Text>
+                          <Text style={styles.modalCardDigits}>
+                            {card.lastDigits
+                              ? `**** **** **** ${card.lastDigits}`
+                              : "ไม่มีข้อมูลเลขบัตร"}
+                          </Text>
+                        </View>
+                        {isSelected ? (
+                          <Ionicons name="radio-button-on" size={20} color="#2563EB" />
+                        ) : (
+                          <Ionicons name="radio-button-off" size={20} color="#CBD5F5" />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </View>
+
+              <TouchableOpacity
+                style={styles.modalAddCardButton}
+                onPress={handleAddNewCard}
+              >
+                <Ionicons name="add" size={16} color="#2563EB" />
+                <Text style={styles.modalAddCardLabel}>เพิ่มบัตรใหม่</Text>
+              </TouchableOpacity>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.modalSecondaryButton}
+                  onPress={() => setPaymentModalVisible(false)}
+                  disabled={isProcessingPayment}
+                >
+                  <Text style={styles.modalSecondaryLabel}>ยกเลิก</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modalPrimaryButton,
+                    (!selectedCardId || isProcessingPayment) && styles.modalPrimaryButtonDisabled,
+                  ]}
+                  onPress={handleProcessPayment}
+                  disabled={!selectedCardId || isProcessingPayment}
+                >
+                  {isProcessingPayment ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.modalPrimaryLabel}>ชำระเงิน</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </LinearGradient>
     </SafeAreaView>
   );
@@ -388,8 +662,103 @@ const styles = StyleSheet.create({
     textAlign: "right",
     marginLeft: 12,
   },
+  paymentCardSection: {
+    borderRadius: 18,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.cardLight,
+    padding: 18,
+    marginBottom: 24,
+  },
+  paymentCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  paymentCardTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: COLORS.textPrimary,
+  },
+  paymentCardAction: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.glow,
+  },
+  paymentCardBody: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  paymentCardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "rgba(37,99,235,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+  },
+  paymentCardInfo: {
+    marginLeft: 16,
+  },
+  paymentCardBrand: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+  },
+  paymentCardNumber: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  paymentCardBadge: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#22D3EE",
+  },
+  paymentCardEmpty: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.cardLight,
+    padding: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 24,
+  },
+  paymentCardEmptyTextWrapper: {
+    flex: 1,
+  },
+  paymentCardEmptyTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: COLORS.textPrimary,
+  },
+  paymentCardEmptySubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
   actions: {
     gap: 12,
+  },
+  paymentButton: {
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  paymentButtonGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 16,
+  },
+  paymentButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
   },
   primaryButton: {
     borderRadius: 16,
@@ -422,5 +791,134 @@ const styles = StyleSheet.create({
     color: COLORS.glow,
     fontSize: 15,
     fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  modalContainer: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginBottom: 16,
+  },
+  modalCardList: {
+    maxHeight: 320,
+  },
+  modalLoader: {
+    paddingVertical: 36,
+    alignItems: "center",
+  },
+  modalCardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    backgroundColor: "#FFFFFF",
+  },
+  modalCardRowSelected: {
+    borderColor: "#2563EB",
+    backgroundColor: "rgba(37,99,235,0.08)",
+  },
+  modalCardIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "rgba(37,99,235,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  modalCardInfo: {
+    flex: 1,
+  },
+  modalCardBrand: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#0F172A",
+  },
+  modalCardDigits: {
+    fontSize: 13,
+    color: "#475569",
+    marginTop: 4,
+  },
+  modalAddCardButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+    marginVertical: 8,
+  },
+  modalAddCardLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2563EB",
+  },
+  modalActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 12,
+  },
+  modalSecondaryButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#CBD5F5",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  modalSecondaryLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1E293B",
+  },
+  modalPrimaryButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalPrimaryButtonDisabled: {
+    backgroundColor: "#93C5FD",
+  },
+  modalPrimaryLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  modalEmptyState: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#CBD5F5",
+    paddingVertical: 24,
+    alignItems: "center",
+    gap: 6,
+  },
+  modalEmptyStateText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1E293B",
+  },
+  modalEmptyStateHint: {
+    fontSize: 12,
+    color: "#64748B",
   },
 });

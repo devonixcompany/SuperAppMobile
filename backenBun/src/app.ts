@@ -4,7 +4,6 @@ import { fromTypes, openapi } from '@elysiajs/openapi';
 import { Elysia, t } from 'elysia';
 import { adminServiceContainer } from './admin';
 import { logger, requestLogger } from './lib/logger';
-import { userAuthMiddleware } from './middleware/user-auth';
 import { serviceContainer } from './user';
 
 // Get services from container
@@ -187,9 +186,8 @@ export const app = new Elysia()
     name: 'jwt',
     secret: process.env.JWT_SECRET || 'your-secret-key'
   }))
-  .use(userAuthMiddleware(jwtService))
   // Global guard: block non-public routes when JWT is missing or invalid
-  .onBeforeHandle(({ request, user, set }: any) => {
+  .onBeforeHandle(async ({ request, set, cookie }: any) => {
     if (request.method === "OPTIONS") {
       return;
     }
@@ -197,22 +195,83 @@ export const app = new Elysia()
     const path = new URL(request.url).pathname;
     const method = request.method.toUpperCase();
 
+    // Authenticate user directly in main app
+    const authHeader = request.headers.get('authorization');
+    let user = null;
+
+    console.log('🔍 [AUTH DEBUG] Request details:', {
+      path,
+      method,
+      hasAuthHeader: !!authHeader,
+      authHeaderPreview: authHeader 
+    });
+
+    // Try to authenticate if auth header exists
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      console.log('🎫 [AUTH] Extracting token, length:', token.length);
+
+      try {
+        const payload = await jwtService.verifyToken(token);
+        if (payload) {
+          console.log('✅ [AUTH] Token verified for user:', payload.userId);
+          
+          // แสดงเวลาหมดอายุของ token
+          if (payload.exp) {
+            const expDate = new Date(payload.exp * 1000);
+            const now = new Date();
+            const timeLeft = Math.floor((expDate.getTime() - now.getTime()) / 1000);
+            console.log('⏰ [AUTH] Token expires at:', expDate.toLocaleString());
+            console.log('⏱️ [AUTH] Time left:', timeLeft > 0 ? `${timeLeft} seconds` : 'EXPIRED');
+          }
+
+          // Get user from database
+          const { prisma } = await import('./lib/prisma');
+          const dbUser = await prisma.user.findUnique({
+            where: { id: payload.userId },
+            select: {
+              id: true,
+              phoneNumber: true,
+              status: true,
+              typeUser: true,
+              createdAt: true
+            }
+          });
+
+          if (dbUser && dbUser.status === 'ACTIVE') {
+            user = dbUser;
+            console.log('✅ [AUTH] User authenticated:', user.id);
+          } else {
+            console.log('❌ [AUTH] User not found or inactive');
+          }
+        } else {
+          console.log('❌ [AUTH] Token verification failed');
+        }
+      } catch (error) {
+        console.error('❌ [AUTH] Authentication error:', error);
+      }
+    }
+
     if (isPublicRoute(path)) {
+      console.log('🌐 [AUTH] Public route, allowing access:', path);
       return;
     }
 
     // Skip global guard for admin routes - they have their own strict authentication
     if (path.startsWith('/admin/') || path.startsWith('/api/admin/')) {
-      console.log('Ã°Å¸â€Â Admin route detected, skipping global guard (admin middleware will handle auth):', path);
+      console.log('🔐 Admin route detected, skipping global guard (admin middleware will handle auth):', path);
       return;
     }
 
     if (isGatewayRoute(method, path)) {
       const gatewayKey = extractGatewayKey(request);
+      console.log('🚪 [AUTH] Gateway route detected:', { path, hasKey: !!gatewayKey });
       if (gatewayKey && gatewayKey === GATEWAY_API_KEY) {
+        console.log('✅ [AUTH] Gateway key valid, allowing access');
         return;
       }
 
+      console.log('❌ [AUTH] Invalid gateway key');
       logger.warn("Unauthorized gateway access attempt", {
         path,
         method,
@@ -227,11 +286,13 @@ export const app = new Elysia()
 
     // For user routes, check user authentication
     if (!user) {
-      if (isDevBypassEnabled()) {
-        console.log('Ã°Å¸â€â€œ Development mode: Allowing user access without authentication for eiei', path);
-        return; // Ã Â¸Â­Ã Â¸â„¢Ã Â¸Â¸Ã Â¸ÂÃ Â¸Â²Ã Â¸â€¢Ã Â¹Æ’Ã Â¸Â«Ã Â¹â€°Ã Â¹â‚¬Ã Â¸â€šÃ Â¹â€°Ã Â¸Â²Ã Â¸â€“Ã Â¸Â¶Ã Â¸â€¡Ã Â¹â€žÃ Â¸â€Ã Â¹â€°
-      }
-      
+      console.log('❌ [AUTH] User authentication failed:', {
+        path,
+        method,
+        hasAuthHeader: !!authHeader,
+        reason: 'Authentication failed or no valid token'
+      });
+
       logger.warn('Unauthorized user API access blocked', {
         path,
         method,
@@ -243,40 +304,62 @@ export const app = new Elysia()
         message: 'Unauthorized: missing or invalid user token'
       };
     }
+
+    console.log('✅ [AUTH] User authenticated successfully:', {
+      path,
+      userId: user.id,
+      phoneNumber: user.phoneNumber
+    });
+
+    // Add user to context for controllers to use
+    (request as any).user = user;
   })
   .use(serviceContainer.getAuthController())
   .use(serviceContainer.getUserController())
   .use(serviceContainer.getChargePointController())
   .use((() => {
-    console.log('Registering admin auth controller');
+    console.log('🔧 Registering admin auth controller');
     const adminAuthCtrl = adminServiceContainer.getAuthController();
-    console.log('Admin auth controller registered');
+    console.log('✅ Admin auth controller registered');
     return adminAuthCtrl;
   })())
   .use((() => {
-    console.log('Registering admin chargepoints controller');
-    const adminChargePointsCtrl =
-      adminServiceContainer.getChargePointsCrudController();
-    console.log('Admin chargepoints controller registered');
-    return adminChargePointsCtrl;
+    console.log('🔧 Registering admin chargepoint controller');
+    const adminChargePointCtrl = adminServiceContainer.getChargePointsCrudController();
+    console.log('✅ Admin chargepoint controller registered');
+    return adminChargePointCtrl;
   })())
-  .use((() => {
-    console.log('Registering admin station controller');
-    const adminStationCtrl = adminServiceContainer.getStationController();
-    console.log('Admin station controller registered');
-    return adminStationCtrl;
-  })())
-  .use((() => {
-    console.log('Registering admin chargepoint connector controller');
-    const adminCpcCtrl =
-      adminServiceContainer.getChargePointConnectorController();
-    console.log('Admin chargepoint connector controller registered');
-    return adminCpcCtrl;
-  })())
+  .derive(({ request }: any) => {
+    // Extract user from request and make it available in context
+    const user = (request as any).user;
+    console.log('🔧 [DERIVE] Extracting user from request:', {
+      hasUser: !!user,
+      userId: user?.id,
+      path: request.url
+    });
+    return {
+      user: user
+    };
+  })
   .use(serviceContainer.getTransactionController())
-  .use(serviceContainer.getPaymentController())
+  .use((app: any) => {
+    // Create a wrapper that injects user into context for payment and tax invoice controllers
+    return app
+      .onBeforeHandle(({ request, set }: any) => {
+        const user = (request as any).user;
+        if (request.url.includes('/api/payment') || request.url.includes('/api/tax-invoice')) {
+          console.log('🔧 [WRAPPER] Injecting user for protected route:', {
+            hasUser: !!user,
+            userId: user?.id,
+            path: request.url
+          });
+          (request as any).elysiaContext = { user };
+        }
+      })
+      .use(serviceContainer.getPaymentController())
+      .use(serviceContainer.getSsTaxInvoiceProfileController());
+  })
   .use(serviceContainer.getWebhookController())
-  .use(serviceContainer.getSsTaxInvoiceProfileController())
   .guard(
     ({ user }: any) => {
       // Allow access in development mode even without user
@@ -296,13 +379,13 @@ export const app = new Elysia()
           createdAt: new Date().toISOString()
         } : null);
 
-          return {
-            success: true,
-            data: {
-              user: profileUser,
-            },
-          };
-        },
+        return {
+          success: true,
+          data: {
+            user: profileUser,
+          },
+        };
+      },
         {
           detail: {
             tags: ["User Management"],
@@ -350,7 +433,7 @@ export const app = new Elysia()
     {
       detail: {
         tags: ["Health"],
-        summary: "Ã°Å¸ÂÂ¥ Health Check",
+        summary: "🏥 Health Check",
         description:
           "Returns the current status and health information of the API server",
         responses: {
@@ -409,10 +492,10 @@ export const app = new Elysia()
   });
 
 app.listen(port, () => {
-  console.log(`Ã°Å¸Â¦Å  Server is running on port ${port}`);
-  console.log(`Ã°Å¸â€œÅ¡ OpenAPI Documentation: ${serverUrl}/openapi`);
-  console.log(`Ã°Å¸â€œâ€ž OpenAPI Schema: ${serverUrl}/openapi/json`);
-  console.log(`Ã°Å¸â€œÂ API Endpoints:`);
+  console.log(`🦊 Server is running on port ${port}`);
+  console.log(`📚 OpenAPI Documentation: ${serverUrl}/openapi`);
+  console.log(`📄 OpenAPI Schema: ${serverUrl}/openapi/json`);
+  console.log(`📝 API Endpoints:`);
   console.log(`   POST /api/auth/register - User registration`);
   console.log(`   POST /api/auth/login - User login`);
   console.log(`   POST /api/auth/refresh - Refresh token`);

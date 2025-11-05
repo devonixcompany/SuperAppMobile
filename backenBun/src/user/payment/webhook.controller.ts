@@ -1,7 +1,7 @@
-import { Elysia, t } from 'elysia';
 import crypto from 'crypto';
-import { PaymentService } from './payment.service';
+import { Elysia, t } from 'elysia';
 import { prisma } from '../../lib/prisma';
+import { PaymentService } from './payment.service';
 
 export const webhookController = () =>
   new Elysia({ prefix: '/api/payment/omise' })
@@ -100,7 +100,7 @@ async function handleChargeComplete(chargeData: any) {
       
       // Update transaction status
       if (payment.transaction) {
-        await prisma.transaction.update({
+        await prisma.transactions.update({
           where: { id: payment.transaction.id },
           data: { 
             status: 'COMPLETED'
@@ -115,7 +115,7 @@ async function handleChargeComplete(chargeData: any) {
       
       // Update transaction status
       if (payment.transaction) {
-        await prisma.transaction.update({
+        await prisma.transactions.update({
           where: { id: payment.transaction.id },
           data: { 
             status: 'FAILED'
@@ -257,7 +257,7 @@ async function handleRefundCreate(refundData: any) {
 
     // Update transaction status if needed
     if (payment.transaction) {
-      await prisma.transaction.update({
+      await prisma.transactions.update({
         where: { id: payment.transaction.id },
         data: { 
           status: 'CANCELED'

@@ -1,8 +1,8 @@
+import { Prisma } from "@prisma/client";
 import { JWTService } from "../../lib/jwt";
 import { logAuthEvent, logger } from "../../lib/logger";
 import { hashPassword, verifyPassword } from "../../lib/password";
 import { prisma } from "../../lib/prisma";
-import { Prisma } from "@prisma/client";
 
 export interface RefreshTokenResponse {
   success: boolean;

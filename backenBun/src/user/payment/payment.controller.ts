@@ -7,16 +7,19 @@ export const paymentController = (paymentService: PaymentService) =>
     // Add payment card
     .post(
       '/cards',
-      async ({ body, user, set }: any) => {
+      async ({ body, request, set }: any) => {
+        const user = (request as any).user || (request as any).elysiaContext?.user;
+        console.log('Add payment card request /api/payment/cards', body);
+        console.log('Add payment card request /api/payment/cards user', user);
         try {
           if (!user) {
             set.status = 401;
             return { success: false, message: 'Unauthorized' };
           }
 
-          const { token } = body;
-          const result = await PaymentService.addPaymentCard(user.id, token);
-          
+          const { token, setDefault } = body;
+          const result = await PaymentService.addPaymentCard(user.id, token, setDefault);
+          console.log('Add payment card result:', result);
           return {
             success: true,
             message: 'เพิ่มบัตรเครดิตสำเร็จ',
@@ -33,7 +36,8 @@ export const paymentController = (paymentService: PaymentService) =>
       },
       {
         body: t.Object({
-          token: t.String()
+          token: t.String(),
+          setDefault: t.Optional(t.Boolean())
         })
       }
     )
@@ -41,7 +45,8 @@ export const paymentController = (paymentService: PaymentService) =>
     // Get payment cards
     .get(
       '/cards',
-      async ({ user, set }: any) => {
+      async ({ request, set }: any) => {
+        const user = (request as any).user || (request as any).elysiaContext?.user;
         try {
           if (!user) {
             set.status = 401;
@@ -68,7 +73,8 @@ export const paymentController = (paymentService: PaymentService) =>
     // Remove payment card
     .delete(
       '/cards/:cardId',
-      async ({ params, user, set }: any) => {
+      async ({ params, request, set }: any) => {
+        const user = (request as any).user || (request as any).elysiaContext?.user;
         try {
           if (!user) {
             set.status = 401;
@@ -101,7 +107,8 @@ export const paymentController = (paymentService: PaymentService) =>
     // Set default payment card
     .put(
       '/cards/:cardId/default',
-      async ({ params, user, set }: any) => {
+      async ({ params, request, set }: any) => {
+        const user = (request as any).user || (request as any).elysiaContext?.user;
         try {
           if (!user) {
             set.status = 401;
@@ -134,7 +141,8 @@ export const paymentController = (paymentService: PaymentService) =>
     // Process payment for transaction
     .post(
       '/process',
-      async ({ body, user, set }: any) => {
+      async ({ body, request, set }: any) => {
+        const user = (request as any).user || (request as any).elysiaContext?.user;
         try {
           if (!user) {
             set.status = 401;
@@ -169,7 +177,8 @@ export const paymentController = (paymentService: PaymentService) =>
     // Get payment history
     .get(
       '/history',
-      async ({ query, user, set }: any) => {
+      async ({ query, request, set }: any) => {
+        const user = (request as any).user || (request as any).elysiaContext?.user;
         try {
           if (!user) {
             set.status = 401;

@@ -50,10 +50,12 @@ export const API_CONFIG = {
     
     // Payment
     PAYMENT: {
-      METHODS: '/api/payment/methods',
-      ADD_METHOD: '/api/payment/methods',
-      REMOVE_METHOD: (methodId: string) => 
-        `/api/payment/methods/${methodId}`,
+      CARDS: '/api/payment/cards',
+      ADD_CARD: '/api/payment/cards',
+      REMOVE_CARD: (cardId: string) => 
+        `/api/payment/cards/${cardId}`,
+      SET_DEFAULT_CARD: (cardId: string) =>
+        `/api/payment/cards/${cardId}/default`,
       PROCESS_PAYMENT: '/api/payment/process',
       PAYMENT_HISTORY: '/api/payment/history',
     },

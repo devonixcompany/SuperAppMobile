@@ -159,8 +159,7 @@ export const transactionController = (transactionService: TransactionService) =>
           }
           let Newuserid = userId
           //แก้ไขด้วยนะ จำลองข้อมูลอยู่
-            Newuserid = 'cba427d4-7f42-4283-b5fe-9f10193d9aaa2'
- 
+            Newuserid = 'a18e44f5-8ee8-43a1-af78-faab47ebea69'
           console.log("userrrrrrrrrr",Newuserid)
           const transactions = await transactionService.getTransactionsByUserId(Newuserid);
 

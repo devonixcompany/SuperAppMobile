@@ -3,109 +3,125 @@
  * Handles all payment-related API calls
  */
 
-import { http } from './client';
-import type { ApiResponse } from './client';
 import API_CONFIG from '@/config/api.config';
+import type { ApiResponse } from './client';
+import { http } from './client';
 
-export interface PaymentMethod {
+export interface PaymentCard {
   id: string;
-  type: 'card' | 'bank_account';
-  brand?: string;
-  last_digits?: string;
-  name?: string;
-  expiration_month?: number;
-  expiration_year?: number;
-  is_default: boolean;
-  created_at: string;
+  omiseCardId: string;
+  omiseCustomerId?: string | null;
+  brand: string | null;
+  lastDigits: string | null;
+  expirationMonth: number | null;
+  expirationYear: number | null;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface AddPaymentMethodRequest {
+export interface AddPaymentCardRequest {
   token: string;
-  is_default?: boolean;
+  setDefault?: boolean;
+}
+
+export interface PaymentProcessingResult {
+  success: boolean;
+  requiresAction: boolean;
+  authorizeUri?: string;
+  paymentId: string;
+  chargeId?: string;
+  error?: string;
 }
 
 export interface ProcessPaymentRequest {
-  amount: number;
-  currency: string;
-  payment_method_id?: string;
-  description?: string;
-  metadata?: Record<string, any>;
+  transactionId: string;
+  cardId?: string;
 }
 
-export interface ProcessPaymentResponse {
+export interface PaymentHistoryEntry {
   id: string;
   amount: number;
   currency: string;
-  status: 'pending' | 'successful' | 'failed';
-  payment_method: PaymentMethod;
-  created_at: string;
-  failure_code?: string;
-  failure_message?: string;
+  status: string;
+  chargeId?: string | null;
+  cardId?: string | null;
+  failureMessage?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  transaction?: {
+    transactionId: string;
+    totalCost?: number | null;
+  } | null;
 }
 
-export interface PaymentHistory {
-  id: string;
-  amount: number;
-  currency: string;
-  status: 'pending' | 'successful' | 'failed';
-  description?: string;
-  payment_method: PaymentMethod;
-  transaction_id?: string;
-  created_at: string;
-  failure_code?: string;
-  failure_message?: string;
+export interface PaymentHistoryResponse {
+  payments: PaymentHistoryEntry[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 export interface ProcessTransactionPaymentRequest {
-  payment_method_id?: string;
+  cardId?: string;
 }
 
 class PaymentService {
   /**
-   * Get user's payment methods
+   * Retrieve saved payment cards
    */
-  async getPaymentMethods(): Promise<ApiResponse<PaymentMethod[]>> {
-    return http.get<PaymentMethod[]>(API_CONFIG.ENDPOINTS.PAYMENT.METHODS);
+  async getPaymentCards(): Promise<ApiResponse<PaymentCard[]>> {
+    return http.get<PaymentCard[]>(API_CONFIG.ENDPOINTS.PAYMENT.CARDS);
   }
 
   /**
-   * Add a new payment method
+   * Add a new payment card
    */
-  async addPaymentMethod(data: AddPaymentMethodRequest): Promise<ApiResponse<PaymentMethod>> {
-    return http.post<PaymentMethod>(API_CONFIG.ENDPOINTS.PAYMENT.ADD_METHOD, data);
+  async addPaymentCard(payload: AddPaymentCardRequest): Promise<ApiResponse<PaymentCard>> {
+    return http.post<PaymentCard>(API_CONFIG.ENDPOINTS.PAYMENT.ADD_CARD, payload);
   }
 
   /**
-   * Remove a payment method
+   * Remove a payment card
    */
-  async removePaymentMethod(methodId: string): Promise<ApiResponse<{ message: string }>> {
-    return http.delete<{ message: string }>(API_CONFIG.ENDPOINTS.PAYMENT.REMOVE_METHOD(methodId));
+  async removePaymentCard(cardId: string): Promise<ApiResponse<{ success: boolean }>> {
+    return http.delete<{ success: boolean }>(API_CONFIG.ENDPOINTS.PAYMENT.REMOVE_CARD(cardId));
   }
 
   /**
-   * Process a payment
+   * Set default payment card
    */
-  async processPayment(data: ProcessPaymentRequest): Promise<ApiResponse<ProcessPaymentResponse>> {
-    return http.post<ProcessPaymentResponse>(API_CONFIG.ENDPOINTS.PAYMENT.PROCESS_PAYMENT, data);
+  async setDefaultCard(cardId: string): Promise<ApiResponse<PaymentCard>> {
+    return http.put<PaymentCard>(API_CONFIG.ENDPOINTS.PAYMENT.SET_DEFAULT_CARD(cardId), {});
   }
 
   /**
-   * Get payment history
+   * Process payment directly through payment controller
    */
-  async getPaymentHistory(): Promise<ApiResponse<PaymentHistory[]>> {
-    return http.get<PaymentHistory[]>(API_CONFIG.ENDPOINTS.PAYMENT.PAYMENT_HISTORY);
+  async processPayment(payload: ProcessPaymentRequest): Promise<ApiResponse<PaymentProcessingResult>> {
+    return http.post<PaymentProcessingResult>(API_CONFIG.ENDPOINTS.PAYMENT.PROCESS_PAYMENT, payload);
+  }
+
+  /**
+   * Retrieve payment history
+   */
+  async getPaymentHistory(): Promise<ApiResponse<PaymentHistoryResponse>> {
+    return http.get<PaymentHistoryResponse>(API_CONFIG.ENDPOINTS.PAYMENT.PAYMENT_HISTORY);
   }
 
   /**
    * Process payment for a specific transaction
    */
   async processTransactionPayment(
-    transactionId: string, 
-    data: ProcessTransactionPaymentRequest
-  ): Promise<ApiResponse<ProcessPaymentResponse>> {
-    return http.post<ProcessPaymentResponse>(
+    transactionId: string,
+    payload: ProcessTransactionPaymentRequest,
+  ): Promise<ApiResponse<PaymentProcessingResult>> {
+    return http.post<PaymentProcessingResult>(
       `/api/transactions/${encodeURIComponent(transactionId)}/payment`,
-      data
+      payload,
     );
   }
 }

@@ -261,7 +261,6 @@ export default function QRScannerScreen() {
         payload.connectorId,
         {
           userId: credentials.id,
-          accessToken: tokens.accessToken
         }
       );
 

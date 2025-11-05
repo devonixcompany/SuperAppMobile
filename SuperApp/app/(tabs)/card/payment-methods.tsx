@@ -1,50 +1,50 @@
+import { paymentService, type PaymentCard } from "@/services/api/payment.service";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   RefreshControl,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
-  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { paymentService, type PaymentMethod } from "@/services/api/payment.service";
 
 export default function PaymentMethodsScreen() {
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Load payment methods
-  const loadPaymentMethods = async () => {
+  // Load payment cards
+  const loadPaymentCards = async () => {
     try {
-      const response = await paymentService.getPaymentMethods();
+      const response = await paymentService.getPaymentCards();
       if (response.success && response.data) {
-        setPaymentMethods(response.data);
+        setPaymentCards(response.data);
       }
     } catch (error) {
-      console.error('Error loading payment methods:', error);
-      Alert.alert('ข้อผิดพลาด', 'ไม่สามารถโหลดวิธีการชำระเงินได้');
+      console.error('Error loading payment cards:', error);
+      Alert.alert('ข้อผิดพลาด', 'ไม่สามารถโหลดบัตรชำระเงินได้');
     } finally {
       setLoading(false);
     }
   };
 
-  // Refresh payment methods
+  // Refresh payment cards
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadPaymentMethods();
+    await loadPaymentCards();
     setRefreshing(false);
   };
 
-  // Remove payment method
-  const removePaymentMethod = async (methodId: string) => {
+  // Remove payment card
+  const removePaymentCard = async (cardId: string) => {
     Alert.alert(
       'ยืนยันการลบ',
-      'คุณต้องการลบวิธีการชำระเงินนี้หรือไม่?',
+      'คุณต้องการลบบัตรนี้หรือไม่?',
       [
         { text: 'ยกเลิก', style: 'cancel' },
         {
@@ -52,14 +52,14 @@ export default function PaymentMethodsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await paymentService.removePaymentMethod(methodId);
+              const response = await paymentService.removePaymentCard(cardId);
               if (response.success) {
-                Alert.alert('สำเร็จ', 'ลบวิธีการชำระเงินเรียบร้อยแล้ว');
-                loadPaymentMethods();
+                Alert.alert('สำเร็จ', 'ลบบัตรเรียบร้อยแล้ว');
+                loadPaymentCards();
               }
             } catch (error) {
-              console.error('Error removing payment method:', error);
-              Alert.alert('ข้อผิดพลาด', 'ไม่สามารถลบวิธีการชำระเงินได้');
+              console.error('Error removing payment card:', error);
+              Alert.alert('ข้อผิดพลาด', 'ไม่สามารถลบบัตรได้');
             }
           },
         },
@@ -67,42 +67,49 @@ export default function PaymentMethodsScreen() {
     );
   };
 
-  // Get payment method icon
-  const getPaymentMethodIcon = (type: string, brand?: string) => {
-    if (type === 'card') {
-      switch (brand?.toLowerCase()) {
-        case 'visa':
-          return 'card';
-        case 'mastercard':
-          return 'card';
-        case 'amex':
-          return 'card';
-        default:
-          return 'card';
+  const setDefaultCard = async (cardId: string) => {
+    try {
+      const response = await paymentService.setDefaultCard(cardId);
+      if (response.success) {
+        Alert.alert('สำเร็จ', 'ตั้งบัตรหลักเรียบร้อยแล้ว');
+        loadPaymentCards();
       }
+    } catch (error) {
+      console.error('Error setting default card:', error);
+      Alert.alert('ข้อผิดพลาด', 'ไม่สามารถตั้งบัตรหลักได้');
     }
-    return 'business';
   };
 
-  // Get payment method color
-  const getPaymentMethodColor = (type: string, brand?: string) => {
-    if (type === 'card') {
-      switch (brand?.toLowerCase()) {
-        case 'visa':
-          return '#1A1F71';
-        case 'mastercard':
-          return '#EB001B';
-        case 'amex':
-          return '#006FCF';
-        default:
-          return '#3B82F6';
-      }
+  // Get payment card icon
+  const getPaymentCardIcon = (brand?: string | null) => {
+    switch (brand?.toLowerCase()) {
+      case 'visa':
+        return 'card';
+      case 'mastercard':
+        return 'card';
+      case 'amex':
+        return 'card';
+      default:
+        return 'card';
     }
-    return '#10B981';
+  };
+
+  // Get payment card accent color
+  const getPaymentCardColor = (brand?: string | null) => {
+    switch (brand?.toLowerCase()) {
+      case 'visa':
+        return '#1A1F71';
+      case 'mastercard':
+        return '#EB001B';
+      case 'amex':
+        return '#006FCF';
+      default:
+        return '#3B82F6';
+    }
   };
 
   useEffect(() => {
-    loadPaymentMethods();
+    loadPaymentCards();
   }, []);
 
   if (loading) {
@@ -131,7 +138,7 @@ export default function PaymentMethodsScreen() {
             </Text>
           </View>
           <TouchableOpacity
-            onPress={() => router.push('/card/add-payment-method')}
+            onPress={() => router.push('/(tabs)/card/add-payment-method')}
             className="w-10 h-10 rounded-full bg-[#51BC8E] items-center justify-center shadow-sm"
           >
             <Ionicons name="add-outline" size={24} color="white" />
@@ -147,34 +154,34 @@ export default function PaymentMethodsScreen() {
         }
       >
         <View className="px-6">
-          {paymentMethods.length === 0 ? (
+          {paymentCards.length === 0 ? (
             // Empty state
             <View className="items-center justify-center py-20">
               <View className="w-20 h-20 bg-gray-100 rounded-full items-center justify-center mb-4">
                 <Ionicons name="card-outline" size={40} color="#9CA3AF" />
               </View>
               <Text className="text-lg font-semibold text-[#1F2937] mb-2">
-                ยังไม่มีวิธีการชำระเงิน
+                ยังไม่มีบัตรชำระเงิน
               </Text>
               <Text className="text-[#6B7280] text-center mb-6">
-                เพิ่มบัตรเครดิตหรือบัญชีธนาคาร{'\n'}เพื่อชำระเงินได้อย่างสะดวก
+                เพิ่มบัตรเครดิตเพื่อชำระค่าชาร์จได้สะดวก
               </Text>
               <TouchableOpacity
-                onPress={() => router.push('/card/add-payment-method')}
+                onPress={() => router.push('/(tabs)/card/add-payment-method')}
                 className="bg-[#51BC8E] rounded-lg px-6 py-3"
               >
                 <Text className="text-white font-semibold">
-                  เพิ่มวิธีการชำระเงิน
+                  เพิ่มบัตรเครดิต
                 </Text>
               </TouchableOpacity>
             </View>
           ) : (
             // Payment methods list
             <View className="space-y-3">
-              {paymentMethods.map((method, index) => (
+              {paymentCards.map((card) => (
                 <View
-                  key={method.id}
-                  className="bg-white rounded-xl p-4 shadow-sm"
+                  key={card.id}
+                  className="bg-white rounded-xl p-4 shadow-sm mb-6"
                 >
                   <View className="flex-row items-center justify-between">
                     <View className="flex-row items-center flex-1">
@@ -182,13 +189,13 @@ export default function PaymentMethodsScreen() {
                       <View
                         className="w-12 h-12 rounded-lg items-center justify-center mr-3"
                         style={{
-                          backgroundColor: `${getPaymentMethodColor(method.type, method.brand)}20`,
+                          backgroundColor: `${getPaymentCardColor(card.brand)}20`,
                         }}
                       >
                         <Ionicons
-                          name={getPaymentMethodIcon(method.type, method.brand) as any}
+                          name={getPaymentCardIcon(card.brand) as any}
                           size={24}
-                          color={getPaymentMethodColor(method.type, method.brand)}
+                          color={getPaymentCardColor(card.brand)}
                         />
                       </View>
 
@@ -196,9 +203,9 @@ export default function PaymentMethodsScreen() {
                       <View className="flex-1">
                         <View className="flex-row items-center">
                           <Text className="font-semibold text-[#1F2937]">
-                            {method.type === 'card' ? 'บัตรเครดิต' : 'บัญชีธนาคาร'}
+                            บัตรเครดิต
                           </Text>
-                          {method.is_default && (
+                          {card.isDefault && (
                             <View className="ml-2 bg-[#51BC8E] rounded-full px-2 py-1">
                               <Text className="text-white text-xs font-medium">
                                 หลัก
@@ -207,13 +214,20 @@ export default function PaymentMethodsScreen() {
                           )}
                         </View>
                         <Text className="text-sm text-[#6B7280]">
-                          {method.type === 'card' && method.last_digits
-                            ? `**** **** **** ${method.last_digits}`
-                            : method.name || 'ไม่ระบุชื่อ'}
+                          {card.lastDigits
+                            ? `**** **** **** ${card.lastDigits}`
+                            : 'ไม่มีหมายเลขปลายทาง'}
                         </Text>
-                        {method.type === 'card' && method.brand && (
+                        {card.brand && (
                           <Text className="text-xs text-[#9CA3AF] capitalize">
-                            {method.brand}
+                            {card.brand}
+                          </Text>
+                        )}
+                        {(card.expirationMonth || card.expirationYear) && (
+                          <Text className="text-xs text-[#9CA3AF] mt-1">
+                            หมดอายุ:{" "}
+                            {card.expirationMonth?.toString().padStart(2, "0") ?? "--"}/
+                            {card.expirationYear ?? "----"}
                           </Text>
                         )}
                       </View>
@@ -221,21 +235,22 @@ export default function PaymentMethodsScreen() {
 
                     {/* Actions */}
                     <View className="flex-row items-center">
-                      {!method.is_default && (
+                      {!card.isDefault && (
                         <TouchableOpacity
-                          onPress={() => removePaymentMethod(method.id)}
+                          onPress={() => setDefaultCard(card.id)}
+                          className="w-8 h-8 items-center justify-center mr-2"
+                        >
+                          <Ionicons name="star-outline" size={20} color="#F59E0B" />
+                        </TouchableOpacity>
+                      )}
+                      {!card.isDefault && (
+                        <TouchableOpacity
+                          onPress={() => removePaymentCard(card.id)}
                           className="w-8 h-8 items-center justify-center"
                         >
                           <Ionicons name="trash-outline" size={20} color="#EF4444" />
                         </TouchableOpacity>
                       )}
-                      <TouchableOpacity className="w-8 h-8 items-center justify-center ml-2">
-                        <Ionicons
-                          name="chevron-forward-outline"
-                          size={20}
-                          color="#9CA3AF"
-                        />
-                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>

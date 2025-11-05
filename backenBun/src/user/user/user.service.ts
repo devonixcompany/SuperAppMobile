@@ -27,11 +27,7 @@ export class UserService {
     });
   }
 
-  async findUserByRefreshToken(refreshToken: string) {
-    return await prisma.user.findFirst({
-      where: { refresh_token: refreshToken }
-    });
-  }
+
 
   async findUserById(id: string) {
     return await prisma.user.findUnique({
@@ -47,7 +43,8 @@ export class UserService {
         email: data.email,
         password: data.password,
         typeUser: data.typeUser,
-        status: data.status
+        status: data.status,
+        updatedAt: new Date()
       }
     });
   }
