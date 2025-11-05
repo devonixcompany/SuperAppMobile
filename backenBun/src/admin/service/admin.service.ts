@@ -367,7 +367,8 @@ export class AdminService {
         ...restBody
       } = data;
 
-      const chargePointData = this.pickChargePointData(restBody) as Prisma.ChargePointUncheckedCreateInput;
+      const chargePointData =
+        this.pickChargePointData(restBody) as Prisma.charge_pointsUncheckedCreateInput;
       const connectorPayload = this.buildConnectorPayload(connectors);
       
       if (connectorPayload.length > 0 && chargePointData.connectorCount === undefined) {
@@ -458,7 +459,7 @@ export class AdminService {
         resolvedStationId = stationRecord.id;
       }
 
-      const chargePoint = await prisma.chargePoint.create({
+      const chargePoint = await prisma.charge_points.create({
         data: {
           ...chargePointData,
           ...(resolvedStationId ? { stationId: resolvedStationId } : {}),
@@ -499,13 +500,14 @@ export class AdminService {
 
   async updateChargePoint(id: string, data: any) {
     try {
-      const chargePointData = this.pickChargePointData(data) as Prisma.ChargePointUncheckedUpdateInput;
+      const chargePointData =
+        this.pickChargePointData(data) as Prisma.charge_pointsUncheckedUpdateInput;
 
       if (Object.keys(chargePointData).length === 0) {
         throw new Error("No updatable fields provided");
       }
 
-      const chargePoint = await prisma.chargePoint.update({
+      const chargePoint = await prisma.charge_points.update({
         where: { id },
         data: chargePointData,
         include: {
@@ -538,7 +540,7 @@ export class AdminService {
 
   async deleteChargePoint(id: string) {
     try {
-      await prisma.chargePoint.delete({ where: { id } });
+      await prisma.charge_points.delete({ where: { id } });
       return { success: true };
     } catch (error: any) {
       console.error("Error deleting chargepoint:", error);
@@ -608,7 +610,7 @@ export class AdminService {
     "offPeakEndTime",
     "urlwebSocket",
     "stationId",
-  ] as const satisfies readonly (keyof Prisma.ChargePointUncheckedCreateInput)[];
+  ] as const satisfies readonly (keyof Prisma.charge_pointsUncheckedCreateInput)[];
 
   private NUMERIC_FIELDS = [
     "latitude",
@@ -624,27 +626,28 @@ export class AdminService {
 
   private numericFieldSet = new Set(this.NUMERIC_FIELDS);
 
-  private transformValue = <K extends keyof Prisma.ChargePointUncheckedCreateInput>(
+  private transformValue = <K extends keyof Prisma.charge_pointsUncheckedCreateInput>(
     field: K,
     value: unknown,
-  ): Prisma.ChargePointUncheckedCreateInput[K] => {
+  ): Prisma.charge_pointsUncheckedCreateInput[K] => {
     if (this.numericFieldSet.has(field as any)) {
       return (
         value === null || value === undefined ? null : Number(value)
-      ) as Prisma.ChargePointUncheckedCreateInput[K];
+      ) as Prisma.charge_pointsUncheckedCreateInput[K];
     }
-    return value as Prisma.ChargePointUncheckedCreateInput[K];
+    return value as Prisma.charge_pointsUncheckedCreateInput[K];
   };
 
   private pickChargePointData = (source: Record<string, unknown>) => {
-    const data: Partial<Record<keyof Prisma.ChargePointUncheckedCreateInput, any>> = {};
+    const data: Partial<Record<keyof Prisma.charge_pointsUncheckedCreateInput, any>> =
+      {};
     for (const field of this.ALLOWED_CHARGE_POINT_FIELDS) {
       const value = source[field as string];
       if (value !== undefined) {
         data[field] = this.transformValue(field, value);
       }
     }
-    return data as Partial<Prisma.ChargePointUncheckedCreateInput>;
+    return data as Partial<Prisma.charge_pointsUncheckedCreateInput>;
   };
 
   private buildConnectorPayload = (

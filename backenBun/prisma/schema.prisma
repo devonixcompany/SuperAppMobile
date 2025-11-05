@@ -94,6 +94,7 @@ model admin_refresh_tokens {
   Admin     Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
 }
 
+
 model charge_points {
   id              String  @id @default(uuid())
   chargepointname String
@@ -135,15 +136,15 @@ model charge_points {
 
 model connectors {
   id              String          @id @default(uuid())
-  chargePointId   String
-  connectorId     Int
-  type            ConnectorType   @default(TYPE_2)
-  typeDescription String?
-  connectorstatus ConnectorStatus @default(AVAILABLE)
-  maxPower        Float?
-  maxCurrent      Float?
-  charge_points   charge_points   @relation(fields: [chargePointId], references: [id], onDelete: Cascade)
-  transactions    transactions[]
+  chargePointId   String?                                              // รหัสจุดชาร์จที่คอนเน็กเตอร์นี้เชื่อมต่อ
+  connectorId     Int                                                 // หมายเลขประจำคอนเน็กเตอร์ภายในจุดชาร์จ
+  type            ConnectorType   @default(TYPE_2)                    // ประเภทของคอนเน็กเตอร์
+  typeDescription String?                                             // คำอธิบายเพิ่มเติมเกี่ยวกับประเภทของคอนเน็กเตอร์
+  connectorstatus ConnectorStatus @default(AVAILABLE)                 // สถานะปัจจุบันของคอนเน็กเตอร์
+  maxPower        Float?                                              // กำลังไฟสูงสุดที่คอนเน็กเตอร์สามารถจ่ายได้
+  maxCurrent      Float?                                              // กระแสไฟฟ้าสูงสุดที่คอนเน็กเตอร์สามารถจ่ายได้
+  charge_points   charge_points?   @relation(fields: [chargePointId], references: [id]) // ความสัมพันธ์กับจุดชาร์จที่คอนเน็กเตอร์นี้เชื่อมต่อ
+  transactions    transactions[]                                      // ความสัมพันธ์กับธุรกรรมการชาร์จที่เกิดขึ้นที่คอนเน็กเตอร์นี้
 
   @@unique([chargePointId, connectorId])
 }
