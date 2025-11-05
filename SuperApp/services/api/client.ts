@@ -181,6 +181,11 @@ const refreshAccessToken = async (refreshToken: string) => {
         }
 
         await persistTokens(tokens);
+        
+        // ✅ CRITICAL: Update cached tokens immediately so subsequent requests use the new tokens
+        cachedTokens = tokens;
+        console.log('✅ [HTTP] Cached tokens updated after refresh');
+        
         return tokens;
       } catch (error) {
         console.error('❌ [HTTP] Token refresh failed:', error);
@@ -249,27 +254,37 @@ api.interceptors.request.use(async (config) => {
   }
 
   if (!requestConfig.skipAuth) {
-    const tokens = await loadTokens();
-    if (tokens?.accessToken) {
-      headers.Authorization = `Bearer ${tokens.accessToken}`;
-      
-      // ตรวจสอบ token expiration
-      try {
-        const payload = JSON.parse(atob(tokens.accessToken.split('.')[1]));
-        const currentTime = Math.floor(Date.now() / 1000);
-        const timeLeft = payload.exp - currentTime;
-        
-        console.log(`🎫 [HTTP] Using token:`, {
-          tokenLength: tokens.accessToken.length,
-          tokenPreview: `${tokens.accessToken.substring(0, 20)}...`,
-          expTime: new Date(payload.exp * 1000).toLocaleTimeString(),
-          timeLeft: timeLeft > 0 ? `${timeLeft} seconds` : 'EXPIRED'
-        });
-      } catch (error) {
-        console.log('❌ [HTTP] Error checking token expiration:', error);
-      }
+    // ✅ CRITICAL: Check if this is a retry with fresh token
+    if (requestConfig._retry && headers.Authorization) {
+      console.log('🔄 [HTTP] Using fresh token from retry:', {
+        tokenPreview: headers.Authorization.substring(0, 27) + '...'
+      });
+    } else if (headers.Authorization) {
+      console.log('🎫 [HTTP] Using existing Authorization header');
     } else {
-      console.log('❌ [HTTP] No access token available');
+      // Load tokens from cache/storage only if header not already set
+      const tokens = await loadTokens();
+      if (tokens?.accessToken) {
+        headers.Authorization = `Bearer ${tokens.accessToken}`;
+        
+        // ตรวจสอบ token expiration
+        try {
+          const payload = JSON.parse(atob(tokens.accessToken.split('.')[1]));
+          const currentTime = Math.floor(Date.now() / 1000);
+          const timeLeft = payload.exp - currentTime;
+          
+          console.log(`🎫 [HTTP] Using token:`, {
+            tokenLength: tokens.accessToken.length,
+            tokenPreview: `${tokens.accessToken.substring(0, 20)}...`,
+            expTime: new Date(payload.exp * 1000).toLocaleTimeString(),
+            timeLeft: timeLeft > 0 ? `${timeLeft} seconds` : 'EXPIRED'
+          });
+        } catch (error) {
+          console.log('❌ [HTTP] Error checking token expiration:', error);
+        }
+      } else {
+        console.log('❌ [HTTP] No access token available');
+      }
     }
   } else {
     console.log('🌐 [HTTP] Public endpoint, skipping auth');
@@ -315,9 +330,31 @@ api.interceptors.response.use(
 
         if (refreshed?.accessToken) {
           console.log('✅ [HTTP] Token refreshed successfully, retrying request');
-          const headers = ensureHeadersObject(requestConfig);
-          headers.Authorization = `Bearer ${refreshed.accessToken}`;
-          return api(requestConfig);
+          
+          // ✅ CRITICAL: Create completely fresh headers to avoid any cached Authorization
+          const freshHeaders = {
+            ...API_CONFIG.HEADERS.DEFAULT,
+            Authorization: `Bearer ${refreshed.accessToken}`,
+          };
+          
+          // Remove any existing headers that might interfere
+          delete freshHeaders['authorization']; // lowercase
+          freshHeaders.Authorization = `Bearer ${refreshed.accessToken}`; // Set fresh token
+          
+          const retryConfig = {
+            ...requestConfig,
+            headers: freshHeaders,
+            _retry: true, // Mark as retry to prevent infinite loops
+          };
+          
+          console.log('🔄 [HTTP] Retrying with completely fresh token:', {
+            tokenPreview: `${refreshed.accessToken.substring(0, 20)}...`,
+            url: retryConfig.url,
+            method: retryConfig.method,
+            hasAuthHeader: !!retryConfig.headers.Authorization
+          });
+          
+          return api(retryConfig);
         } else {
           console.log('❌ [HTTP] Token refresh failed');
         }
@@ -377,5 +414,6 @@ export const authTokens = {
   // ใช้ prime เพื่อเก็บ token ในหน่วยความจำล่วงหน้า
   prime: (tokens: AuthTokens | null) => {
     cachedTokens = tokens;
+    console.log('✅ [HTTP] Tokens primed in cache:', tokens ? 'Available' : 'Cleared');
   },
 };

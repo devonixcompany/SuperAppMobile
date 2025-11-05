@@ -11,7 +11,7 @@ export const transactionController = (transactionService: TransactionService) =>
       async ({ body, set, user }: any) => {
         try {
           const bypassEnabled = isDevBypassEnabled();
-          console.log("post transaction",user)
+          
           if (!user?.id && !bypassEnabled) {
             set.status = 401;
             return {
@@ -157,9 +157,9 @@ export const transactionController = (transactionService: TransactionService) =>
               message: 'Access denied. You can only view your own transactions.',
             };
           }
-          console.log("Fetching transactions for user:", userId)
-          const transactions = await transactionService.getTransactionsByUserId(userId);
-
+          console.log("Fetching transactions for user:", 'a18e44f5-8ee8-43a1-af78-faab47ebea69')
+          const transactions = await transactionService.getTransactionsByUserId('a18e44f5-8ee8-43a1-af78-faab47ebea69');
+          console.log("transactions", transactions)
           return {
             success: true,
             data: transactions,

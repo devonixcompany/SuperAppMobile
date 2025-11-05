@@ -186,17 +186,45 @@ export const app = new Elysia()
     name: 'jwt',
     secret: process.env.JWT_SECRET || 'your-secret-key'
   }))
-  // ✅ CRITICAL: Authentication middleware that runs BEFORE derive middleware
-  .use((app: any) => {
-    let currentUser = null; // Store user at wrapper level
-    
-    return app.onBeforeHandle(async ({ request, set, cookie }: any) => {
+  // Global guard: block non-public routes when JWT is missing or invalid
+  .onBeforeHandle(async ({ request, set, cookie }: any) => {
     if (request.method === "OPTIONS") {
-                                                                                                                                                                                                                                                    return;
+      return;
     }
 
     const path = new URL(request.url).pathname;
     const method = request.method.toUpperCase();
+
+    // Check if development bypass is enabled
+    const bypassAuth = (process.env.DEV_BYPASS_AUTH ?? '').toLowerCase() === 'true';
+    
+    if (bypassAuth) {
+      console.log('🔓 Development mode: Bypassing global authentication');
+      
+      // Extract user ID from path if available
+      const path = new URL(request.url).pathname;
+      let userId = 'dev-user-123'; // default fallback
+      
+      // Try to extract user ID from common patterns
+      const userIdMatch = path.match(/\/user\/([a-f0-9-]{36})/i);
+      if (userIdMatch) {
+        userId = userIdMatch[1];
+        console.log(`🔧 Development mode: Using user ID from path: ${userId}`);
+      } else {
+        console.log(`🔧 Development mode: Using default user ID: ${userId}`);
+      }
+      
+      // Create mock user for development mode
+      const mockUser = {
+        id: userId,
+        phoneNumber: '+66999999999',
+        status: 'ACTIVE' as const,
+        typeUser: 'USER' as const,
+        createdAt: new Date()
+      };
+      (request as any).user = mockUser;
+      return;
+    }
 
     // Authenticate user directly in main app
     const authHeader = request.headers.get('authorization');
@@ -243,7 +271,6 @@ export const app = new Elysia()
 
           if (dbUser && dbUser.status === 'ACTIVE') {
             user = dbUser;
-            currentUser = dbUser; // Store for derive middleware
             console.log('✅ [AUTH] User authenticated:', user.id);
           } else {
             console.log('❌ [AUTH] User not found or inactive');
@@ -317,23 +344,6 @@ export const app = new Elysia()
 
     // Add user to context for controllers to use
     (request as any).user = user;
-    
-    // Store user in closure variable for derive middleware
-    currentUser = user;
-      })
-      // ✅ Derive middleware inside same wrapper to access currentUser
-      .derive(({ request }: any) => {
-        const user = currentUser || (request as any).user;
-        console.log('🔧 [DERIVE] Extracting user from context:', {
-          hasCurrentUser: !!currentUser,
-          hasRequestUser: !!(request as any).user,
-          userId: user?.id,
-          path: request.url
-        });
-        return {
-          user: user
-        };
-      });
   })
   .use(serviceContainer.getAuthController())
   .use(serviceContainer.getUserController())
@@ -350,10 +360,36 @@ export const app = new Elysia()
     console.log('✅ Admin chargepoint controller registered');
     return adminChargePointCtrl;
   })())
+  .derive(({ request }: any) => {
+    // Extract user from request and make it available in context
+    const user = (request as any).user;
+    console.log('🔧 [DERIVE] Extracting user from request:', {
+      hasUser: !!user,
+      userId: user?.id,
+      path: request.url
+    });
+    return {
+      user: user
+    };
+  })
   .use(serviceContainer.getTransactionController())
-  // Payment controller also needs user context, no need for wrapper since derive middleware is now available
-  .use(serviceContainer.getPaymentController())
-  .use(serviceContainer.getSsTaxInvoiceProfileController())
+  .use((app: any) => {
+    // Create a wrapper that injects user into context for payment and tax invoice controllers
+    return app
+      .onBeforeHandle(({ request, set }: any) => {
+        const user = (request as any).user;
+        if (request.url.includes('/api/payment') || request.url.includes('/api/tax-invoice')) {
+          console.log('🔧 [WRAPPER] Injecting user for protected route:', {
+            hasUser: !!user,
+            userId: user?.id,
+            path: request.url
+          });
+          (request as any).elysiaContext = { user };
+        }
+      })
+      .use(serviceContainer.getPaymentController())
+      .use(serviceContainer.getSsTaxInvoiceProfileController());
+  })
   .use(serviceContainer.getWebhookController())
   .guard(
     ({ user }: any) => {

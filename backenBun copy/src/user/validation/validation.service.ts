@@ -1,0 +1,156 @@
+import {
+  LoginData,
+  RegistrationData,
+  ValidationError,
+  validateLoginData,
+  validateRegistrationData
+} from '../../lib/validation';
+
+export class ValidationService {
+  validateRegistrationData(data: RegistrationData): void {
+    validateRegistrationData(data);
+  }
+
+  validateLoginData(data: LoginData): void {
+    validateLoginData(data);
+  }
+
+  validateEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
+  validatePassword(password: string): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    if (password.length < 8) {
+      errors.push('รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร');
+    }
+    
+    if (!/[A-Z]/.test(password)) {
+      errors.push('รหัสผ่านต้องมีตัวอักษรพิมพ์ใหญ่อย่างน้อย 1 ตัว');
+    }
+    
+    if (!/[a-z]/.test(password)) {
+      errors.push('รหัสผ่านต้องมีตัวอักษรพิมพ์เล็กอย่างน้อย 1 ตัว');
+    }
+    
+    if (!/\d/.test(password)) {
+      errors.push('รหัสผ่านต้องมีตัวเลขอย่างน้อย 1 ตัว');
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  validatePhoneNumber(phoneNumber: string): boolean {
+    // Thai phone number validation (10 digits starting with 0)
+    const phoneRegex = /^0[0-9]{9}$/;
+    return phoneRegex.test(phoneNumber);
+  }
+
+  validateUserType(userType: string): boolean {
+    return ['individual', 'corporate'].includes(userType);
+  }
+
+  validateFullName(fullName: string): boolean {
+    return fullName.trim().length >= 2 && fullName.trim().length <= 100;
+  }
+
+  sanitizeInput(input: string): string {
+    return input.trim().replace(/[<>]/g, '');
+  }
+
+  validatePasswordConfirmation(password: string, confirmPassword: string): boolean {
+    return password === confirmPassword;
+  }
+
+  validateBusinessRules(data: any): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // Business rule: Corporate users must have company domain email
+    if (data.userType === 'corporate' && data.email) {
+      const personalDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com'];
+      const emailDomain = data.email.split('@')[1]?.toLowerCase();
+      
+      if (personalDomains.includes(emailDomain)) {
+        errors.push('บัญชีองค์กรต้องใช้อีเมลของบริษัท ไม่สามารถใช้อีเมลส่วนตัวได้');
+      }
+    }
+
+    // Business rule: Individual users cannot use certain reserved names
+    if (data.userType === 'individual' && data.fullName) {
+      const reservedNames = ['admin', 'administrator', 'root', 'system'];
+      const nameWords = data.fullName.toLowerCase().split(' ');
+      
+      for (const word of nameWords) {
+        if (reservedNames.includes(word)) {
+          errors.push('ไม่สามารถใช้ชื่อที่สงวนไว้สำหรับระบบได้');
+          break;
+        }
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Validate time format (HH:MM)
+   */
+  validateTimeFormat(time: string): boolean {
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    return timeRegex.test(time);
+  }
+
+  /**
+   * Validate pricing time periods
+   */
+  validatePricingTimes(peakStart?: string, peakEnd?: string, offPeakStart?: string, offPeakEnd?: string): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // Validate time formats
+    if (peakStart && !this.validateTimeFormat(peakStart)) {
+      errors.push('รูปแบบเวลาเริ่มต้น Peak ไม่ถูกต้อง (ใช้รูปแบบ HH:MM)');
+    }
+    
+    if (peakEnd && !this.validateTimeFormat(peakEnd)) {
+      errors.push('รูปแบบเวลาสิ้นสุด Peak ไม่ถูกต้อง (ใช้รูปแบบ HH:MM)');
+    }
+    
+    if (offPeakStart && !this.validateTimeFormat(offPeakStart)) {
+      errors.push('รูปแบบเวลาเริ่มต้น Off-Peak ไม่ถูกต้อง (ใช้รูปแบบ HH:MM)');
+    }
+    
+    if (offPeakEnd && !this.validateTimeFormat(offPeakEnd)) {
+      errors.push('รูปแบบเวลาสิ้นสุด Off-Peak ไม่ถูกต้อง (ใช้รูปแบบ HH:MM)');
+    }
+
+    // Validate time logic
+    if (peakStart && peakEnd) {
+      const peakStartMinutes = this.timeToMinutes(peakStart);
+      const peakEndMinutes = this.timeToMinutes(peakEnd);
+      
+      if (peakStartMinutes >= peakEndMinutes) {
+        errors.push('เวลาเริ่มต้น Peak ต้องน้อยกว่าเวลาสิ้นสุด Peak');
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Convert time string to minutes for comparison
+   */
+  private timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  }
+}

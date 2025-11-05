@@ -1,0 +1,394 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id                   String                 @id @default(uuid())
+  email                String                 @unique
+  password             String
+  role                 AdminRole              @default(STAFF)
+  firstName            String?
+  lastName             String?
+  isActive             Boolean                @default(true)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime
+  admin_refresh_tokens admin_refresh_tokens[]
+}
+
+model SsTaxInvoiceProfile {
+  id            String       @id @default(uuid())
+  userId        String
+  taxpayerType  TaxpayerType
+  fullName      String?
+  companyName   String?
+  taxId         String       @db.VarChar(20)
+  branchType    BranchType?
+  branchCode    String?      @db.VarChar(5)
+  addressLine1  String
+  addressLine2  String?
+  provinceId    String
+  districtId    String
+  subdistrictId String
+  postalCode    String       @db.VarChar(10)
+  isDefault     Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime
+
+  @@unique([userId, taxId, branchCode])
+  @@index([userId])
+}
+model Station {
+  id                   String           @id @default(uuid())
+  stationname          String           @unique
+  location             String
+  imageUrl             String?          @db.VarChar(512)
+  latitude             Decimal?
+  longitude            Decimal?
+  openclosedays        String?
+  onPeakRate           Float            @default(10.0)
+  onPeakStartTime      String           @default("10:00")
+  onPeakEndTime        String           @default("12:00")
+  onPeakbaseRate       Float            @default(20.0)
+  offPeakRate          Float            @default(20.0)
+  offPeakStartTime     String           @default("16:00")
+  offPeakEndTime       String           @default("22:00")
+  offPeakbaseRate      Float            @default(20.0) 
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime
+  charge_points charge_points[]
+}
+
+model User {
+  id              String          @id @default(uuid())
+  firebaseUid     String          @unique
+  email           String          @unique
+  phoneNumber     String          @unique
+  fullName        String?
+  password        String
+  status          String          @default("PENDING")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime
+  typeUser        UserType?
+  refresh_token   String?
+  omiseCustomerId String?         @unique
+  charge_points   charge_points[]
+  transactions    transactions[]
+  user_vehicles   user_vehicles[]
+  paymentCards    PaymentCard[]
+  payments        Payment[]
+}
+
+model admin_refresh_tokens {
+  id        String    @id @default(uuid())
+  token     String    @unique
+  adminId   String
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  isRevoked Boolean   @default(false)
+  revokedAt DateTime?
+  Admin     Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+}
+
+
+model charge_points {
+  id              String  @id @default(uuid())
+  chargepointname String
+  stationId       String?
+
+  openingHours   String?
+  is24Hours      Boolean     @default(false)
+  brand          String
+  serialNumber   String      @unique
+  powerRating    Float
+  powerSystem    Int         @default(1)
+  connectorCount Int         @default(1)
+  protocol       OCPPVersion
+  csmsUrl        String?
+
+  chargePointIdentity  String            @unique
+  chargepointstatus    ChargePointStatus @default(AVAILABLE)
+  maxPower             Float?
+  lastSeen             DateTime?
+  heartbeatIntervalSec Int?
+  vendor               String?
+  model                String?
+  firmwareVersion      String?
+  ocppProtocolRaw      String?
+  ocppSessionId        String?
+  isWhitelisted        Boolean           @default(true)
+  ownerId              String?
+  ownershipType        OwnershipType     @default(PUBLIC)
+  isPublic             Boolean           @default(true)
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime
+  urlwebSocket String?
+  User         User?          @relation(fields: [ownerId], references: [id])
+  Station      Station?       @relation(fields: [stationId], references: [id])
+  connectors   connectors[]
+  transactions transactions[]
+}
+
+model connectors {
+  id              String          @id @default(uuid())
+  chargePointId   String?                                              // รหัสจุดชาร์จที่คอนเน็กเตอร์นี้เชื่อมต่อ
+  connectorId     Int                                                 // หมายเลขประจำคอนเน็กเตอร์ภายในจุดชาร์จ
+  type            ConnectorType   @default(TYPE_2)                    // ประเภทของคอนเน็กเตอร์
+  typeDescription String?                                             // คำอธิบายเพิ่มเติมเกี่ยวกับประเภทของคอนเน็กเตอร์
+  connectorstatus ConnectorStatus @default(AVAILABLE)                 // สถานะปัจจุบันของคอนเน็กเตอร์
+  maxPower        Float?                                              // กำลังไฟสูงสุดที่คอนเน็กเตอร์สามารถจ่ายได้
+  maxCurrent      Float?                                              // กระแสไฟฟ้าสูงสุดที่คอนเน็กเตอร์สามารถจ่ายได้
+  charge_points   charge_points?   @relation(fields: [chargePointId], references: [id]) // ความสัมพันธ์กับจุดชาร์จที่คอนเน็กเตอร์นี้เชื่อมต่อ
+  transactions    transactions[]                                      // ความสัมพันธ์กับธุรกรรมการชาร์จที่เกิดขึ้นที่คอนเน็กเตอร์นี้
+
+  @@unique([chargePointId, connectorId])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  transactionId  String
+  userId         String
+  provider       String        @default("OMISE") // อาจรองรับ Stripe, Paypal ในอนาคต
+  amount         Float
+  currency       String        @default("THB")
+  status         PaymentStatus @default(PENDING) // WAITING, SUCCESS, FAILED, CANCELED
+  chargeId       String?       @unique // รหัส charge จาก Omise (เช่น chrg_test_...)
+  cardId         String? // รหัสบัตรจาก Omise (ถ้ามี)
+  failureMessage String?
+  authorizeUri   String?
+  paidAt         DateTime?
+  refundedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  transaction transactions @relation(fields: [transactionId], references: [id])
+  user        User         @relation(fields: [userId], references: [id])
+  paymentLogs PaymentLog[]
+
+  @@index([transactionId])
+  @@index([userId])
+}
+
+model PaymentCard {
+  id              String    @id @default(cuid())
+  userId          String
+  omiseCardId     String    @unique // card_XXX จาก Omise
+  omiseCustomerId String?
+  brand           String?
+  lastDigits      String?
+  expirationMonth Int?
+  expirationYear  Int?
+  isDefault       Boolean   @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model PaymentLog {
+  id          String   @id @default(cuid())
+  paymentId   String
+  rawRequest  Json
+  rawResponse Json
+  eventType   String // เช่น "CHARGE_CREATE", "CHARGE_FAILED"
+  createdAt   DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  @@index([paymentId])
+}
+
+model notifications {
+  id        String           @id @default(uuid())
+  userId    String?
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+}
+
+model ocpp_messages {
+  id            String           @id @default(uuid())
+  messageId     String
+  chargePointId String
+  direction     MessageDirection
+  action        String
+  payload       Json
+  timestamp     DateTime         @default(now())
+}
+
+model transactions {
+  id                String            @id @default(uuid())
+  transactionId     String            @unique
+  ocppTransactionId String?           @unique
+  userId            String
+  vehicleId         String?
+  chargePointId     String
+  connectorId       String
+  startTime         DateTime
+  endTime           DateTime?
+  startMeterValue   Float             @default(0)
+  endMeterValue     Float?
+  totalEnergy       Float?
+  totalCost         Float?
+  appliedRate       Float?
+  status            TransactionStatus @default(ACTIVE)
+  stopReason        String?
+  charge_points     charge_points     @relation(fields: [chargePointId], references: [id])
+  connectors        connectors        @relation(fields: [connectorId], references: [id])
+  User              User              @relation(fields: [userId], references: [id])
+  user_vehicles     user_vehicles?    @relation(fields: [vehicleId], references: [id])
+  payments          Payment[]
+}
+
+model user_vehicles {
+  id           String         @id @default(uuid())
+  userId       String
+  licensePlate String         @unique
+  make         String?
+  model        String?
+  type         VehicleType    @default(ELECTRIC)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime
+  transactions transactions[]
+  User         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum AdminRole {
+  SUPERADMIN
+  STAFF
+}
+
+enum BranchType {
+  HEAD_OFFICE
+  BRANCH
+}
+
+enum ChargePointStatus {
+  AVAILABLE
+  OCCUPIED
+  UNAVAILABLE
+  FAULTED
+  MAINTENANCE
+}
+
+enum ConnectorStatus {
+  AVAILABLE
+  PREPARING
+  CHARGING
+  SUSPENDED_EV
+  SUSPENDED_EVSE
+  RESERVED
+  UNAVAILABLE
+  FAULTED
+}
+
+enum ConnectorType {
+  TYPE_1
+  TYPE_2
+  CHADEMO
+  CCS_COMBO_1
+  CCS_COMBO_2
+  TESLA
+  GB_T
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum NotificationType {
+  CHARGING_STARTEDChargePoint
+  CHARGING_STOPPED
+  CHARGING_COMPLETED
+  PAYMENT_REQUIRED
+  SYSTEM_MAINTENANCE
+  GENERAL
+}
+
+enum OCPPVersion {
+  OCPP16
+  OCPP20
+  OCPP21
+}
+
+enum OwnershipType {
+  PUBLIC
+  PRIVATE
+  SHARED
+}
+
+enum PricingTierType {
+  STANDARD
+  PEAK_OFF_PEAK
+  TIME_OF_USE
+  DYNAMIC
+}
+
+enum RateUnit {
+  A
+  W
+  kW
+}
+
+enum ReservationStatus {
+  ACTIVE
+  COMPLETED
+  CANCELED
+  EXPIRED
+}
+
+enum SessionStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+  TIMEOUT
+}
+
+enum TaxpayerType {
+  PERSONAL
+  JURISTIC
+}
+
+enum TransactionStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  EXPIRED
+}
+
+enum UserType {
+  NORMAL
+  BUSINESS
+}
+
+enum VehicleType {
+  ELECTRIC
+  HYBRID
+  PLUGIN_HYBRID
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELED
+  REFUNDED
+}

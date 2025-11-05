@@ -452,6 +452,21 @@ export default function ChargeSessionScreen() {
               }
             : data,
         );
+        
+        // ตรวจสอบว่าการชาร์จเสร็จสิ้นแล้วหรือไม่
+        if (data?.status) {
+          const normalizedConnectorStatus = data.status.toLowerCase()
+            .replace("suspendedevse", "suspended_evse")
+            .replace("suspendedev", "suspended_ev");
+          
+          if (normalizedConnectorStatus === "suspended_ev" || 
+              normalizedConnectorStatus === "suspended_evse" ||
+              normalizedConnectorStatus === "finishing") {
+            console.log("🏁 [CONNECTOR] Charging completed detected from connectorStatus:", normalizedConnectorStatus);
+            setHasReceivedStopEvent(true);
+          }
+        }
+        
         appendLog("info", `หัวชาร์จอยู่ในสถานะ ${data?.status ?? "-"}`);
         break;
       }
@@ -479,6 +494,20 @@ export default function ChargeSessionScreen() {
 
         if (payload.transactionId) {
           setActiveTransactionId(payload.transactionId);
+        }
+
+        // ตรวจสอบว่าการชาร์จเสร็จสิ้นแล้วหรือไม่
+        if (payload.status) {
+          const normalizedPayloadStatus = payload.status.toLowerCase()
+            .replace("suspendedevse", "suspended_evse")
+            .replace("suspendedev", "suspended_ev");
+          
+          if (normalizedPayloadStatus === "suspended_ev" || 
+              normalizedPayloadStatus === "suspended_evse" ||
+              normalizedPayloadStatus === "finishing") {
+            console.log("🏁 [CHARGING] Charging completed detected from charging_data:", normalizedPayloadStatus);
+            setHasReceivedStopEvent(true);
+          }
         }
 
         appendLog("info", "รับข้อมูลการชาร์จล่าสุด");
@@ -823,6 +852,16 @@ export default function ChargeSessionScreen() {
       !hasFetchedSummary &&
       !isFetchingSummary;
 
+    // เพิ่มการตรวจสอบสำหรับสถานะที่ควร fetch summary ทันที
+    const shouldFetchSummaryByStatus = 
+      !!summaryCandidateId &&
+      (normalizedStatus === "suspended_ev" || 
+       normalizedStatus === "suspended_evse" || 
+       normalizedStatus === "finishing") &&
+      !transactionSummary &&
+      !hasFetchedSummary &&
+      !isFetchingSummary;
+
     console.log("🔍 Summary Fetch Debug:", {
       backendTransactionId,
       activeTransactionId,
@@ -836,8 +875,11 @@ export default function ChargeSessionScreen() {
       shouldFetchSummary,
     });
 
-    if (shouldFetchSummary) {
-      console.log("📊 Fetching transaction summary for:", summaryCandidateId);
+    if (shouldFetchSummary || shouldFetchSummaryByStatus) {
+      console.log("📊 Fetching transaction summary for:", summaryCandidateId, {
+        reason: shouldFetchSummary ? "stop event" : "status based",
+        normalizedStatus
+      });
       fetchTransactionSummary(summaryCandidateId);
     }
   }, [
@@ -852,6 +894,16 @@ export default function ChargeSessionScreen() {
   ]);
 
   useEffect(() => {
+    // เพิ่มเงื่อนไขสำหรับสถานะที่ควรนำทางไปหน้า summary
+    const shouldNavigateStatuses = [
+      "finishing", 
+      "suspended_ev", 
+      "suspended_evse", 
+      "available"
+    ];
+    
+    const shouldNavigateByStatus = shouldNavigateStatuses.includes(normalizedStatus);
+    
     console.log("🚀 Navigation Debug:", {
       transactionSummary: !!transactionSummary,
       hasFetchedSummary,
@@ -860,11 +912,12 @@ export default function ChargeSessionScreen() {
       hasNavigatedToSummary,
       hasReceivedStopEvent,
       normalizedStatus,
+      shouldNavigateByStatus,
       shouldNavigate: hasReceivedStopEvent &&
         transactionSummary &&
         hasFetchedSummary &&
         !isFetchingSummary &&
-        (!activeTransactionId || normalizedStatus === "finishing") &&
+        shouldNavigateByStatus &&
         !hasNavigatedToSummary
     });
 
@@ -873,7 +926,7 @@ export default function ChargeSessionScreen() {
       transactionSummary &&
       hasFetchedSummary &&
       !isFetchingSummary &&
-      (!activeTransactionId || normalizedStatus === "finishing") &&
+      shouldNavigateByStatus &&
       !hasNavigatedToSummary
     ) {
       const energyParam = energyKWh != null ? String(energyKWh) : "";
@@ -922,6 +975,11 @@ export default function ChargeSessionScreen() {
         },
       });
       setHasNavigatedToSummary(true);
+      console.log("🎯 [NAVIGATION] Navigating to summary page with params:", {
+        transactionId: transactionSummary.transactionId,
+        energy: energyParam,
+        cost: costParam
+      });
     }
   }, [
     activeTransactionId,
