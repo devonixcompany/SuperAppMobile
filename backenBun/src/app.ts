@@ -203,7 +203,7 @@ export const app = new Elysia()
 
     // Skip global guard for admin routes - they have their own strict authentication
     if (path.startsWith('/admin/') || path.startsWith('/api/admin/')) {
-      console.log('🔐 Admin route detected, skipping global guard (admin middleware will handle auth):', path);
+      console.log('Ã°Å¸â€Â Admin route detected, skipping global guard (admin middleware will handle auth):', path);
       return;
     }
 
@@ -228,8 +228,8 @@ export const app = new Elysia()
     // For user routes, check user authentication
     if (!user) {
       if (isDevBypassEnabled()) {
-        console.log('🔓 Development mode: Allowing user access without authentication for eiei', path);
-        return; // อนุญาตให้เข้าถึงได้
+        console.log('Ã°Å¸â€â€œ Development mode: Allowing user access without authentication for eiei', path);
+        return; // Ã Â¸Â­Ã Â¸â„¢Ã Â¸Â¸Ã Â¸ÂÃ Â¸Â²Ã Â¸â€¢Ã Â¹Æ’Ã Â¸Â«Ã Â¹â€°Ã Â¹â‚¬Ã Â¸â€šÃ Â¹â€°Ã Â¸Â²Ã Â¸â€“Ã Â¸Â¶Ã Â¸â€¡Ã Â¹â€žÃ Â¸â€Ã Â¹â€°
       }
       
       logger.warn('Unauthorized user API access blocked', {
@@ -248,16 +248,30 @@ export const app = new Elysia()
   .use(serviceContainer.getUserController())
   .use(serviceContainer.getChargePointController())
   .use((() => {
-    console.log('🔧 Registering admin auth controller');
+    console.log('Registering admin auth controller');
     const adminAuthCtrl = adminServiceContainer.getAuthController();
-    console.log('✅ Admin auth controller registered');
+    console.log('Admin auth controller registered');
     return adminAuthCtrl;
   })())
   .use((() => {
-    console.log('🔧 Registering admin chargepoint controller');
-    const adminChargePointCtrl = adminServiceContainer.getChargePointController();
-    console.log('✅ Admin chargepoint controller registered');
-    return adminChargePointCtrl;
+    console.log('Registering admin chargepoints controller');
+    const adminChargePointsCtrl =
+      adminServiceContainer.getChargePointsCrudController();
+    console.log('Admin chargepoints controller registered');
+    return adminChargePointsCtrl;
+  })())
+  .use((() => {
+    console.log('Registering admin station controller');
+    const adminStationCtrl = adminServiceContainer.getStationController();
+    console.log('Admin station controller registered');
+    return adminStationCtrl;
+  })())
+  .use((() => {
+    console.log('Registering admin chargepoint connector controller');
+    const adminCpcCtrl =
+      adminServiceContainer.getChargePointConnectorController();
+    console.log('Admin chargepoint connector controller registered');
+    return adminCpcCtrl;
   })())
   .use(serviceContainer.getTransactionController())
   .use(serviceContainer.getPaymentController())
@@ -336,7 +350,7 @@ export const app = new Elysia()
     {
       detail: {
         tags: ["Health"],
-        summary: "🏥 Health Check",
+        summary: "Ã°Å¸ÂÂ¥ Health Check",
         description:
           "Returns the current status and health information of the API server",
         responses: {
@@ -395,10 +409,10 @@ export const app = new Elysia()
   });
 
 app.listen(port, () => {
-  console.log(`🦊 Server is running on port ${port}`);
-  console.log(`📚 OpenAPI Documentation: ${serverUrl}/openapi`);
-  console.log(`📄 OpenAPI Schema: ${serverUrl}/openapi/json`);
-  console.log(`📝 API Endpoints:`);
+  console.log(`Ã°Å¸Â¦Å  Server is running on port ${port}`);
+  console.log(`Ã°Å¸â€œÅ¡ OpenAPI Documentation: ${serverUrl}/openapi`);
+  console.log(`Ã°Å¸â€œâ€ž OpenAPI Schema: ${serverUrl}/openapi/json`);
+  console.log(`Ã°Å¸â€œÂ API Endpoints:`);
   console.log(`   POST /api/auth/register - User registration`);
   console.log(`   POST /api/auth/login - User login`);
   console.log(`   POST /api/auth/refresh - Refresh token`);

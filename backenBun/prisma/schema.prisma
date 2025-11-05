@@ -44,37 +44,44 @@ model SsTaxInvoiceProfile {
 }
 
 model Station {
-  id                   String          @id @default(uuid())
-  stationname          String          @unique
+  id                   String           @id @default(uuid())
+  stationname          String           @unique
   location             String
+  imageUrl             String?          @db.VarChar(512)
   latitude             Decimal?
   longitude            Decimal?
-   onPeakRate           Float             @default(10.0)
-  onPeakStartTime      String            @default("10:00")
-  onPeakEndTime        String            @default("12:00")
-  offPeakRate          Float             @default(20.0)
-  offPeakStartTime     String            @default("16:00")
-  offPeakEndTime       String            @default("22:00")
-  createdAt            DateTime        @default(now())
+  openclosedays        String?
+  onPeakRate           Float            @default(10.0)
+  onPeakStartTime      String           @default("10:00")
+  onPeakEndTime        String           @default("12:00")
+  onPeakbaseRate       Float            @default(20.0)
+  offPeakRate          Float            @default(20.0)
+  offPeakStartTime     String           @default("16:00")
+  offPeakEndTime       String           @default("22:00")
+  offPeakbaseRate      Float            @default(20.0) 
+  createdAt            DateTime         @default(now())
   updatedAt            DateTime
   charge_points charge_points[]
 }
 
 model User {
-  id            String          @id @default(uuid())
-  firebaseUid   String          @unique
-  email         String          @unique
-  phoneNumber   String          @unique
-  fullName      String?
-  password      String
-  status        String          @default("PENDING")
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime
-  typeUser      UserType?
-  refresh_token String?
-  charge_points charge_points[]
-  transactions  transactions[]
-  user_vehicles user_vehicles[]
+  id              String          @id @default(uuid())
+  firebaseUid     String          @unique
+  email           String          @unique
+  phoneNumber     String          @unique
+  fullName        String?
+  password        String
+  status          String          @default("PENDING")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime
+  typeUser        UserType?
+  refresh_token   String?
+  omiseCustomerId String?         @unique
+  charge_points   charge_points[]
+  transactions    transactions[]
+  user_vehicles   user_vehicles[]
+  paymentCards    PaymentCard[]
+  payments        Payment[]
 }
 
 model admin_refresh_tokens {
@@ -88,57 +95,118 @@ model admin_refresh_tokens {
   Admin     Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
 }
 
+
 model charge_points {
-  id                   String            @id @default(uuid())
-  chargepointname      String
-  stationId            String?
-  
-  openingHours         String?
-  is24Hours            Boolean           @default(false)
-  brand                String
-  serialNumber         String            @unique
-  powerRating          Float
-  powerSystem          Int               @default(1)
-  connectorCount       Int               @default(1)
-  protocol             OCPPVersion
-  csmsUrl              String?
-  chargePointIdentity  String            @unique
-  chargepointstatus    ChargePointStatus @default(AVAILABLE)
-  maxPower             Float?
-  lastSeen             DateTime?
-  heartbeatIntervalSec Int?
-  vendor               String?
-  model                String?
-  firmwareVersion      String?
-  ocppProtocolRaw      String?
-  ocppSessionId        String?
-  isWhitelisted        Boolean           @default(true)
-  ownerId              String?
-  ownershipType        OwnershipType     @default(PUBLIC)
-  isPublic             Boolean           @default(true)
- 
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime
-  urlwebSocket         String?
-  User                 User?             @relation(fields: [ownerId], references: [id])
-  Station              Station?          @relation(fields: [stationId], references: [id])
-  connectors           connectors[]
-  transactions         transactions[]
+  id              String  @id @default(uuid())
+  chargepointname String                                          // ชื่อจุดชาร์จ
+  stationId       String?                                         // รหัสสถานีที่ตั้งจุดชาร์จ
+
+  openingHours   String?
+  is24Hours      Boolean     @default(false)                      // เปิด 24 ชั่วโมงหรือไม่
+  brand          String                                           // ยี่ห้อของอุปกรณ์ชาร์จ
+  serialNumber   String      @unique                              // หมายเลขประจำอุปกรณ์  
+  powerRating    Float                                            // กำลังไฟของจุดชาร์จ
+  powerSystem    Int         @default(1)                          // ประเภทระบบไฟฟ้า
+  connectorCount Int         @default(1)                          // จำนวนคอนเน็กเตอร์ที่มีให้ใช้งาน
+  protocol       OCPPVersion                                      // เวอร์ชัน OCPP ที่อุปกรณ์รองรับ
+  csmsUrl        String?                                          // ที่อยู่ของ CSMS (Charge Station Management System)
+
+
+  chargePointIdentity  String            @unique                  // รหัสประจำจุดชาร์จ (Charge Point Identity)
+  chargepointstatus    ChargePointStatus @default(AVAILABLE)      // สถานะปัจจุบันของจุดชาร์จ
+  maxPower             Float?                                     // กำลังไฟสูงสุดที่จุดชาร์จสามารถจ่ายได้
+  lastSeen             DateTime?                                  // เวลาที่อุปกรณ์ติดต่อครั้งล่าสุด
+  heartbeatIntervalSec Int?                                       // ช่วงเวลาการส่งสัญญาณหัวใจ (heartbeat) เป็นวินาที
+  vendor               String?                                    // ผู้ผลิตอุปกรณ์
+  model                String?                                    // รุ่นของอุปกรณ์
+  firmwareVersion      String?                                    // เวอร์ชันเฟิร์มแวร์ของอุปกรณ์
+  ocppProtocolRaw      String?                                    // ข้อมูลดิบเกี่ยวกับโปรโตคอล OCPP ที่อุปกรณ์ใช้
+  ocppSessionId        String?                                    // รหัสเซสชัน OCPP ปัจจุบัน
+  isWhitelisted        Boolean           @default(true)           // ระบุว่าจุดชาร์จนี้อยู่ในรายการอนุญาตหรือไม่
+  ownerId              String?                                    // รหัสเจ้าของจุดชาร์จ (ถ้าเป็นส่วนตัว)
+  ownershipType        OwnershipType     @default(PUBLIC)         // ประเภทความเป็นเจ้าของของจุดชาร์จ
+  isPublic             Boolean           @default(true)           // ระบุว่าจุดชาร์จนี้เป็นสาธารณะหรือไม่
+
+  createdAt    DateTime       @default(now())                     // เวลาที่สร้างข้อมูล
+  updatedAt    DateTime                                           // เวลาที่อัปเดตข้อมูลล่าสุด
+  urlwebSocket String?                                            // ที่อยู่ WebSocket สำหรับการสื่อสารกับจุดชาร์จ
+  User         User?          @relation(fields: [ownerId], references: [id])         // ความสัมพันธ์กับผู้ใช้เจ้าของจุดชาร์จ
+  Station      Station?       @relation(fields: [stationId], references: [id])       // ความสัมพันธ์กับสถานีที่ตั้งจุดชาร์จ
+  connectors   connectors[]                                                          // ความสัมพันธ์กับคอนเน็กเตอร์ที่เชื่อมต่อกับจุดชาร์จ
+  transactions transactions[]                                                        // ความสัมพันธ์กับธุรกรรมการชาร์จที่เกิดขึ้นที่จุดชาร์จนี้
 }
 
 model connectors {
   id              String          @id @default(uuid())
-  chargePointId   String
-  connectorId     Int
-  type            ConnectorType   @default(TYPE_2)
-  typeDescription String?
-  connectorstatus ConnectorStatus @default(AVAILABLE)
-  maxPower        Float?
-  maxCurrent      Float?
-  charge_points   charge_points   @relation(fields: [chargePointId], references: [id], onDelete: Cascade)
-  transactions    transactions[]
+  chargePointId   String?                                              // รหัสจุดชาร์จที่คอนเน็กเตอร์นี้เชื่อมต่อ
+  connectorId     Int                                                 // หมายเลขประจำคอนเน็กเตอร์ภายในจุดชาร์จ
+  type            ConnectorType   @default(TYPE_2)                    // ประเภทของคอนเน็กเตอร์
+  typeDescription String?                                             // คำอธิบายเพิ่มเติมเกี่ยวกับประเภทของคอนเน็กเตอร์
+  connectorstatus ConnectorStatus @default(AVAILABLE)                 // สถานะปัจจุบันของคอนเน็กเตอร์
+  maxPower        Float?                                              // กำลังไฟสูงสุดที่คอนเน็กเตอร์สามารถจ่ายได้
+  maxCurrent      Float?                                              // กระแสไฟฟ้าสูงสุดที่คอนเน็กเตอร์สามารถจ่ายได้
+  charge_points   charge_points?   @relation(fields: [chargePointId], references: [id]) // ความสัมพันธ์กับจุดชาร์จที่คอนเน็กเตอร์นี้เชื่อมต่อ
+  transactions    transactions[]                                      // ความสัมพันธ์กับธุรกรรมการชาร์จที่เกิดขึ้นที่คอนเน็กเตอร์นี้
 
   @@unique([chargePointId, connectorId])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  transactionId  String
+  userId         String
+  provider       String        @default("OMISE") // อาจรองรับ Stripe, Paypal ในอนาคต
+  amount         Float
+  currency       String        @default("THB")
+  status         PaymentStatus @default(PENDING) // WAITING, SUCCESS, FAILED, CANCELED
+  chargeId       String?       @unique // รหัส charge จาก Omise (เช่น chrg_test_...)
+  cardId         String? // รหัสบัตรจาก Omise (ถ้ามี)
+  failureMessage String?
+  authorizeUri   String?
+  paidAt         DateTime?
+  refundedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  transaction transactions @relation(fields: [transactionId], references: [id])
+  user        User         @relation(fields: [userId], references: [id])
+  paymentLogs PaymentLog[]
+
+  @@index([transactionId])
+  @@index([userId])
+}
+
+model PaymentCard {
+  id              String    @id @default(cuid())
+  userId          String
+  omiseCardId     String    @unique // card_XXX จาก Omise
+  omiseCustomerId String?
+  brand           String?
+  lastDigits      String?
+  expirationMonth Int?
+  expirationYear  Int?
+  isDefault       Boolean   @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model PaymentLog {
+  id          String   @id @default(cuid())
+  paymentId   String
+  rawRequest  Json
+  rawResponse Json
+  eventType   String // เช่น "CHARGE_CREATE", "CHARGE_FAILED"
+  createdAt   DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  @@index([paymentId])
 }
 
 model notifications {
@@ -182,6 +250,7 @@ model transactions {
   connectors        connectors        @relation(fields: [connectorId], references: [id])
   User              User              @relation(fields: [userId], references: [id])
   user_vehicles     user_vehicles?    @relation(fields: [vehicleId], references: [id])
+  payments          Payment[]
 }
 
 model user_vehicles {
@@ -316,4 +385,12 @@ enum VehicleType {
   ELECTRIC
   HYBRID
   PLUGIN_HYBRID
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELED
+  REFUNDED
 }
