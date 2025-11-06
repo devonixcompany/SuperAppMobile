@@ -32,7 +32,7 @@ export default function BottomNavigation({
   const CORNER_RADIUS = 32;
   const FLOATING_BUTTON_SIZE = 88;
   const horizontalPadding = 16;
-  const bottomOffset = Math.max(insets.bottom, 16);
+  const bottomOffset = Math.max(insets.bottom - 20, 20); // ลด padding ด้านล่างลงเล็กน้อยให้ bar อยู่ต่ำลง ลดตำแหน่ง Bar
 
   type TabItem = {
     id: string;
