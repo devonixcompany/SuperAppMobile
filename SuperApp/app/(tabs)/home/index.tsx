@@ -21,7 +21,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { ClipPath, Defs, G, Path, Rect } from "react-native-svg";
 import MiniProfileModal, { DEFAULT_PROFILE_AVATAR } from "./miniprofile";
 import NotificationModal from "./notification";
-import ChargingStatusPopup, {
+import {
+  ChargingStatusInlineCard,
   useChargingStatusPopup,
 } from "./popup";
 
@@ -360,6 +361,14 @@ export default function HomeScreen() {
            </TouchableScale>
           </View>
 
+          {chargingPopupData && isChargingPopupVisible ? (
+            <ChargingStatusInlineCard
+              data={chargingPopupData}
+              onClose={hideChargingPopup}
+              onNavigateToCharging={handleNavigateToCharging}
+            />
+          ) : null}
+
           {/* === NEWS UPDATES SECTION === */}
           <View className="mb-2">
             <View className="flex-row items-center justify-between mb-2">
@@ -471,14 +480,6 @@ export default function HomeScreen() {
           {/* ส่วนล่างถูกตัดออกตามคำขอ */}
         </View>
       </ScrollView>
-      {chargingPopupData ? (
-        <ChargingStatusPopup
-          visible={isChargingPopupVisible}
-          data={chargingPopupData}
-          onClose={hideChargingPopup}
-          onNavigateToCharging={handleNavigateToCharging}
-        />
-      ) : null}
       <NotificationModal
         visible={isNotificationVisible}
         onClose={() => setNotificationVisible(false)}
