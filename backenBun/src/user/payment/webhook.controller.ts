@@ -69,6 +69,140 @@ export const webhookController = () =>
         }
       },
       {
+        detail: {
+          tags: ['Payment Webhooks'],
+          summary: '🔔 Omise Payment Webhook',
+          description: `
+Handle webhook notifications from Omise payment gateway.
+
+**Supported Events:**
+- \`charge.complete\`: Payment charge completed (success or failure)
+- \`charge.create\`: New charge created
+- \`charge.update\`: Charge status updated
+- \`charge.capture\`: Authorized charge captured
+- \`refund.create\`: Refund processed
+
+**Security:**
+- Validates webhook signature using HMAC-SHA256
+- Only processes requests with valid signatures
+- Webhook secret must be configured in environment
+
+**Process Flow:**
+1. Validate webhook signature
+2. Parse event type and data
+3. Update payment and transaction records
+4. Return acknowledgment to Omise
+
+**Note:** This endpoint is called by Omise servers, not directly by clients.
+          `,
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['key', 'data'],
+                  properties: {
+                    key: {
+                      type: 'string',
+                      description: 'Event type',
+                      example: 'charge.complete',
+                      enum: [
+                        'charge.complete',
+                        'charge.create',
+                        'charge.update',
+                        'charge.capture',
+                        'refund.create'
+                      ]
+                    },
+                    data: {
+                      type: 'object',
+                      description: 'Event payload data from Omise',
+                      properties: {
+                        id: { type: 'string', example: 'chrg_test_5xj6h36c0j1p2kxqskt' },
+                        status: { type: 'string', example: 'successful' },
+                        paid: { type: 'boolean', example: true },
+                        amount: { type: 'number', example: 150050 },
+                        currency: { type: 'string', example: 'thb' }
+                      }
+                    }
+                  }
+                },
+                examples: {
+                  chargeComplete: {
+                    summary: 'Charge Complete Event',
+                    value: {
+                      key: 'charge.complete',
+                      data: {
+                        id: 'chrg_test_5xj6h36c0j1p2kxqskt',
+                        status: 'successful',
+                        paid: true,
+                        amount: 150050,
+                        currency: 'thb'
+                      }
+                    }
+                  },
+                  refundCreate: {
+                    summary: 'Refund Create Event',
+                    value: {
+                      key: 'refund.create',
+                      data: {
+                        id: 'rfnd_test_5xj6h36c0j1p2kxqskt',
+                        charge: 'chrg_test_5xj6h36c0j1p2kxqskt',
+                        amount: 150050,
+                        currency: 'thb'
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Webhook processed successfully',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      message: { type: 'string', example: 'Webhook processed successfully' }
+                    }
+                  }
+                }
+              }
+            },
+            401: {
+              description: 'Invalid webhook signature',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: false },
+                      message: { type: 'string', example: 'Invalid signature' }
+                    }
+                  }
+                }
+              }
+            },
+            500: {
+              description: 'Webhook processing error',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: false },
+                      message: { type: 'string', example: 'Webhook processing failed' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         body: t.Object({
           key: t.String(),
           data: t.Any()
