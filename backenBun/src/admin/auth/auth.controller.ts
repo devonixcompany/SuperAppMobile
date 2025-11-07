@@ -56,25 +56,25 @@ export const adminAuthController = (adminAuthService: AdminAuthService) =>
       {
         detail: {
           tags: ['Admin Authentication'],
-          summary: '🔐 Admin Registration',
+          summary: '🔐 ลงทะเบียนแอดมิน',
           description: `
-Register a new admin account in the system.
+สร้างบัญชีแอดมินใหม่สำหรับระบบ
 
-**Supported Admin Roles:**
-- **SUPERADMIN**: Full system access with all permissions
-- **STAFF**: Limited access for specific administrative tasks
+**ระดับสิทธิ์ที่รองรับ:**
+- **SUPERADMIN**: เข้าถึงทุกส่วนของระบบ
+- **STAFF**: จำกัดการใช้งานเฉพาะงานที่ได้รับมอบหมาย
 
-**Password Requirements:**
-- Minimum 8 characters
-- Should contain a mix of letters, numbers, and special characters
+**ข้อกำหนดรหัสผ่าน:**
+- อย่างน้อย 8 ตัวอักษร
+- ควรผสมตัวอักษร ตัวเลข และอักขระพิเศษ
 
-**Security Notes:**
-- Only SUPERADMIN users can create new admin accounts
-- Email must be unique across all admin accounts
-- All admin accounts are created as active by default
+**ข้อควรระวังด้านความปลอดภัย:**
+- ต้องเป็น SUPERADMIN เท่านั้นที่สร้างแอดมินใหม่ได้
+- อีเมลต้องไม่ซ้ำกับแอดมินคนอื่น
+- บัญชีใหม่จะถูกเปิดใช้งานทันที
           `,
           requestBody: {
-            description: 'Admin registration data',
+            description: 'ข้อมูลสำหรับลงทะเบียนแอดมิน',
             required: true,
             content: {
               'application/json': {
@@ -85,41 +85,41 @@ Register a new admin account in the system.
                     email: {
                       type: 'string',
                       format: 'email',
-                      description: 'Admin email address (must be unique)',
+                      description: 'อีเมลของแอดมิน (ต้องไม่ซ้ำ)',
                       example: 'admin@company.com'
                     },
                     password: {
                       type: 'string',
                       minLength: 8,
-                      description: 'Admin password (minimum 8 characters)',
+                      description: 'รหัสผ่านของแอดมิน (อย่างน้อย 8 ตัวอักษร)',
                       example: 'AdminSecurePass123!'
                     },
                     confirmPassword: {
                       type: 'string',
-                      description: 'Password confirmation (must match password)',
+                      description: 'ยืนยันรหัสผ่าน (ต้องตรงกับรหัสผ่าน)',
                       example: 'AdminSecurePass123!'
                     },
                     firstName: {
                       type: 'string',
-                      description: 'Admin first name (optional)',
+                      description: 'ชื่อจริงของแอดมิน (ถ้ามี)',
                       example: 'สมชาย'
                     },
                     lastName: {
                       type: 'string',
-                      description: 'Admin last name (optional)',
+                      description: 'นามสกุลของแอดมิน (ถ้ามี)',
                       example: 'ใจดี'
                     },
                     role: {
                       type: 'string',
                       enum: ['SUPERADMIN', 'STAFF'],
-                      description: 'Admin role level',
+                      description: 'ระดับสิทธิ์ของแอดมิน',
                       example: 'STAFF'
                     }
                   }
                 },
                 examples: {
                   superadmin: {
-                    summary: 'Super Admin Registration',
+                    summary: 'ตัวอย่างการลงทะเบียน Super Admin',
                     value: {
                       email: 'superadmin@company.com',
                       password: 'SuperAdminPass123!',
@@ -130,7 +130,7 @@ Register a new admin account in the system.
                     }
                   },
                   staff: {
-                    summary: 'Staff Admin Registration',
+                    summary: 'ตัวอย่างการลงทะเบียน Staff',
                     value: {
                       email: 'staff@company.com',
                       password: 'StaffPass123!',
@@ -146,7 +146,7 @@ Register a new admin account in the system.
           },
           responses: {
             201: {
-              description: 'Admin registered successfully',
+              description: 'ลงทะเบียนแอดมินสำเร็จ',
               content: {
                 'application/json': {
                   schema: {
@@ -169,8 +169,8 @@ Register a new admin account in the system.
                               createdAt: { type: 'string', format: 'date-time' }
                             }
                           },
-                          accessToken: { type: 'string', description: 'JWT access token' },
-                          refreshToken: { type: 'string', description: 'JWT refresh token' }
+                          accessToken: { type: 'string', description: 'JWT access token (สำหรับยืนยันตัวตน)' },
+                          refreshToken: { type: 'string', description: 'JWT refresh token (สำหรับออกโทเค็นใหม่)' }
                         }
                       }
                     }
@@ -179,7 +179,7 @@ Register a new admin account in the system.
               }
             },
             400: {
-              description: 'Validation error or admin already exists',
+              description: 'ตรวจสอบข้อมูลไม่ผ่านหรือมีแอดมินคนนี้อยู่แล้ว',
               content: {
                 'application/json': {
                   schema: {
@@ -191,14 +191,14 @@ Register a new admin account in the system.
                   },
                   examples: {
                     validation: {
-                      summary: 'Validation Error',
+                      summary: 'ตรวจสอบข้อมูลไม่ผ่าน',
                       value: {
                         success: false,
                         message: 'รูปแบบอีเมลไม่ถูกต้อง'
                       }
                     },
                     duplicate: {
-                      summary: 'Admin Already Exists',
+                      summary: 'พบแอดมินซ้ำ',
                       value: {
                         success: false,
                         message: 'อีเมลนี้ถูกใช้งานแล้ว'
@@ -268,24 +268,24 @@ Register a new admin account in the system.
       {
         detail: {
           tags: ['Admin Authentication'],
-          summary: '🔑 Admin Login',
+          summary: '🔑 เข้าสู่ระบบแอดมิน',
           description: `
-Authenticate an admin and receive access tokens.
+ยืนยันตัวตนแอดมินและรับโทเค็นสำหรับใช้งานระบบ
 
-**Login Process:**
-1. Validate email and password
-2. Check admin account status
-3. Generate JWT access and refresh tokens
-4. Return admin information and tokens
+**ขั้นตอนการเข้าสู่ระบบ:**
+1. ตรวจสอบอีเมลและรหัสผ่าน
+2. ตรวจสอบสถานะบัญชีแอดมิน
+3. สร้าง JWT access token และ refresh token
+4. ส่งข้อมูลแอดมินพร้อมโทเค็นตอบกลับ
 
-**Security Features:**
-- Password hashing verification
-- Account status validation
-- JWT token generation
-- Role-based access control
+**มาตรการความปลอดภัย:**
+- ตรวจสอบรหัสผ่านที่ถูกแฮช
+- ตรวจสถานะบัญชี
+- สร้างโทเค็นด้วย JWT
+- ควบคุมสิทธิ์ตามบทบาท (RBAC)
           `,
           requestBody: {
-            description: 'Admin login credentials',
+            description: 'ข้อมูลเข้าสู่ระบบของแอดมิน',
             required: true,
             content: {
               'application/json': {
@@ -296,26 +296,26 @@ Authenticate an admin and receive access tokens.
                     email: {
                       type: 'string',
                       format: 'email',
-                      description: 'Admin email address',
+                      description: 'อีเมลของแอดมิน',
                       example: 'admin@company.com'
                     },
                     password: {
                       type: 'string',
-                      description: 'Admin password',
+                      description: 'รหัสผ่านของแอดมิน',
                       example: 'AdminSecurePass123!'
                     }
                   }
                 },
                 examples: {
                   superadmin: {
-                    summary: 'Super Admin Login',
+                    summary: 'เข้าสู่ระบบแบบ Super Admin',
                     value: {
                       email: 'superadmin@company.com',
                       password: 'SuperAdminPass123!'
                     }
                   },
                   staff: {
-                    summary: 'Staff Admin Login',
+                    summary: 'เข้าสู่ระบบแบบ Staff',
                     value: {
                       email: 'staff@company.com',
                       password: 'StaffPass123!'
@@ -327,7 +327,7 @@ Authenticate an admin and receive access tokens.
           },
           responses: {
             200: {
-              description: 'Admin login successful',
+              description: 'เข้าสู่ระบบแอดมินสำเร็จ',
               content: {
                 'application/json': {
                   schema: {
@@ -352,12 +352,12 @@ Authenticate an admin and receive access tokens.
                           },
                           accessToken: { 
                             type: 'string', 
-                            description: 'JWT access token (expires in 1 hour)',
+                            description: 'JWT access token (อายุ 1 ชั่วโมง)',
                             example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
                           },
                           refreshToken: { 
                             type: 'string', 
-                            description: 'JWT refresh token (expires in 7 days)',
+                            description: 'JWT refresh token (อายุ 7 วัน)',
                             example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
                           }
                         }
@@ -368,7 +368,7 @@ Authenticate an admin and receive access tokens.
               }
             },
             401: {
-              description: 'Authentication failed',
+              description: 'ยืนยันตัวตนไม่ผ่าน',
               content: {
                 'application/json': {
                   schema: {
@@ -416,26 +416,26 @@ Authenticate an admin and receive access tokens.
       {
         detail: {
           tags: ['Admin Authentication'],
-          summary: '🔄 Admin Refresh Token',
+          summary: '🔄 รีเฟรชโทเค็นแอดมิน',
           description: `
-Generate a new admin access token using a valid refresh token.
+สร้าง access token ใหม่โดยใช้ refresh token ที่ยังถูกต้อง
 
-**Token Refresh Process:**
-1. Validate the provided refresh token
-2. Check if the token is not expired and not revoked
-3. Verify the associated admin account is still active
-4. Generate new access and refresh tokens
-5. Revoke the old refresh token and store the new one
+**ขั้นตอนการรีเฟรชโทเค็น:**
+1. ตรวจสอบ refresh token ที่ส่งมา
+2. เช็กว่าโทเค็นไม่หมดอายุและไม่ถูกยกเลิก
+3. ยืนยันว่าแอดมินที่เกี่ยวข้องยังใช้งานได้
+4. สร้าง access token และ refresh token ใหม่
+5. เพิกถอน refresh token เดิมและบันทึกตัวใหม่
 
-**Security Notes:**
-- Refresh tokens are single-use (invalidated after use)
-- New refresh token is generated with each refresh
-- Access tokens have shorter expiration (1 hour)
-- Refresh tokens have longer expiration (7 days)
-- Only active admin accounts can refresh tokens
+**ข้อควรระวังด้านความปลอดภัย:**
+- refresh token ใช้ได้ครั้งเดียว
+- ทุกครั้งที่รีเฟรชจะออก refresh token ใหม่
+- access token มีอายุ 1 ชั่วโมง
+- refresh token มีอายุ 7 วัน
+- เฉพาะบัญชีแอดมินที่ยัง active เท่านั้นที่รีเฟรชได้
           `,
           requestBody: {
-            description: 'Admin refresh token data',
+            description: 'ข้อมูล refresh token ของแอดมิน',
             required: true,
             content: {
               'application/json': {
@@ -445,14 +445,14 @@ Generate a new admin access token using a valid refresh token.
                   properties: {
                     refreshToken: {
                       type: 'string',
-                      description: 'Valid JWT admin refresh token',
+                      description: 'JWT refresh token ของแอดมินที่ยังใช้ได้',
                       example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
                     }
                   }
                 },
                 examples: {
                   refresh: {
-                    summary: 'Admin Token Refresh Request',
+                    summary: 'ตัวอย่างคำขอรีเฟรชโทเค็นแอดมิน',
                     value: {
                       refreshToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbklkIjoiMTIzNDU2Nzg5MCIsInR5cGUiOiJhZG1pbl9yZWZyZXNoIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
                     }
@@ -463,25 +463,25 @@ Generate a new admin access token using a valid refresh token.
           },
           responses: {
             200: {
-              description: 'Admin token refreshed successfully',
+              description: 'รีเฟรชโทเค็นแอดมินสำเร็จ',
               content: {
                 'application/json': {
                   schema: {
                     type: 'object',
                     properties: {
                       success: { type: 'boolean', example: true },
-                      message: { type: 'string', example: 'Admin token refreshed successfully' },
+                      message: { type: 'string', example: 'รีเฟรชโทเค็นแอดมินสำเร็จ' },
                       data: {
                         type: 'object',
                         properties: {
                           accessToken: { 
                             type: 'string', 
-                            description: 'New JWT admin access token (expires in 1 hour)',
+                            description: 'JWT access token ใหม่ของแอดมิน (อายุ 1 ชั่วโมง)',
                             example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
                           },
                           refreshToken: { 
                             type: 'string', 
-                            description: 'New JWT admin refresh token (expires in 7 days)',
+                            description: 'JWT refresh token ใหม่ของแอดมิน (อายุ 7 วัน)',
                             example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
                           }
                         }
@@ -492,43 +492,43 @@ Generate a new admin access token using a valid refresh token.
               }
             },
             401: {
-              description: 'Invalid or expired refresh token',
+              description: 'refresh token ไม่ถูกต้องหรือหมดอายุ',
               content: {
                 'application/json': {
                   schema: {
                     type: 'object',
                     properties: {
                       success: { type: 'boolean', example: false },
-                      message: { type: 'string', example: 'Invalid or expired refresh token' }
+                      message: { type: 'string', example: 'refresh token ไม่ถูกต้องหรือหมดอายุ' }
                     }
                   },
                   examples: {
                     invalid_token: {
-                      summary: 'Invalid Token',
+                      summary: 'โทเค็นไม่ถูกต้อง',
                       value: {
                         success: false,
-                        message: 'Invalid refresh token'
+                        message: 'refresh token ไม่ถูกต้อง'
                       }
                     },
                     expired_token: {
-                      summary: 'Expired Token',
+                      summary: 'โทเค็นหมดอายุ',
                       value: {
                         success: false,
-                        message: 'Invalid or expired refresh token'
+                        message: 'refresh token ไม่ถูกต้องหรือหมดอายุ'
                       }
                     },
                     admin_not_found: {
-                      summary: 'Admin Not Found',
+                      summary: 'ไม่พบบัญชีแอดมิน',
                       value: {
                         success: false,
-                        message: 'Admin not found'
+                        message: 'ไม่พบบัญชีแอดมิน'
                       }
                     },
                     inactive_admin: {
-                      summary: 'Inactive Admin',
+                      summary: 'บัญชีแอดมินถูกระงับ',
                       value: {
                         success: false,
-                        message: 'Admin account is inactive'
+                        message: 'บัญชีแอดมินถูกระงับ'
                       }
                     }
                   }
@@ -536,14 +536,14 @@ Generate a new admin access token using a valid refresh token.
               }
             },
             500: {
-              description: 'Internal server error',
+              description: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์',
               content: {
                 'application/json': {
                   schema: {
                     type: 'object',
                     properties: {
                       success: { type: 'boolean', example: false },
-                      message: { type: 'string', example: 'Failed to refresh admin token' }
+                      message: { type: 'string', example: 'ไม่สามารถรีเฟรชโทเค็นแอดมินได้' }
                     }
                   }
                 }
@@ -593,23 +593,23 @@ Generate a new admin access token using a valid refresh token.
       {
         detail: {
           tags: ['Admin Authentication'],
-          summary: '🚪 Admin Logout',
+          summary: '🚪 ออกจากระบบแอดมิน',
           description: `
-Logout an admin and invalidate their tokens.
+ออกจากระบบและทำให้โทเค็นของแอดมินใช้ไม่ได้อีก
 
-**Logout Process:**
-1. Revoke the refresh token from database
-2. Clear HTTP-only cookies
-3. Return success confirmation
+**ขั้นตอนการออกจากระบบ:**
+1. เพิกถอน refresh token ในฐานข้อมูล
+2. ล้างคุกกี้แบบ HTTP-only
+3. ส่งผลลัพธ์ยืนยันการออกจากระบบ
 
-**Security Features:**
-- Token invalidation
-- Secure cookie clearing
-- Session termination
+**มาตรการความปลอดภัย:**
+- ยกเลิกโทเค็น
+- ล้างคุกกี้อย่างปลอดภัย
+- ปิดเซสชันการใช้งาน
           `,
           responses: {
             200: {
-              description: 'Admin logout successful',
+              description: 'ออกจากระบบแอดมินสำเร็จ',
               content: {
                 'application/json': {
                   schema: {
@@ -623,7 +623,7 @@ Logout an admin and invalidate their tokens.
               }
             },
             500: {
-              description: 'Logout failed',
+              description: 'ออกจากระบบไม่สำเร็จ',
               content: {
                 'application/json': {
                   schema: {

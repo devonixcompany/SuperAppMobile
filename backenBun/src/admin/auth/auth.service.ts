@@ -169,9 +169,9 @@ export class AdminAuthService {
       }
 
       // Find stored refresh token
-      const storedToken = await prisma.adminRefreshToken.findUnique({
+      const storedToken = await prisma.admin_refresh_tokens.findUnique({
         where: { token: refreshToken },
-        include: { admin: true }
+        include: { Admin: true }
       });
 
       if (!storedToken || storedToken.isRevoked || storedToken.expiresAt < new Date()) {
@@ -179,17 +179,17 @@ export class AdminAuthService {
       }
 
       // Generate new tokens
-      const newAccessToken = await this.jwtService.generateAdminToken(storedToken.admin);
-      const newRefreshToken = await this.jwtService.generateAdminRefreshToken(storedToken.admin);
+      const newAccessToken = await this.jwtService.generateAdminToken(storedToken.Admin);
+      const newRefreshToken = await this.jwtService.generateAdminRefreshToken(storedToken.Admin);
 
       // Revoke old refresh token
-      await prisma.adminRefreshToken.update({
+      await prisma.admin_refresh_tokens.update({
         where: { id: storedToken.id },
         data: { isRevoked: true, revokedAt: new Date() }
       });
 
       // Store new refresh token
-      await this.storeRefreshToken(storedToken.admin.id, newRefreshToken);
+      await this.storeRefreshToken(storedToken.Admin.id, newRefreshToken);
 
       return {
         success: true,
@@ -212,7 +212,7 @@ export class AdminAuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
-    await prisma.adminRefreshToken.create({
+    await prisma.admin_refresh_tokens.create({
       data: {
         token: refreshToken,
         adminId,
@@ -222,21 +222,21 @@ export class AdminAuthService {
   }
 
   async revokeRefreshToken(refreshToken: string): Promise<void> {
-    await prisma.adminRefreshToken.updateMany({
+    await prisma.admin_refresh_tokens.updateMany({
       where: { token: refreshToken },
       data: { isRevoked: true, revokedAt: new Date() }
     });
   }
 
   async revokeAllAdminRefreshTokens(adminId: string): Promise<void> {
-    await prisma.adminRefreshToken.updateMany({
+    await prisma.admin_refresh_tokens.updateMany({
       where: { adminId },
       data: { isRevoked: true, revokedAt: new Date() }
     });
   }
 
   async cleanupExpiredRefreshTokens(): Promise<void> {
-    await prisma.adminRefreshToken.deleteMany({
+    await prisma.admin_refresh_tokens.deleteMany({
       where: {
         OR: [
           { expiresAt: { lt: new Date() } },
