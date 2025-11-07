@@ -10,11 +10,55 @@
   export const adminStationController = (jwtService: JWTService) => {
     const stationService = new AdminStationService();
 
-    return new Elysia({ prefix: '/api/admin/stations' })
-      .use(requireAdminAuth(jwtService))
-      .decorate('adminStationService', stationService)
-      .get(
-        '/',
+  return new Elysia({ prefix: '/api/admin/stations' })
+    .use(requireAdminAuth(jwtService))
+    .decorate('adminStationService', stationService)
+    .get(
+      '/:stationId/details',
+      async ({ params, set, adminStationService }) => {
+        try {
+          const { stationId } = params as { stationId?: string };
+          if (!stationId) {
+            set.status = 400;
+            return {
+              success: false,
+              message: 'stationId is required',
+            };
+          }
+
+          const data =
+            await adminStationService.getStationDetailsById(stationId);
+
+          return {
+            success: true,
+            data,
+          };
+        } catch (error: any) {
+          set.status = 500;
+          return {
+            success: false,
+            message: error?.message ?? 'Failed to fetch station details',
+          };
+        }
+      },
+      {
+        detail: {
+          tags: ['Admin Station'],
+          summary: 'Get station details by ID',
+          description:
+            'Returns detailed information for a station including charge points and connectors',
+        },
+        params: t.Object({
+          stationId: t.String({
+            description: 'Station ID to retrieve details for.',
+            minLength: 1,
+            example: '8c56eeaa-562d-4235-b0a5-cd7cea5a202d',
+          }),
+        }),
+      },
+    )
+    .get(
+      '/',
         async ({ query, set, adminStationService }) => {
           try {
             const { page, limit, search } = query as {
