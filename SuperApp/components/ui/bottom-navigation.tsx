@@ -53,7 +53,7 @@ export default function BottomNavigation({
       id: "charging",
       icon: "flash-outline",
       activeIcon: "flash",
-      label: "ประวัติการชาร์จ",
+      label: "สถานี",
     },
     {
       id: "qr",

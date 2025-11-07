@@ -181,6 +181,8 @@ const recommendationTopics: Recommendation[] = [
   },
 ];
 
+const CHARGING_STATUS_POLL_INTERVAL_MS = 500;
+
 const CoinIcon = ({ size = 40 }: { size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 33 33" fill="none">
     <G clipPath="url(#clip0_750_7653)">
@@ -265,7 +267,9 @@ export default function HomeScreen() {
     data: chargingPopupData,
     visible: isChargingPopupVisible,
     hide: hideChargingPopup,
-  } = useChargingStatusPopup();
+  } = useChargingStatusPopup({
+    pollInterval: CHARGING_STATUS_POLL_INTERVAL_MS,
+  });
 
   const handleNavigateToCharging = useCallback(() => {
     hideChargingPopup();
