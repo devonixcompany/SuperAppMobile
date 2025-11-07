@@ -21,7 +21,7 @@ model Admin {
 }
 
 model SsTaxInvoiceProfile {
-  id            String       @id @default(uuid())
+  id            String       @id @default(uuid())              
   userId        String
   taxpayerType  TaxpayerType
   fullName      String?
@@ -64,18 +64,18 @@ model Station {
 }
 
 model User {
-  id              String          @id @default(uuid())
-  firebaseUid     String          @unique
-  email           String          @unique
-  phoneNumber     String          @unique
-  fullName        String?
-  password        String
-  status          String          @default("PENDING")
-  createdAt       DateTime        @default(now())
+  id              String          @id @default(uuid())             // รหัสผู้ใช้
+  firebaseUid     String          @unique                          // รหัสผู้ใช้จาก Firebase Authentication
+  email           String          @unique                          // อีเมลผู้ใช้                 
+  phoneNumber     String          @unique                          // หมายเลขโทรศัพท์ผู้ใช้             
+  fullName        String?                                          // ชื่อเต็มของผู้ใช้                      
+  password        String                                           // รหัสผ่านผู้ใช้ (hashed)                 
+  status          String          @default("PENDING")              // สถานะผู้ใช้ (ACTIVE, BLOCKED, EXPIRED)         
+  createdAt       DateTime        @default(now())                           
   updatedAt       DateTime
   typeUser        UserType?
-  refresh_token   String?
-  omiseCustomerId String?         @unique
+  refresh_token   String?                                          // โทเค็นรีเฟรชสำหรับการยืนยันตัวตน                       
+  omiseCustomerId String?         @unique                          // cus_XXX จาก Omise             
   charge_points   charge_points[]
   transactions    transactions[]
   user_vehicles   user_vehicles[]
@@ -150,19 +150,19 @@ model connectors {
 }
 
 model Payment {
-  id             String        @id @default(cuid())
-  transactionId  String
+  id             String        @id @default(cuid())           
+  transactionId  String                                             
   userId         String
-  provider       String        @default("OMISE") // อาจรองรับ Stripe, Paypal ในอนาคต
-  amount         Float
-  currency       String        @default("THB")
-  status         PaymentStatus @default(PENDING) // WAITING, SUCCESS, FAILED, CANCELED
-  chargeId       String?       @unique // รหัส charge จาก Omise (เช่น chrg_test_...)
-  cardId         String? // รหัสบัตรจาก Omise (ถ้ามี)
-  failureMessage String?
-  authorizeUri   String?
-  paidAt         DateTime?
-  refundedAt     DateTime?
+  provider       String        @default("OMISE")                        // อาจรองรับ Stripe, Paypal ในอนาคต
+  amount         Float                                                  // จำนวนเงินทั้งหมด (รวมภาษีแล้ว)
+  currency       String        @default("THB")                          // สกุลเงิน
+  status         PaymentStatus @default(PENDING)                        // WAITING, SUCCESS, FAILED, CANCELED
+  chargeId       String?       @unique                                  // รหัส charge จาก Omise (เช่น chrg_test_...)
+  cardId         String?                                                // รหัสบัตรจาก Omise (ถ้ามี)
+  failureMessage String?                                                // ข้อความแสดงข้อผิดพลาด (ถ้ามี)                             
+  authorizeUri   String?                                                // ลิงก์สำหรับการยืนยันการชำระเงิน (ถ้ามี)                   
+  paidAt         DateTime?                                              // เวลาที่ชำระเงินสำเร็จ (ถ้ามี)                
+  refundedAt     DateTime?                                              // เวลาที่คืนเงิน (ถ้ามี)         
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -178,14 +178,14 @@ model Payment {
 model PaymentCard {
   id              String    @id @default(cuid())
   userId          String
-  omiseCardId     String    @unique // card_XXX จาก Omise
-  omiseCustomerId String?
-  brand           String?
-  lastDigits      String?
-  expirationMonth Int?
-  expirationYear  Int?
-  isDefault       Boolean   @default(false)
-  deletedAt       DateTime?
+  omiseCardId     String    @unique                                     // card_XXX จาก Omise 
+  omiseCustomerId String? @unique                                       // cus_XXX จาก Omise                  
+  brand           String?                                               // ยี่ห้อบัตร เช่น Visa, MasterCard
+  lastDigits      String?                                               // 4 หลักสุดท้ายของบัตร
+  expirationMonth Int?                                                  // เดือนหมดอายุ
+  expirationYear  Int?                                                  // ปีหมดอายุ            
+  isDefault       Boolean   @default(false)                             // บัตรเริ่มต้นสำหรับการชำระเงิน
+  deletedAt       DateTime?                                             // เวลาที่บัตรถูกลบ (ถ้ามี)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
