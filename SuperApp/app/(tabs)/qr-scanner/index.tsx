@@ -1,28 +1,28 @@
 import env from "@/config/env";
+import { ApiError, chargepointService } from "@/services/api";
 import {
-  clearCredentials,
-  clearTokens,
-  getCredentials,
-  getTokens,
+    clearCredentials,
+    clearTokens,
+    getCredentials,
+    getTokens,
 } from "@/utils/keychain";
 import {
-  normalizeUrlToDevice,
-  normalizeWebSocketUrlToDevice,
+    normalizeUrlToDevice,
+    normalizeWebSocketUrlToDevice,
 } from "@/utils/network";
 import { Ionicons } from "@expo/vector-icons";
 import { BarcodeScanningResult, Camera, CameraView } from "expo-camera";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ApiError, chargepointService } from "@/services/api";
 
 type ResolvedPayload = {
   requestUrl: string;
@@ -258,31 +258,75 @@ export default function QRScannerScreen() {
       }
 
       console.log('QR Scanner Debug - Raw data:', String(data));
-      
+
       const payload = resolveScannedPayload(String(data));
-      
+
       console.log('QR Scanner Debug - Payload:', payload);
       console.log('QR Scanner Debug - User ID:', credentials.id);
       console.log('QR Scanner Debug - Access Token:', tokens.accessToken ? 'Present' : 'Missing');
-      
+
       // Extract chargePointIdentity and connectorId from payload
       if (!payload.chargePointIdentity || !payload.connectorId) {
         throw new Error("QR Code ไม่มีข้อมูลเครื่องชาร์จหรือหัวชาร์จที่ถูกต้อง");
       }
-      
+
       // Use chargepoint service to get WebSocket URL
-      const response = await chargepointService.getWebSocketUrl(
-        payload.chargePointIdentity,
-        payload.connectorId,
-        {
-          userId: credentials.id,
+      let response;
+      try {
+        response = await chargepointService.getWebSocketUrl(
+          payload.chargePointIdentity,
+          payload.connectorId,
+          {
+            userId: credentials.id,
+          }
+        );
+      } catch (apiError: any) {
+        // จัดการ error จาก API โดยเฉพาะ
+        console.log('QR Scanner Debug - API Error caught:', apiError);
+
+        // ตรวจสอบว่าเป็น error 402 (Payment Required)
+        if (apiError?.status === 402 || apiError?.data?.code === 'NO_PAYMENT_CARDS') {
+          console.log('🚫 [QR] User has no payment cards, redirecting to add card page');
+
+          setIsProcessing(false);
+
+          Alert.alert(
+            "กรุณาเพิ่มบัตร",
+            apiError?.data?.message || apiError?.message || "กรุณาเพิ่มบัตรเครดิตก่อนใช้งานเครื่องชาร์จ",
+            [
+              {
+                text: "ยกเลิก",
+                style: "cancel",
+                onPress: () => {
+                  setScanned(false);
+                  isHandlingScanRef.current = false;
+                }
+              },
+              {
+                text: "เพิ่มบัตร",
+                onPress: () => {
+                  setScanned(false);
+                  isHandlingScanRef.current = false;
+                  router.push("/card" as never);
+                }
+              }
+            ]
+          );
+          return;
         }
-      );
+
+        // ถ้าไม่ใช่ error เรื่องบัตร ให้ throw ต่อไป
+        throw apiError;
+      }
 
       console.log('QR Scanner Debug - Service Response:', response);
 
-      if (!response.success || !response.data) {
-        throw new Error(response.error || "ไม่สามารถเรียก API ได้");
+      if (!response.success) {
+        throw new Error(response.error || response.message || "ไม่สามารถเรียก API ได้");
+      }
+
+      if (!response.data) {
+        throw new Error("ไม่พบข้อมูลในการตอบกลับจากเซิร์ฟเวอร์");
       }
 
       const body = response.data;
@@ -342,6 +386,8 @@ export default function QRScannerScreen() {
       isHandlingScanRef.current = false;
 
       const apiError = error as ApiError | undefined;
+
+      // ตรวจสอบว่าเป็น error 401 (Unauthorized)
       if (apiError?.status === 401) {
         await clearTokens();
         await clearCredentials();
@@ -354,6 +400,33 @@ export default function QRScannerScreen() {
         return;
       }
 
+      // ตรวจสอบว่าเป็น error 402 (Payment Required) - กรณีที่ไม่ได้ถูกจัดการใน inner catch
+      if (apiError?.status === 402) {
+        Alert.alert(
+          "กรุณาเพิ่มบัตร",
+          apiError?.data?.message || apiError?.message || "กรุณาเพิ่มบัตรเครดิตก่อนใช้งานเครื่องชาร์จ",
+          [
+            {
+              text: "ยกเลิก",
+              style: "cancel",
+              onPress: () => {
+                setScanned(false);
+                isHandlingScanRef.current = false;
+              }
+            },
+            {
+              text: "เพิ่มบัตร",
+              onPress: () => {
+                setScanned(false);
+                isHandlingScanRef.current = false;
+                router.push("/card" as never);
+              }
+            }
+          ]
+        );
+        return;
+      }
+
       const message =
         error instanceof Error
           ? error.message
@@ -362,7 +435,10 @@ export default function QRScannerScreen() {
       Alert.alert("เชื่อมต่อไม่สำเร็จ", message, [
         {
           text: "ลองใหม่",
-          onPress: () => setScanned(false),
+          onPress: () => {
+            setScanned(false);
+            isHandlingScanRef.current = false;
+          },
         },
         {
           text: "ปิด",

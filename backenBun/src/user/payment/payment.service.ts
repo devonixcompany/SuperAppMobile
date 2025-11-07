@@ -27,31 +27,44 @@ export class PaymentService {
       }
 
       let customer;
+      let customerExists = false;
+
+      // Try to get existing customer if omiseCustomerId exists
       if (user.omiseCustomerId) {
-        // Get existing customer
-        customer = await omise.customers.retrieve(user.omiseCustomerId);
-      } else {
-        // Create new customer
+        try {
+          customer = await omise.customers.retrieve(user.omiseCustomerId);
+          customerExists = true;
+          console.log('✅ Found existing Omise customer:', customer.id);
+        } catch (error: any) {
+          // Customer not found in Omise, need to create new one
+          console.log('⚠️ Omise customer not found, creating new one:', error.message);
+          customerExists = false;
+        }
+      }
+
+      // Create new customer if doesn't exist
+      if (!customerExists) {
         customer = await omise.customers.create({
           email: user.email,
           description: `Customer for user ${user.id}`,
           card: token
         });
 
-        // Update user with Omise customer ID
+        console.log('✅ Created new Omise customer:', customer.id);
+
+        // Update user with new Omise customer ID
         await prisma.user.update({
           where: { id: userId },
           data: { omiseCustomerId: customer.id }
         });
-      }
-
-      // If customer already exists, add card to customer
-      if (user.omiseCustomerId && customer.id === user.omiseCustomerId) {
+      } else {
+        // Customer exists, add card to existing customer
         await omise.customers.update(customer.id, {
           card: token
         });
-        // Refresh customer data
+        // Refresh customer data to get the new card
         customer = await omise.customers.retrieve(customer.id);
+        console.log('✅ Added card to existing customer:', customer.id);
       }
 
       const shouldSetDefault = Boolean(setDefault) || user.paymentCards.length === 0;

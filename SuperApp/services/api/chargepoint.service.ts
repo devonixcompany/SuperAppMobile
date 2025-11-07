@@ -1,5 +1,13 @@
-import { http } from './client';
 import type { ApiResponse } from './client';
+import { http } from './client';
+
+export interface PaymentCardRequiredError {
+  success: false;
+  error: string;
+  code: 'NO_PAYMENT_CARDS';
+  message: string;
+  action: 'ADD_PAYMENT_CARD';
+}
 
 export interface ChargepointWebSocketResponse {
   websocketUrl?: string;
@@ -46,7 +54,7 @@ class ChargepointService {
     chargePointIdentity: string,
     connectorId: number,
     params: ChargepointApiParams
-  ): Promise<ApiResponse<ChargepointWebSocketResponse>> {
+  ): Promise<ApiResponse<ChargepointWebSocketResponse> | PaymentCardRequiredError> {
     try {
       console.log('Chargepoint Service - ChargePoint Identity:', chargePointIdentity);
       console.log('Chargepoint Service - Connector ID:', connectorId);

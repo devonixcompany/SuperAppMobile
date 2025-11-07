@@ -25,9 +25,16 @@ export default function AddPaymentMethodScreen() {
 
   // Format card number with spaces
   const formatCardNumber = (text: string) => {
+    // ลบอักขระที่ไม่ใช่ตัวเลขทั้งหมด (รวมช่องว่างเก่า)
     const cleaned = text.replace(/\D/g, '');
-    const formatted = cleaned.replace(/(.{4})/g, '$1 ').trim();
-    return formatted.substring(0, 19); // Max 16 digits + 3 spaces
+
+    // จำกัดแค่ 16 หลัก
+    const limited = cleaned.substring(0, 16);
+
+    // เพิ่มช่องว่างทุก 4 ตัว
+    const formatted = limited.match(/.{1,4}/g)?.join(' ') || limited;
+
+    return formatted;
   };
 
   // Format expiry date
@@ -60,19 +67,59 @@ export default function AddPaymentMethodScreen() {
 
     setLoading(true);
     try {
-      const cleanCardNumber = cardNumber.replace(/\s/g, '');
+      // Clean card number - remove all non-digits
+      const cleanCardNumber = cardNumber.replace(/\D/g, '');
       const month = Number.parseInt(expiryMonth, 10);
       const year = Number.parseInt(expiryYear, 10);
 
+      console.log('Card validation:', {
+        original: cardNumber,
+        cleaned: cleanCardNumber,
+        length: cleanCardNumber.length,
+        isNumeric: /^\d+$/.test(cleanCardNumber),
+        month,
+        year,
+        cvvLength: cvv.length
+      });
+
+      // Validate card number
+      if (!cleanCardNumber || cleanCardNumber.length < 13 || cleanCardNumber.length > 19) {
+        Alert.alert('ข้อผิดพลาด', 'หมายเลขบัตรต้องมี 13-19 หลัก');
+        setLoading(false);
+        return;
+      }
+
+      if (!/^\d+$/.test(cleanCardNumber)) {
+        Alert.alert('ข้อผิดพลาด', 'หมายเลขบัตรต้องเป็นตัวเลขเท่านั้น');
+        setLoading(false);
+        return;
+      }
+
       if (!Number.isFinite(month) || month < 1 || month > 12) {
         Alert.alert('ข้อผิดพลาด', 'เดือนหมดอายุต้องอยู่ระหว่าง 01 ถึง 12');
+        setLoading(false);
         return;
       }
 
       if (!Number.isFinite(year) || expiryYear.length !== 4) {
         Alert.alert('ข้อผิดพลาด', 'กรุณากรอกปีหมดอายุเป็นตัวเลข 4 หลัก');
+        setLoading(false);
         return;
       }
+
+      if (cvv.length < 3 || cvv.length > 4) {
+        Alert.alert('ข้อผิดพลาด', 'CVV ต้องมี 3-4 หลัก');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Creating Omise token with:', {
+        number: cleanCardNumber,
+        expirationMonth: month,
+        expirationYear: year,
+        securityCode: cvv,
+        name: cardholderName.trim()
+      });
 
       const token = await createCardToken({
         number: cleanCardNumber,

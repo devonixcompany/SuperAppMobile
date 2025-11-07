@@ -51,6 +51,7 @@ const PUBLIC_ROUTES = [
   "/api/auth/login",
   "/api/auth/register",
   "/api/auth/refresh",
+  "/api/payment/omise/webhook", // Omise webhook - verified by signature
 ];
 
 const GATEWAY_API_KEY = process.env.WS_GATEWAY_API_KEY || "your-api-key";

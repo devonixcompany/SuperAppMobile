@@ -368,13 +368,23 @@ export default function ChargeSessionScreen() {
         appendLog("info", `กำลังดึงสรุปธุรกรรม ${transactionId}`);
 
         const response = await transactionService.getTransactionSummary(transactionId);
-        console.log("response transactionService", response.data);
+        console.log("📊 [FETCH SUMMARY] Raw response:", response);
+        console.log("📊 [FETCH SUMMARY] Response data:", response.data);
+
         if (!response.success || !response.data) {
           appendLog("error", "ไม่สามารถดึงข้อมูลสรุปธุรกรรมได้");
           return;
         }
 
         const summary = response.data;
+        console.log("📊 [FETCH SUMMARY] Summary object:", {
+          transactionId: summary.transactionId,
+          totalEnergy: summary.totalEnergy,
+          totalCost: summary.totalCost,
+          appliedRate: summary.appliedRate,
+          meterStart: summary.meterStart,
+          meterStop: summary.meterStop,
+        });
         setTransactionSummary(summary);
         setHasFetchedSummary(true);
         appendLog("success", "ดึงข้อมูลสรุปธุรกรรมสำเร็จ");
@@ -832,6 +842,47 @@ export default function ChargeSessionScreen() {
       activeTransactionId !== null ||
       backendTransactionId !== null);
 
+  // คำนวณค่าพลังงานและค่าใช้จ่าย (ย้ายมาไว้ก่อน useEffect เพื่อใช้ใน navigation)
+  const energyKWh = transactionSummary?.totalEnergy ?? chargingData?.energyDelivered;
+
+  const costEstimate = (() => {
+    // ใช้ appliedRate จาก backend เป็น fallback ถ้า baseRate ไม่มี
+    const effectiveRate = baseRate ?? transactionSummary?.appliedRate;
+
+    console.log("💰 [COST DEBUG]", {
+      summaryTotalCost: transactionSummary?.totalCost,
+      chargingDataCost: chargingData?.cost,
+      energyKWh,
+      baseRate,
+      appliedRate: transactionSummary?.appliedRate,
+      effectiveRate,
+    });
+
+    // ลำดับความสำคัญในการหาค่า cost:
+    // 1. ใช้ totalCost จาก backend (ถ้ามี)
+    if (transactionSummary?.totalCost != null) {
+      console.log("💰 Using transactionSummary.totalCost:", transactionSummary.totalCost);
+      return transactionSummary.totalCost;
+    }
+
+    // 2. ใช้ cost จาก WebSocket (ถ้ามี)
+    if (chargingData?.cost != null) {
+      console.log("💰 Using chargingData.cost:", chargingData.cost);
+      return chargingData.cost;
+    }
+
+    // 3. คำนวณจาก energyKWh * rate (ใช้ effectiveRate ที่อาจมาจาก baseRate หรือ appliedRate)
+    if (energyKWh != null && effectiveRate !== undefined) {
+      const calculated = energyKWh * effectiveRate;
+      const rateSource = baseRate !== undefined ? "baseRate" : "appliedRate";
+      console.log(`💰 Calculated cost: ${calculated} = ${energyKWh} * ${effectiveRate} (from ${rateSource})`);
+      return calculated;
+    }
+
+    console.log("💰 No cost available, returning undefined");
+    return undefined;
+  })();
+
   useEffect(() => {
     const isFinalizedStatus =
       normalizedStatus === "finishing" ||
@@ -1166,7 +1217,7 @@ export default function ChargeSessionScreen() {
     );
   }
 
-  const energyKWh = transactionSummary?.totalEnergy ?? chargingData?.energyDelivered;
+  // energyKWh และ costEstimate ถูกประกาศไว้ด้านบนแล้ว (บรรทัด 836-861)
   const energyDeliveredDisplay = formatNumber(energyKWh, 2);
   console.log("🔋 Energy Delivered:", energyDeliveredDisplay, "Raw:", energyKWh);
   const currentPower = formatNumber(chargingData?.currentPower ?? 0, 2);
@@ -1177,18 +1228,6 @@ export default function ChargeSessionScreen() {
   const startTimeLabel = formatDateTime(
     sessionStartTime ?? chargingData?.startTime,
   );
-  const costEstimate = (() => {
-    if (transactionSummary?.totalCost != null) {
-      return transactionSummary.totalCost;
-    }
-    if (chargingData?.cost != null) {
-      return chargingData.cost;
-    }
-    if (energyKWh != null && baseRate !== undefined) {
-      return energyKWh * baseRate;
-    }
-    return undefined;
-  })();
   const costDisplay = costEstimate != null
     ? formatCurrency(costEstimate, params.currency ?? "บาท")
     : null;

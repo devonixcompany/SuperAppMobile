@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Charging WebSocket API Example</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.connecting {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        .form-group {
+            margin: 15px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 600px) {
+            .two-column {
+                grid-template-columns: 1fr;
+            }
+        }
+        .metric {
+            display: inline-block;
+            background: #e9ecef;
+            padding: 5px 10px;
+            border-radius: 3px;
+            margin: 2px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔌 Charging WebSocket API Example</body></h1></h1>
+
+    <div class="container">
+        <h2>Connection</h2> Status</h2>
+        <div id="connectionStatus" class="status disconnected">Disconnected</div>
+        <div class="form-group">
+            <label for="serverUrl">WebSocket Server URL:</label>
+            <input type="text" id="serverUrl" value="ws://localhost:8082/ws" />
+        </div>
+        <div class="form-group">
+            <label for="authToken">JWT Token:</label>
+            <input type="text" id="authToken" placeholder="Enter your JWT token here" />
+        </div>
+        <button id="connectBtn" onclick="connect()">Connect</button>
+        <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button</button>>
+    </div>
+
+    <div class="container">
+        <h2>Charging Control</h2></h2>
+        <div class="two-column">
+            <div>
+                <</div>h3>Start Charging</h3>
+                <div class="form-group">
+                    <label for="chargePointId">Charge Point ID:</label>
+                    <input type="text" id="chargePointId" value="CP_001" />
+                </div>
+                <div class="form-group">
+                    <label for="connectorId">Connector ID:</label>
+                    <input type="number" id="connectorId" value="1" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="idTag">ID Tag:</label>
+                    <input type="text" id="idTag" value="USER_123" />
+                </div>
+                <button id="startChargingBtn" onclick="startCharging()" disabled></button>Start Charging</button>
+            </div>
+
+            <div>
+                <</div>h3>Stop Charging</h3>
+                <div class="form-group">
+                    <label for="stopChargePointId">Charge Point ID:</label>
+                    <input type="text" id="stopChargePointId" value="CP_001" />
+                </div>
+                <div class="form-group">
+                    <label for="transactionId">Transaction ID:</label>
+                    <input type="number" id="transactionId" value="12345" />
+                </div>
+                <div class="form-group">
+                    <label for="stopReason">Reason:</label>
+                    <select id="stopReason">
+                        <option value="UserStop">User Stop</option>
+                        <option value="EmergencyStop">Emergency Stop</option>
+                        <option value="DeAuthorized">DeAuthorized</option>
+                        <option value="RemoteStop">Remote Stop</option>
+                    </select>
+                </div>
+                <button id="stopChargingBtn" onclick="stopCharging()" disabled>Stop Charging</button></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Real-time Status</h2></h2>
+        <div id="chargingStatus">
+            <p>No active charging session</p>
+        </div>
+        <div id="meterValues" style="margin-top: 10px;">
+            <p>No meter values available</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2></h2>Message Log</h2>
+        <button onclick="clearLog()">Clear Log</button>
+        <div id="messageLog" class="log"></div>
+    </div>
+
+    <script></script>
+        let wsClient = null;
+        let isConnected = false;
+
+        // Simple WebSocket client implementation
+        class SimpleWebSocketClient {
+            constructor(url) {
+                this.url = url;
+                this.ws = null;
+                this.messageId = 1;
+                this.pendingCalls = new Map();
+                this.reconnectTimer = null;
+                this.autoReconnect = true;
+                this.reconnectInterval = 5000;
+            }
+
+            async connect() {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    return;
+                }
+
+                return new Promise((resolve, reject) => {
+                    try {
+                        logMessage('Connecting to ' + this.url);
+                        updateConnectionStatus('connecting');
+
+                        this.ws = new WebSocket(this.url);
+
+                        this.ws.onopen = () => {
+                            logMessage('✅ Connected to server');
+                            updateConnectionStatus('connected');
+                            isConnected = true;
+                            updateButtonStates();
+                            resolve();
+                        };
+
+                        this.ws.onmessage = (event) => {
+                            this.handleMessage(event.data);
+                        };
+
+                        this.ws.onclose = (event) => {
+                            logMessage('🔌 Disconnected: ' + event.code + ' - ' + event.reason);
+                            updateConnectionStatus('disconnected');
+                            isConnected = false;
+                            updateButtonStates();
+
+                            if (this.autoReconnect) {
+                                this.scheduleReconnect();
+                            }
+                        };
+
+                        this.ws.onerror = (error) => {
+                            logMessage('❌ WebSocket error: ' + error);
+                            updateConnectionStatus('disconnected');
+                            reject(error);
+                        };
+
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            }
+
+            disconnect() {
+                this.autoReconnect = false;
+                if (this.reconnectTimer) {
+                    clearTimeout(this.reconnectTimer);
+                    this.reconnectTimer = null;
+                }
+                if (this.ws) {
+                    this.ws.close(1000, 'Client disconnect');
+                    this.ws = null;
+                }
+            }
+
+            async sendMessage(type, data) {
+                if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+                    throw new Error('Not connected to server');
+                }
+
+                const messageId = this.getNextMessageId();
+                const message = {
+                    id: messageId,
+                    type: type,
+                    timestamp: new Date().toISOString(),
+                    data: data
+                };
+
+                return new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        this.pendingCalls.delete(messageId);
+                        reject(new Error('Timeout waiting for response'));
+                    }, 30000);
+
+                    this.pendingCalls.set(messageId, { resolve, reject, timeout });
+
+                    try {
+                        this.ws.send(JSON.stringify(message));
+                        logMessage('📤 Sent: ' + type, JSON.stringify(message, null, 2));
+                    } catch (error) {
+                        clearTimeout(timeout);
+                        this.pendingCalls.delete(messageId);
+                        reject(error);
+                    }
+                });
+            }
+
+            async authenticate(token) {
+                return this.sendMessage('auth_request', { token: token });
+            }
+
+            async startCharging(params) {
+                return this.sendMessage('start_charging_request', params);
+            }
+
+            async stopCharging(params) {
+                return this.sendMessage('stop_charging_request', params);
+            }
+
+            handleMessage(data) {
+                try {
+                    const message = JSON.parse(data);
+                    logMessage('📥 Received: ' + message.type, JSON.stringify(message, null, 2));
+
+                    // Handle response to pending call
+                    if (this.pendingCalls.has(message.id)) {
+                        const pending = this.pendingCalls.get(message.id);
+                        if (pending) {
+                            clearTimeout(pending.timeout);
+                            this.pendingCalls.delete(message.id);
+
+                            if (message.error) {
+                                pending.reject(new Error(message.error.message));
+                            } else {
+                                pending.resolve(message);
+                            }
+                        }
+                        return;
+                    }
+
+                    // Handle different message types
+                    switch (message.type) {
+                        case 'auth_response':
+                            handleAuthResponse(message);
+                            break;
+                        case 'charging_status_update':
+                            handleChargingStatusUpdate(message);
+                            break;
+                        case 'meter_values_update':
+                            handleMeterValuesUpdate(message);
+                            break;
+                        case 'start_charging_response':
+                            handleStartChargingResponse(message);
+                            break;
+                        case 'stop_charging_response':
+                            handleStopChargingResponse(message);
+                            break;
+                    }
+
+                } catch (error) {
+                    logMessage('❌ Failed to parse message: ' + error);
+                }
+            }
+
+            scheduleReconnect() {
+                if (this.reconnectTimer) return;
+
+                logMessage('🔄 Scheduling reconnection in ' + this.reconnectInterval + 'ms');
+                this.reconnectTimer = setTimeout(async () => {
+                    this.reconnectTimer = null;
+                    try {
+                        await this.connect();
+                        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                            const token = document.getElementById('authToken').value;
+                            if (token) {
+                                await this.authenticate(token);
+                            }
+                        }
+                    } catch (error) {
+                        logMessage('❌ Reconnection failed: ' + error);
+                        if (this.autoReconnect) {
+                            this.scheduleReconnect();
+                        }
+                    }
+                }, this.reconnectInterval);
+            }
+
+            getNextMessageId() {
+                return (this.messageId++).toString();
+            }
+        }
+
+        // UI Functions
+        function updateConnectionStatus(status) {
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.className = 'status ' + status;
+
+            switch (status) {
+                case 'connected':
+                    statusDiv.textContent = '✅ Connected';
+                    break;
+                case 'connecting':
+                    statusDiv.textContent = '🔄 Connecting...';
+                    break;
+                case 'disconnected':
+                    statusDiv.textContent = '❌ Disconnected';
+                    break;
+            }
+        }
+
+        function updateButtonStates() {
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            const startChargingBtn = document.getElementById('startChargingBtn');
+            const stopChargingBtn = document.getElementById('stopChargingBtn');
+
+            connectBtn.disabled = isConnected;
+            disconnectBtn.disabled = !isConnected;
+            startChargingBtn.disabled = !isConnected;
+            stopChargingBtn.disabled = !isConnected;
+        }
+
+        function logMessage(message, data = null) {
+            const log = document.getElementById('messageLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}${data ? '\n' + data : ''}\n`;
+            log.textContent += logEntry;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('messageLog').textContent = '';
+        }
+
+        function handleAuthResponse(message) {
+            if (message.data && message.data.success) {
+                logMessage('✅ Authentication successful');
+            } else {
+                logMessage('❌ Authentication failed: ' + (message.data?.message || 'Unknown error'));
+            }
+        }
+
+        function handleChargingStatusUpdate(message) {
+            const statusDiv = document.getElementById('chargingStatus');
+            const data = message.data;
+
+            if (data) {
+                statusDiv.innerHTML = `
+                    <h4>Charging Status Update</h4></h4>
+                    <p><strong>Charge Point</strong>:</strong> ${data.chargePointId}</p>
+                    <p><strong>Connector:</</strong>strong> ${data.connectorId}</p>
+                    <p><strong>Status:</strong> <span class="metric">${data.status}</span></p>
+                    ${data.transactionId ? `<p><strong></strong>Transaction:</strong> <span class="metric">${data.transactionId}</span></p>` : ''}
+                    <p><strong>Updated</strong>:</strong> ${new Date(data.timestamp).toLocaleString()}</p>
+                `;
+            }
+        }
+
+        function handleMeterValuesUpdate(message) {
+            const meterDiv = document.getElementById('meterValues');
+            const data = message.data;
+
+            if (data && data.meterValue) {
+                const mv = data.meterValue;
+                meterDiv.innerHTML = `
+                    <h4>Meter Values</h4>
+                    <p><strong></strong>Energy:</strong> <span class="metric">${mv.energyImportKWh.toFixed(3)} kWh</span></p>
+                    <p><strong></strong>Power:</strong> <span class="metric">${mv.powerKw.toFixed(1)} kW</span></p>
+                    <p><strong>Voltage:</strong> <span class="metric">${mv.voltage.toFixed(1)} V</span></p>
+                    <p><strong>Current:</</strong>strong> <span class="metric">${mv.current.toFixed(1)} A</span></p>
+                    ${mv.stateOfCharge ? `<p><strong>SoC</strong>:</strong> <span class="metric">${mv.stateOfCharge}%</span></p>` : ''}
+                    <p><strong>Updated</strong>:</strong> ${new Date(mv.timestamp).toLocaleString()}</p>
+                `;
+            }
+        }
+
+        function handleStartChargingResponse(message) {
+            if (message.data) {
+                if (message.data.success) {
+                    logMessage('✅ Charging started successfully');
+                    logMessage('Transaction ID: ' + message.data.transactionId);
+                } else {
+                    logMessage('❌ Failed to start charging: ' + message.data.message);
+                }
+            }
+        }
+
+        function handleStopChargingResponse(message) {
+            if (message.data) {
+                if (message.data.success) {
+                    logMessage('✅ Charging stopped successfully');
+                } else {
+                    logMessage('❌ Failed to stop charging: ' + message.data.message);
+                }
+            }
+        }
+
+        // Control Functions
+        async function connect() {
+            const url = document.getElementById('serverUrl').value;
+            const token = document.getElementById('authToken').value;
+
+            try {
+                wsClient = new SimpleWebSocketClient(url);
+                await wsClient.connect();
+
+                if (token) {
+                    await wsClient.authenticate(token);
+                }
+            } catch (error) {
+                logMessage('❌ Connection failed: ' + error.message);
+                updateConnectionStatus('disconnected');
+            }
+        }
+
+        function disconnect() {
+            if (wsClient) {
+                wsClient.disconnect();
+                wsClient = null;
+            }
+            isConnected = false;
+            updateButtonStates();
+        }
+
+        async function startCharging() {
+            if (!wsClient || !isConnected) {
+                logMessage('❌ Not connected to server');
+                return;
+            }
+
+            const params = {
+                chargePointId: document.getElementById('chargePointId').value,
+                connectorId: parseInt(document.getElementById('connectorId').value),
+                idTag: document.getElementById('idTag').value
+            };
+
+            try {
+                const response = await wsClient.startCharging(params);
+                logMessage('Start charging request sent');
+            } catch (error) {
+                logMessage('❌ Failed to start charging: ' + error.message);
+            }
+        }
+
+        async function stopCharging() {
+            if (!wsClient || !isConnected) {
+                logMessage('❌ Not connected to server');
+                return;
+            }
+
+            const params = {
+                chargePointId: document.getElementById('stopChargePointId').value,
+                transactionId: parseInt(document.getElementById('transactionId').value),
+                reason: document.getElementById('stopReason').value
+            };
+
+            try {
+                const response = await wsClient.stopCharging(params);
+                logMessage('Stop charging request sent');
+            } catch (error) {
+                logMessage('❌ Failed to stop charging: ' + error.message);
+            }
+        }
+
+        // Initialize
+        updateButtonStates();
+        logMessage('Charging WebSocket API Example loaded');
+        logMessage('Enter your JWT token and click Connect to get started');
+    </script>
+</body>
+</html>

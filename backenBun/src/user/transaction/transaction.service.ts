@@ -306,16 +306,18 @@ export class TransactionService {
       },
     });
 
-    // Process payment automatically if transaction has a cost
-    if (totalCost && totalCost > 0) {
-      try {
-        await PaymentService.processPayment(updatedTransaction.id);
-        console.log(`Payment processing initiated for transaction ${updatedTransaction.transactionId}`);
-      } catch (paymentError) {
-        console.error(`Payment processing failed for transaction ${updatedTransaction.transactionId}:`, paymentError);
-        // Don't throw error here - transaction is still completed, payment can be retried
-      }
-    }
+    // ปิด auto payment - ให้ผู้ใช้เลือกบัตรและยืนยันการชำระเองในหน้า summary
+    // if (totalCost && totalCost > 0) {
+    //   try {
+    //     await PaymentService.processPayment(updatedTransaction.id);
+    //     console.log(`Payment processing initiated for transaction ${updatedTransaction.transactionId}`);
+    //   } catch (paymentError) {
+    //     console.error(`Payment processing failed for transaction ${updatedTransaction.transactionId}:`, paymentError);
+    //     // Don't throw error here - transaction is still completed, payment can be retried
+    //   }
+    // }
+
+    console.log(`✅ Transaction ${updatedTransaction.transactionId} completed. Cost: ${totalCost} (Payment will be processed manually by user)`);
 
     return updatedTransaction;
   }
@@ -805,6 +807,15 @@ export class TransactionService {
       transaction.charge_points?.Station?.onPeakRate ??
       null;
 
+    console.log('💰 [BACKEND] Transaction Summary Cost Debug:', {
+      transactionId: transaction.transactionId,
+      totalEnergy,
+      transactionAppliedRate: transaction.appliedRate,
+      stationOnPeakRate: transaction.charge_points?.Station?.onPeakRate,
+      resolvedAppliedRate: appliedRate,
+      transactionTotalCost: transaction.totalCost,
+    });
+
     let totalCost = transaction.totalCost ?? null;
     if (
       totalCost === null &&
@@ -813,6 +824,13 @@ export class TransactionService {
     ) {
       const computedCost = totalEnergy * appliedRate;
       totalCost = Number.isFinite(computedCost) ? computedCost : null;
+      console.log('💰 [BACKEND] Computed cost:', computedCost, '=', totalEnergy, '*', appliedRate);
+    } else {
+      console.log('💰 [BACKEND] Cannot compute cost:', {
+        totalCostIsNull: totalCost === null,
+        totalEnergyIsNull: totalEnergy === null,
+        appliedRateIsNull: appliedRate === null,
+      });
     }
 
     return {

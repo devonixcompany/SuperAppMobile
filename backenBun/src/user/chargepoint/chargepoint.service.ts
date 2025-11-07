@@ -1561,12 +1561,35 @@ export class ChargePointService {
    */
   async getWebSocketUrl(chargePointIdentity: string, connectorId: number, userId?: string) {
     try {
-               const User = await this.prisma.user.findUnique({
+      // ตรวจสอบผู้ใช้และบัตรเครดิต
+      const user = await this.prisma.user.findUnique({
         where: { id: userId },
-              });
-      if (!User) {
+        include: {
+          paymentCards: {
+            where: {
+              deletedAt: null // เฉพาะบัตรที่ยังไม่ถูกลบ
+            }
+          }
+        }
+      });
+      
+      if (!user) {
         throw new Error(`User with ID '${userId}' not found`);
       }
+
+      // ตรวจสอบว่าผู้ใช้มีบัตรเครดิตหรือไม่
+      if (!user.paymentCards || user.paymentCards.length === 0) {
+        const error = new Error('User has no payment cards registered');
+        (error as any).code = 'NO_PAYMENT_CARDS';
+        throw error;
+      }
+
+      console.log(`✅ [CHARGEPOINT] User ${userId} has ${user.paymentCards.length} payment card(s)`);
+      
+      // Log payment cards for debugging
+      user.paymentCards.forEach((card, index) => {
+        console.log(`💳 [CHARGEPOINT] Card ${index + 1}: ${card.brand} ending in ${card.lastDigits}, default: ${card.isDefault}`);
+      });
       // ค้นหา ChargePoint จาก chargePointIdentity
       const chargePoint = await this.prisma.charge_points.findUnique({
         where: { chargePointIdentity },
@@ -1631,6 +1654,12 @@ export class ChargePointService {
       };
     } catch (error: any) {
       console.error('Error getting WebSocket URL:', error);
+      
+      // ถ้าเป็น error ที่มี code แล้ว ให้ throw ต่อไปโดยไม่ wrap
+      if (error.code) {
+        throw error;
+      }
+      
       throw new Error(`Failed to get WebSocket URL: ${error.message}`);
     }
   }

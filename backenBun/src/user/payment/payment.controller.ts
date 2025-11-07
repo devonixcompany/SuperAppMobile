@@ -7,17 +7,23 @@ export const paymentController = (paymentService: PaymentService) =>
     // Add payment card
     .post(
       '/cards',
-      async ({ body, user, set }: any) => {
+      async ({ body, user, request, set }: any) => {
+        // Try to get user from multiple sources
+        const authenticatedUser = user || (request as any).user;
+
         console.log('Add payment card request /api/payment/cards', body);
-        console.log('Add payment card request /api/payment/cards user', user);
+        console.log('Add payment card request /api/payment/cards user from context:', user);
+        console.log('Add payment card request /api/payment/cards user from request:', (request as any).user);
+        console.log('Add payment card request /api/payment/cards authenticated user:', authenticatedUser);
+
         try {
-          if (!user) {
+          if (!authenticatedUser) {
             set.status = 401;
             return { success: false, message: 'Unauthorized' };
           }
 
           const { token, setDefault } = body;
-          const result = await PaymentService.addPaymentCard(user.id, token, setDefault);
+          const result = await PaymentService.addPaymentCard(authenticatedUser.id, token, setDefault);
           console.log('Add payment card result:', result);
           return {
             success: true,
@@ -44,15 +50,17 @@ export const paymentController = (paymentService: PaymentService) =>
     // Get payment cards
     .get(
       '/cards',
-      async ({ user, set }: any) => {
+      async ({ user, request, set }: any) => {
+        const authenticatedUser = user || (request as any).user;
+
         try {
-          if (!user) {
+          if (!authenticatedUser) {
             set.status = 401;
             return { success: false, message: 'Unauthorized' };
           }
 
-          const cards = await PaymentService.getPaymentCards(user.id);
-          
+          const cards = await PaymentService.getPaymentCards(authenticatedUser.id);
+
           return {
             success: true,
             data: cards
@@ -71,16 +79,18 @@ export const paymentController = (paymentService: PaymentService) =>
     // Remove payment card
     .delete(
       '/cards/:cardId',
-      async ({ params, user, set }: any) => {
+      async ({ params, user, request, set }: any) => {
+        const authenticatedUser = user || (request as any).user;
+
         try {
-          if (!user) {
+          if (!authenticatedUser) {
             set.status = 401;
             return { success: false, message: 'Unauthorized' };
           }
 
           const { cardId } = params;
-          await PaymentService.removePaymentCard(user.id, cardId);
-          
+          await PaymentService.removePaymentCard(authenticatedUser.id, cardId);
+
           return {
             success: true,
             message: 'ลบบัตรเครดิตสำเร็จ'
@@ -138,16 +148,18 @@ export const paymentController = (paymentService: PaymentService) =>
     // Process payment for transaction
     .post(
       '/process',
-      async ({ body, user, set }: any) => {
+      async ({ body, user, request, set }: any) => {
+        const authenticatedUser = user || (request as any).user;
+
         try {
-          if (!user) {
+          if (!authenticatedUser) {
             set.status = 401;
             return { success: false, message: 'Unauthorized' };
           }
 
           const { transactionId, cardId } = body;
           const result = await PaymentService.processPayment(transactionId, cardId);
-          
+
           return {
             success: true,
             message: 'ดำเนินการชำระเงินสำเร็จ',
@@ -173,18 +185,20 @@ export const paymentController = (paymentService: PaymentService) =>
     // Get payment history
     .get(
       '/history',
-      async ({ query, user, set }: any) => {
+      async ({ query, user, request, set }: any) => {
+        const authenticatedUser = user || (request as any).user;
+
         try {
-          if (!user) {
+          if (!authenticatedUser) {
             set.status = 401;
             return { success: false, message: 'Unauthorized' };
           }
 
           const page = parseInt(query.page || '1');
           const limit = parseInt(query.limit || '10');
-          
-          const history = await PaymentService.getPaymentHistory(user.id, page, limit);
-          
+
+          const history = await PaymentService.getPaymentHistory(authenticatedUser.id, page, limit);
+
           return {
             success: true,
             data: history

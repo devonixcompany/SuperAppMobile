@@ -45,6 +45,14 @@ export const createCardToken = async (payload: CardTokenPayload): Promise<CardTo
   }
 
   try {
+    console.log('🔐 Creating Omise token with payload:', {
+      numberLength: payload.number?.length,
+      expirationMonth: payload.expirationMonth,
+      expirationYear: payload.expirationYear,
+      hasSecurityCode: !!payload.securityCode,
+      hasName: !!payload.name
+    });
+
     const token = await OmiseClient.createToken({
       card: {
         number: payload.number,
@@ -55,11 +63,14 @@ export const createCardToken = async (payload: CardTokenPayload): Promise<CardTo
       },
     });
 
+    console.log('✅ Omise token created:', token);
+
     if (!token || typeof token !== 'object') {
       throw new Error('Invalid response from Omise');
     }
 
     if ((token as any).object === 'error') {
+      console.error('❌ Omise returned error:', token);
       throw new Error(
         (token as any).message ||
         (token as any).code ||
@@ -73,18 +84,30 @@ export const createCardToken = async (payload: CardTokenPayload): Promise<CardTo
 
     return token as CardTokenResponse;
   } catch (error: any) {
+    console.error('❌ Omise SDK error:', error);
+
     // Omise SDK rejects with response.json() Promise, resolve it for better messaging
     if (error && typeof error.then === 'function') {
       try {
         const resolved = await error;
+        console.error('❌ Omise error resolved:', resolved);
+
         if (resolved && typeof resolved === 'object') {
-          throw new Error(
-            resolved.message ||
-            resolved.code ||
-            'Omise rejected the card details'
-          );
+          // Extract detailed error message
+          const errorMsg = resolved.message || resolved.code || 'Omise rejected the card details';
+
+          // If there are failures array, show those
+          if (resolved.failures && Array.isArray(resolved.failures)) {
+            const failureMessages = resolved.failures
+              .map((f: any) => `${f.code}: ${f.message}`)
+              .join(', ');
+            throw new Error(failureMessages || errorMsg);
+          }
+
+          throw new Error(errorMsg);
         }
       } catch (nestedError: any) {
+        console.error('❌ Nested error:', nestedError);
         throw new Error(
           nestedError?.message ||
           'Failed to create card token with Omise'

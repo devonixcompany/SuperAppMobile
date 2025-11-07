@@ -1,5 +1,4 @@
 import { ChargePointStatus, OCPPVersion } from '@prisma/client';
-import { Decimal } from '@prisma/client/runtime/library';
 import { Elysia, t } from 'elysia';
 import { ValidationService } from '../validation/validation.service';
 import { ChargePointService } from './chargepoint.service';
@@ -1121,6 +1120,19 @@ export const chargePointController = (
           };
         } catch (error: any) {
           console.error('Error getting WebSocket URL:', error);
+          
+          // จัดการ error code พิเศษสำหรับไม่มีบัตรเครดิต
+          if (error.code === 'NO_PAYMENT_CARDS') {
+            set.status = 402; // Payment Required
+            return {
+              success: false,
+              error: error.message,
+              code: 'NO_PAYMENT_CARDS',
+              message: 'ผู้ใช้ยังไม่ได้เพิ่มบัตรเครดิต กรุณาเพิ่มบัตรก่อนใช้งาน',
+              action: 'ADD_PAYMENT_CARD'
+            };
+          }
+          
           set.status = error.message.includes('not found') ? 404 : 500;
           return {
             success: false,

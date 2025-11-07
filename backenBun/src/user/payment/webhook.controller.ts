@@ -11,26 +11,44 @@ export const webhookController = () =>
       '/webhook',
       async ({ body, headers, set }: any) => {
         try {
+          console.log('🔔 [WEBHOOK] Received request from Omise');
+          console.log('🔔 [WEBHOOK] Headers:', {
+            signature: headers['x-omise-signature'] ? 'present' : 'missing',
+            contentType: headers['content-type']
+          });
+          console.log('🔔 [WEBHOOK] Body:', JSON.stringify(body, null, 2));
+
           // Verify webhook signature for security
           const signature = headers['x-omise-signature'];
           const webhookSecret = process.env.OMISE_WEBHOOK_SECRET;
-          
+
+          console.log('🔔 [WEBHOOK] Secret configured:', webhookSecret ? 'yes' : 'no');
+
           if (webhookSecret && signature) {
             const expectedSignature = crypto
               .createHmac('sha256', webhookSecret)
               .update(JSON.stringify(body))
               .digest('hex');
-              
+
+            console.log('🔔 [WEBHOOK] Signature validation:', {
+              provided: signature,
+              expected: expectedSignature,
+              match: signature === expectedSignature
+            });
+
             if (signature !== expectedSignature) {
-              console.error('Invalid webhook signature');
+              console.error('❌ [WEBHOOK] Invalid webhook signature');
               set.status = 401;
               return { success: false, message: 'Invalid signature' };
             }
+            console.log('✅ [WEBHOOK] Signature valid');
+          } else {
+            console.log('⚠️ [WEBHOOK] Skipping signature validation (secret or signature missing)');
           }
 
           const { key, data } = body;
-          
-          console.log('Received Omise webhook:', { key, chargeId: data?.id });
+
+          console.log('🔔 [WEBHOOK] Processing event:', { key, chargeId: data?.id });
 
           switch (key) {
             case 'charge.complete':
