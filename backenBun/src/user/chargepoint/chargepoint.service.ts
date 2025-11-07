@@ -908,7 +908,6 @@ export class ChargePointService {
         });
 
         if (this.hasStationUpdates(updatePayload)) {
-          updatePayload.updatedAt = new Date();
           await this.prisma.station.update({
             where: { id: station.id },
             data: updatePayload
@@ -935,7 +934,6 @@ export class ChargePointService {
           });
 
           if (this.hasStationUpdates(updatePayload)) {
-            updatePayload.updatedAt = new Date();
             await this.prisma.station.update({
               where: { id: stationByName.id },
               data: updatePayload
@@ -1097,7 +1095,6 @@ export class ChargePointService {
         });
 
         if (this.hasStationUpdates(updatePayload)) {
-          updatePayload.updatedAt = new Date();
           await this.prisma.station.update({
             where: { id: stationId },
             data: updatePayload
@@ -1207,7 +1204,6 @@ export class ChargePointService {
           });
 
           if (this.hasStationUpdates(updateData)) {
-            updateData.updatedAt = new Date();
             await this.prisma.station.update({
               where: { id: stationById.id },
               data: updateData
@@ -1238,7 +1234,6 @@ export class ChargePointService {
           });
 
           if (this.hasStationUpdates(updateData)) {
-            updateData.updatedAt = new Date();
             await this.prisma.station.update({
               where: { id: existingStation.id },
               data: updateData

@@ -114,34 +114,50 @@ async function handleChargeComplete(chargeData: any) {
 
     if (paid && status === 'successful') {
       // Payment successful
+      console.log('✅ [WEBHOOK] Payment successful, updating payment and transaction...', {
+        paymentId: payment.id,
+        chargeId,
+        amount: payment.amount,
+        transactionId: payment.transaction?.id
+      });
+
       await PaymentService.handleSuccessfulPayment(payment.id, chargeData);
-      
+
       // Update transaction status
       if (payment.transaction) {
         await prisma.transactions.update({
           where: { id: payment.transaction.id },
-          data: { 
+          data: {
             status: 'COMPLETED'
           }
         });
+        console.log('✅ [WEBHOOK] Transaction status updated to COMPLETED');
       }
-      
-      console.log('Payment completed successfully:', chargeId);
+
+      console.log('✅ [WEBHOOK] Payment completed successfully:', chargeId);
     } else {
       // Payment failed
+      console.log('❌ [WEBHOOK] Payment failed, updating payment and transaction...', {
+        paymentId: payment.id,
+        chargeId,
+        status,
+        paid
+      });
+
       await PaymentService.handleFailedPayment(payment.id, `Charge failed: ${status}`);
-      
+
       // Update transaction status
       if (payment.transaction) {
         await prisma.transactions.update({
           where: { id: payment.transaction.id },
-          data: { 
+          data: {
             status: 'FAILED'
           }
         });
+        console.log('❌ [WEBHOOK] Transaction status updated to FAILED');
       }
-      
-      console.log('Payment failed:', chargeId, status);
+
+      console.log('❌ [WEBHOOK] Payment failed:', chargeId, status);
     }
   } catch (error) {
     console.error('Error handling charge.complete:', error);

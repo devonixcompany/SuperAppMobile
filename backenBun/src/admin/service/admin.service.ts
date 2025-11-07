@@ -215,7 +215,7 @@ export class AdminService {
 
       // Check if refresh token exists in database and is not revoked
       console.log("💾 [ADMIN] Checking database for refresh token...");
-      const storedToken = await prisma.adminRefreshToken.findFirst({
+      const storedToken = await prisma.admin_refresh_tokens.findFirst({
         where: {
           token: refreshToken,
           isRevoked: false,
@@ -296,7 +296,7 @@ export class AdminService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    await prisma.adminRefreshToken.create({
+    await prisma.admin_refresh_tokens.create({
       data: {
         token: refreshToken,
         adminId,
@@ -306,7 +306,7 @@ export class AdminService {
   }
 
   async revokeRefreshToken(refreshToken: string): Promise<void> {
-    await prisma.adminRefreshToken.updateMany({
+    await prisma.admin_refresh_tokens.updateMany({
       where: {
         token: refreshToken,
         isRevoked: false,
@@ -319,7 +319,7 @@ export class AdminService {
   }
 
   async revokeAllAdminRefreshTokens(adminId: string): Promise<void> {
-    await prisma.adminRefreshToken.updateMany({
+    await prisma.admin_refresh_tokens.updateMany({
       where: {
         adminId,
         isRevoked: false,
@@ -332,7 +332,7 @@ export class AdminService {
   }
 
   async cleanupExpiredRefreshTokens(): Promise<void> {
-    const deletedTokens = await prisma.adminRefreshToken.deleteMany({
+    const deletedTokens = await prisma.admin_refresh_tokens.deleteMany({
       where: {
         OR: [
           {

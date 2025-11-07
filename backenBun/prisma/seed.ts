@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient, OCPPVersion, OwnershipType, ConnectorType } from '@prisma/client';
+import { ConnectorType, OCPPVersion, OwnershipType, Prisma, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 

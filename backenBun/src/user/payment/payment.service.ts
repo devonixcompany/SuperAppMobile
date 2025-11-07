@@ -305,6 +305,13 @@ export class PaymentService {
       });
 
       // Create Omise charge
+      console.log('💳 Creating Omise charge...', {
+        amount: Math.round(transaction.totalCost * 100),
+        currency: 'THB',
+        transactionId: transaction.transactionId,
+        paymentId: payment.id
+      });
+
       const charge = await omise.charges.create({
         amount: Math.round(transaction.totalCost * 100), // Convert to satang
         currency: 'THB',
@@ -317,6 +324,13 @@ export class PaymentService {
           paymentId: payment.id,
           userId: transaction.userId
         }
+      });
+
+      console.log('💳 Charge created:', {
+        chargeId: charge.id,
+        status: charge.status,
+        paid: charge.paid,
+        authorize_uri: charge.authorize_uri ? 'present' : 'none'
       });
 
       // Update payment with charge info
@@ -366,11 +380,28 @@ export class PaymentService {
       }
 
       // Handle failed payment
-      await this.handleFailedPayment(payment.id, charge.failure_message || 'Payment failed');
+      if (charge.status === 'failed') {
+        await this.handleFailedPayment(payment.id, charge.failure_message || 'Payment failed');
+        return {
+          success: false,
+          error: charge.failure_message || 'Payment failed',
+          paymentId: payment.id
+        };
+      }
+
+      // Payment is pending - wait for webhook
+      console.log('💳 Payment is pending, waiting for webhook confirmation...', {
+        chargeId: charge.id,
+        status: charge.status,
+        paid: charge.paid
+      });
+
       return {
-        success: false,
-        error: charge.failure_message || 'Payment failed',
-        paymentId: payment.id
+        success: true,
+        requiresAction: false,
+        pending: true,
+        paymentId: payment.id,
+        chargeId: charge.id
       };
 
     } catch (error) {

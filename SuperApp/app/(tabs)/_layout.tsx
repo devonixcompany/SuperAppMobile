@@ -1,5 +1,5 @@
 // นำเข้า Tabs และ useRouter จาก expo-router สำหรับจัดการการนำทางแบบ tab
-import { Tabs, useRouter } from "expo-router";
+import { Tabs, usePathname, useRouter } from "expo-router";
 import React from "react";
 // นำเข้า component BottomNavigation ที่เราสร้างเองสำหรับแสดงแถบเมนูด้านล่าง
 import BottomNavigation from "../../components/ui/bottom-navigation";
@@ -8,6 +8,8 @@ import BottomNavigation from "../../components/ui/bottom-navigation";
 export default function TabLayout() {
   // ใช้ router สำหรับการนำทางไปหน้าต่างๆ
   const router = useRouter();
+  const pathname = usePathname();
+  const isQRScannerRoute = pathname?.includes("qr-scanner");
 
   return (
     // Tabs component จาก expo-router ใช้สำหรับจัดการหน้าต่างๆ แบบ tab
@@ -23,6 +25,7 @@ export default function TabLayout() {
         <BottomNavigation
           // ส่งชื่อ tab ที่กำลังใช้งานอยู่ โดยดึงจาก state.index (ลำดับปัจจุบัน)
           activeTab={props.state.routeNames[props.state.index]}
+          hidden={Boolean(isQRScannerRoute)}
           // ฟังก์ชันที่ทำงานเมื่อกดที่ tab ใดๆ
           onTabPress={(tab) => {
             // หาลำดับของ tab ที่ถูกกดจากชื่อ tab

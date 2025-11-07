@@ -16,7 +16,7 @@ model Admin {
   lastName             String?
   isActive             Boolean                @default(true)
   createdAt            DateTime               @default(now())
-  updatedAt            DateTime
+  updatedAt            DateTime               @updatedAt
   admin_refresh_tokens admin_refresh_tokens[]
 }
 
@@ -57,9 +57,9 @@ model Station {
   offPeakRate          Float            @default(20.0)
   offPeakStartTime     String           @default("16:00")
   offPeakEndTime       String           @default("22:00")
-  offPeakbaseRate      Float            @default(20.0) 
+  offPeakbaseRate      Float            @default(20.0)
   createdAt            DateTime         @default(now())
-  updatedAt            DateTime
+  updatedAt            DateTime         @updatedAt
   charge_points charge_points[]
 }
 
