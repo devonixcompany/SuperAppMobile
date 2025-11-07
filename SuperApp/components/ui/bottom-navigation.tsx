@@ -1,8 +1,15 @@
 // นำเข้า Ionicons สำหรับไอคอนต่างๆ
 import { Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 // นำเข้า components พื้นฐานจาก React Native
-import { LayoutChangeEvent, Text, TouchableOpacity, View } from "react-native";
+import {
+  Animated,
+  LayoutChangeEvent,
+  Text,
+  TouchableOpacity,
+  View,
+  ViewProps,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
@@ -11,6 +18,7 @@ interface BottomNavigationProps {
   activeTab: string; // ชื่อ tab ที่กำลังใช้งานอยู่
   onTabPress: (tab: string) => void; // ฟังก์ชันเมื่อกด tab ปกติ
   onQRPress?: () => void; // ฟังก์ชันเมื่อกดปุ่ม QR (optional)
+  hidden?: boolean; // ซ่อน bar เมื่ออยู่ในหน้า scanner
 }
 
 // Component หลักของ Bottom Navigation Bar
@@ -19,6 +27,7 @@ export default function BottomNavigation({
   activeTab,
   onTabPress,
   onQRPress,
+  hidden = false,
 }: BottomNavigationProps) { // เทคนิค: Custom Clipping / Custom Painter / Custom Shape
   const insets = useSafeAreaInsets();
 
@@ -33,6 +42,29 @@ export default function BottomNavigation({
   const FLOATING_BUTTON_SIZE = 88;
   const horizontalPadding = 16;
   const bottomOffset = Math.max(insets.bottom - 20, 20); // ลด padding ด้านล่างลงเล็กน้อยให้ bar อยู่ต่ำลง ลดตำแหน่ง Bar
+  const hiddenOffset = bottomOffset + BAR_HEIGHT + FLOATING_BUTTON_SIZE;
+
+  const translateY = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: hidden ? hiddenOffset : 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: hidden ? 0 : 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, hidden, hiddenOffset, translateY]);
+
+  const containerPointerEvents: ViewProps["pointerEvents"] = hidden
+    ? "none"
+    : "box-none";
 
   type TabItem = {
     id: string;
@@ -170,8 +202,8 @@ export default function BottomNavigation({
   };
 
   return (
-    <View
-      pointerEvents="box-none"
+    <Animated.View
+      pointerEvents={containerPointerEvents}
       style={{
         position: "absolute",
         left: 0,
@@ -180,6 +212,8 @@ export default function BottomNavigation({
         paddingHorizontal: horizontalPadding,
         paddingBottom: bottomOffset,
         paddingTop: FLOATING_BUTTON_SIZE - NOTCH_DEPTH,
+        opacity: fadeAnim,
+        transform: [{ translateY }],
       }}
     >
       <View
@@ -241,6 +275,6 @@ export default function BottomNavigation({
           <Ionicons name="qr-code-outline" size={36} color="#1F274B" />
         </TouchableOpacity>
       </View>
-    </View>
+    </Animated.View>
   );
 }
