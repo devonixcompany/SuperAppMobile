@@ -181,7 +181,7 @@ const recommendationTopics: Recommendation[] = [
   },
 ];
 
-const CHARGING_STATUS_POLL_INTERVAL_MS = 10000; //ตั้งเวลาเรียก API ของ Pop-Up หน่วยเป็น ms.
+const CHARGING_STATUS_POLL_INTERVAL_MS = 5000; //ตั้งเวลาเรียก API ของ Pop-Up หน่วยเป็น ms.
 
 const CoinIcon = ({ size = 40 }: { size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 33 33" fill="none">
