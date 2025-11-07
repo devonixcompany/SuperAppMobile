@@ -13,6 +13,66 @@
     return new Elysia({ prefix: '/api/admin/stations' })
       .use(requireAdminAuth(jwtService))
       .decorate('adminStationService', stationService)
+      .get(
+        '/',
+        async ({ query, set, adminStationService }) => {
+          try {
+            const { page, limit, search } = query as {
+              page?: number;
+              limit?: number;
+              search?: string;
+            };
+            const result = await adminStationService.listStations({
+              page,
+              limit,
+              search,
+            });
+
+            return {
+              success: true,
+              data: result.data,
+              meta: result.meta,
+            };
+          } catch (error: any) {
+            set.status = 500;
+            return {
+              success: false,
+              message: error?.message ?? 'Failed to fetch stations',
+            };
+          }
+        },
+        {
+          detail: {
+            tags: ['Admin Station'],
+            summary: 'List charging stations',
+            description:
+              'Returns paginated stations with optional name search.',
+          },
+          query: t.Object({
+            page: t.Optional(
+              t.Number({
+                description: 'Page number (starting at 1).',
+                minimum: 1,
+                default: 1,
+              }),
+            ),
+            limit: t.Optional(
+              t.Number({
+                description: 'Items per page (max 100).',
+                minimum: 1,
+                maximum: 100,
+                default: 10,
+              }),
+            ),
+            search: t.Optional(
+              t.String({
+                description: 'Filter stations by name (case-insensitive).',
+                minLength: 1,
+              }),
+            ),
+          }),
+        },
+      )
       .post(
         '/',
         async ({ body, set, adminStationService }) => {

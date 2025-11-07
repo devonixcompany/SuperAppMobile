@@ -32,6 +32,27 @@ export type CreateStationChargePointData = Omit<
   stationId?: string;
 };
 
+export interface StationListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+}
+
+export interface StationListResult {
+  data: Array<{
+    id: string;
+    stationname: string;
+    imageUrl: string | null;
+    openclosedays: string | null;
+  }>;
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 export class AdminStationService {
   private toDecimal(value?: number | string | null) {
     if (value === null || value === undefined || value === '') {
@@ -120,5 +141,50 @@ export class AdminStationService {
     }
 
     return station;
+  }
+
+  async listStations(params: StationListParams): Promise<StationListResult> {
+    const page = params.page && params.page > 0 ? Math.floor(params.page) : 1;
+    const limit =
+      params.limit && params.limit > 0 && params.limit <= 100
+        ? Math.floor(params.limit)
+        : 10;
+    const skip = (page - 1) * limit;
+
+    const where =
+      params.search && params.search.trim().length
+        ? {
+            stationname: {
+              contains: params.search.trim(),
+              mode: 'insensitive' as const,
+            },
+          }
+        : {};
+
+    const [total, stations] = await Promise.all([
+      prisma.station.count({ where }),
+      prisma.station.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          stationname: true,
+          imageUrl: true,
+          openclosedays: true,
+        },
+      }),
+    ]);
+
+    return {
+      data: stations,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
   }
 }
