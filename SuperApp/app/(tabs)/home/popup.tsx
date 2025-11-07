@@ -430,14 +430,17 @@ const formatDuration = (
   return `${hours} ชม. ${remainingMinutes.toString().padStart(2, "0")} นาที`;
 };
 
-const ChargingStatusPopup: React.FC<ChargingStatusPopupProps> = ({
-  visible,
+type ChargingStatusCardContentProps = {
+  data?: ChargingStatusPopupData | null;
+  onClose?: () => void;
+  onNavigateToCharging?: () => void;
+};
+
+const ChargingStatusCardContent: React.FC<ChargingStatusCardContentProps> = ({
   data,
   onClose,
   onNavigateToCharging,
-  bottomOffset,
 }) => {
-  const insets = useSafeAreaInsets();
   const powerText = formatPower(data?.currentPowerKw);
   const durationText = formatDuration(
     data?.estimatedRemainingSeconds,
@@ -451,6 +454,86 @@ const ChargingStatusPopup: React.FC<ChargingStatusPopupProps> = ({
     }
     onClose?.();
   };
+
+  return (
+    <>
+      <View className="flex-row items-start">
+        <LinearGradient
+          colors={["#2D6BAA", "#48B59E"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          className="items-center justify-center rounded-full w-14 h-14"
+        >
+          <Ionicons name="flash" size={28} color="#FFFFFF" />
+        </LinearGradient>
+        <View className="flex-1 ml-4">
+          <View className="flex-1 pr-2">
+            <Text className="text-xl font-semibold text-[#1D2144]">
+              กำลังชาร์จอยู่
+            </Text>
+            {data?.chargePointName ? (
+              <Text className="mt-1 text-xs text-[#6B7280]">
+                {data.chargePointName}
+                {data.connectorName ? ` • ${data.connectorName}` : ""}
+              </Text>
+            ) : null}
+          </View>
+          <Text className="mt-4 text-sm text-[#1D2144]">
+            การชาร์จปัจจุบัน{" "}
+            <Text className="font-semibold">{powerText} kW</Text>
+          </Text>
+          <Text className="mt-1 text-sm text-[#1D2144]">
+            เวลาที่คาดว่าจะเต็ม{" "}
+            <Text className="font-semibold">{durationText}</Text>
+          </Text>
+        </View>
+      </View>
+      <TouchableOpacity onPress={handleNavigate} className="self-end mt-6">
+        <Text className="text-base font-semibold text-[#36B18F]">
+          กลับสู่หน้าการชาร์จ
+        </Text>
+      </TouchableOpacity>
+    </>
+  );
+};
+
+type ChargingStatusInlineCardProps = {
+  data: ChargingStatusPopupData;
+  onClose?: () => void;
+  onNavigateToCharging?: () => void;
+};
+
+export const ChargingStatusInlineCard: React.FC<
+  ChargingStatusInlineCardProps
+> = ({ data, onClose, onNavigateToCharging }) => (
+  <View className="mb-6">
+    <View
+      className="w-full rounded-[28px] bg-white px-6 py-6"
+      style={{
+        shadowColor: "#1B2344",
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 6,
+      }}
+    >
+      <ChargingStatusCardContent
+        data={data}
+        onClose={onClose}
+        onNavigateToCharging={onNavigateToCharging}
+      />
+    </View>
+  </View>
+);
+
+const ChargingStatusPopup: React.FC<ChargingStatusPopupProps> = ({
+  visible,
+  data,
+  onClose,
+  onNavigateToCharging,
+  bottomOffset,
+}) => {
+  const insets = useSafeAreaInsets();
 
   const containerPaddingBottom = (bottomOffset ?? 120) + insets.bottom;
 
@@ -467,55 +550,11 @@ const ChargingStatusPopup: React.FC<ChargingStatusPopupProps> = ({
         style={{ paddingBottom: containerPaddingBottom }}
       >
         <Pressable className="w-full rounded-[28px] bg-white px-6 py-6">
-          <View className="flex-row items-start">
-            <LinearGradient
-              colors={["#2D6BAA", "#48B59E"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              className="items-center justify-center rounded-full w-14 h-14"
-            >
-              <Ionicons name="flash" size={28} color="#FFFFFF" />
-            </LinearGradient>
-            <View className="flex-1 ml-4">
-              <View className="flex-row items-start justify-between">
-                <View className="flex-1 pr-2">
-                  <Text className="text-xl font-semibold text-[#1D2144]">
-                    กำลังชาร์จอยู่
-                  </Text>
-                  {data?.chargePointName ? (
-                    <Text className="mt-1 text-xs text-[#6B7280]">
-                      {data.chargePointName}
-                      {data.connectorName ? ` • ${data.connectorName}` : ""}
-                    </Text>
-                  ) : null}
-                </View>
-                {onClose ? (
-                  <TouchableOpacity
-                    onPress={onClose}
-                    className="items-center justify-center w-8 h-8 rounded-full bg-[#F3F4F6]"
-                  >
-                    <Ionicons name="close" size={18} color="#6B7280" />
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-              <Text className="mt-4 text-sm text-[#1D2144]">
-                การชาร์จปัจจุบัน{" "}
-                <Text className="font-semibold">{powerText} kW</Text>
-              </Text>
-              <Text className="mt-1 text-sm text-[#1D2144]">
-                เวลาที่คาดว่าจะเต็ม{" "}
-                <Text className="font-semibold">{durationText}</Text>
-              </Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            onPress={handleNavigate}
-            className="self-end mt-6"
-          >
-            <Text className="text-base font-semibold text-[#36B18F]">
-              กลับสู่หน้าการชาร์จ
-            </Text>
-          </TouchableOpacity>
+          <ChargingStatusCardContent
+            data={data}
+            onClose={onClose}
+            onNavigateToCharging={onNavigateToCharging}
+          />
         </Pressable>
       </Pressable>
     </Modal>

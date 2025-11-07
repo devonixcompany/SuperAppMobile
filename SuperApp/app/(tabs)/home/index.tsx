@@ -21,7 +21,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { ClipPath, Defs, G, Path, Rect } from "react-native-svg";
 import MiniProfileModal, { DEFAULT_PROFILE_AVATAR } from "./miniprofile";
 import NotificationModal from "./notification";
-import ChargingStatusPopup, {
+import {
+  ChargingStatusInlineCard,
   useChargingStatusPopup,
 } from "./popup";
 
@@ -180,6 +181,8 @@ const recommendationTopics: Recommendation[] = [
   },
 ];
 
+const CHARGING_STATUS_POLL_INTERVAL_MS = 5000; //ตั้งเวลาเรียก API ของ Pop-Up หน่วยเป็น ms.
+
 const CoinIcon = ({ size = 40 }: { size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 33 33" fill="none">
     <G clipPath="url(#clip0_750_7653)">
@@ -264,7 +267,9 @@ export default function HomeScreen() {
     data: chargingPopupData,
     visible: isChargingPopupVisible,
     hide: hideChargingPopup,
-  } = useChargingStatusPopup();
+  } = useChargingStatusPopup({
+    pollInterval: CHARGING_STATUS_POLL_INTERVAL_MS,
+  });
 
   const handleNavigateToCharging = useCallback(() => {
     hideChargingPopup();
@@ -359,6 +364,14 @@ export default function HomeScreen() {
             </LinearGradient>
            </TouchableScale>
           </View>
+
+          {chargingPopupData && isChargingPopupVisible ? (
+            <ChargingStatusInlineCard
+              data={chargingPopupData}
+              onClose={hideChargingPopup}
+              onNavigateToCharging={handleNavigateToCharging}
+            />
+          ) : null}
 
           {/* === NEWS UPDATES SECTION === */}
           <View className="mb-2">
@@ -471,14 +484,6 @@ export default function HomeScreen() {
           {/* ส่วนล่างถูกตัดออกตามคำขอ */}
         </View>
       </ScrollView>
-      {chargingPopupData ? (
-        <ChargingStatusPopup
-          visible={isChargingPopupVisible}
-          data={chargingPopupData}
-          onClose={hideChargingPopup}
-          onNavigateToCharging={handleNavigateToCharging}
-        />
-      ) : null}
       <NotificationModal
         visible={isNotificationVisible}
         onClose={() => setNotificationVisible(false)}
