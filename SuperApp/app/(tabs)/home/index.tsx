@@ -272,9 +272,44 @@ export default function HomeScreen() {
   });
 
   const handleNavigateToCharging = useCallback(() => {
+    console.log('🚀 [HOME] handleNavigateToCharging called');
+    console.log('🚀 [HOME] chargingPopupData:', chargingPopupData);
+
     hideChargingPopup();
-    router.push("/(tabs)/charging");
-  }, [hideChargingPopup, router]);
+
+    // Navigate to charge session with all required parameters
+    if (chargingPopupData?.websocketUrl && chargingPopupData?.chargePointIdentity && chargingPopupData?.connectorId) {
+      const navParams = {
+        websocketUrl: chargingPopupData.websocketUrl,
+        chargePointIdentity: chargingPopupData.chargePointIdentity,
+        chargePointName: chargingPopupData.chargePointName ?? '',
+        connectorId: String(chargingPopupData.connectorId),
+        stationName: chargingPopupData.stationName ?? chargingPopupData.chargePointName ?? '',
+        stationLocation: chargingPopupData.stationLocation ?? '',
+        powerRating: chargingPopupData.powerRating ? String(chargingPopupData.powerRating) : '',
+        baseRate: chargingPopupData.baseRate ? String(chargingPopupData.baseRate) : '',
+        currency: chargingPopupData.currency ?? 'บาท',
+        pricingTierName: chargingPopupData.pricingTierName ?? '',
+        chargePointBrand: chargingPopupData.chargePointBrand ?? '',
+        protocol: chargingPopupData.protocol ?? '',
+      };
+
+      console.log('✅ [HOME] Navigating to /charge-session with params:', navParams);
+
+      router.push({
+        pathname: '/charge-session',
+        params: navParams,
+      });
+    } else {
+      console.warn('❌ [HOME] Missing required data, navigating to charging list instead');
+      console.warn('❌ [HOME] Missing:', {
+        websocketUrl: chargingPopupData?.websocketUrl,
+        chargePointIdentity: chargingPopupData?.chargePointIdentity,
+        connectorId: chargingPopupData?.connectorId,
+      });
+      router.push("/(tabs)/charging");
+    }
+  }, [hideChargingPopup, router, chargingPopupData]);
 
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar, ตั้งพื้นหลังเป็นสีเทาอ่อน

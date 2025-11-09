@@ -11,6 +11,7 @@ export interface CreateTransactionParams {
   vehicleId?: string;
   requestedAt?: string | Date;
   startMeterValue?: number;
+  websocketUrl?: string;
 }
 
 export interface StartTransactionParams {
@@ -93,6 +94,7 @@ export class TransactionService {
       vehicleId,
       requestedAt,
       startMeterValue,
+      websocketUrl,
     } = params;
 
     const chargePoint = await this.prisma.charge_points.findUnique({
@@ -127,6 +129,7 @@ export class TransactionService {
         vehicleId,
         chargePointId: chargePoint.id,
         connectorId: connector.id,
+        websocketUrl,
         startTime,
         startMeterValue: startMeterValue ?? 0,
         status: TransactionStatus.ACTIVE,
@@ -500,6 +503,12 @@ export class TransactionService {
 
     const absRaw = Math.abs(raw);
     if (absRaw < 50) {
+      return null;
+    }
+
+    // ถ้ามีทศนิยมและค่าน้อยกว่า 10000 แสดงว่าเป็น kWh หรือ Wh อยู่แล้ว ไม่ต้อง normalize
+    const hasDecimal = absRaw !== Math.floor(absRaw);
+    if (hasDecimal && absRaw < 10000) {
       return null;
     }
 

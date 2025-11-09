@@ -27,6 +27,7 @@ export const transactionController = (transactionService: TransactionService) =>
             vehicleId?: string;
             requestedAt?: string;
             startMeterValue?: number;
+            websocketUrl?: string;
           };
 
           if (payload.userId && user?.id && payload.userId !== user.id) {
@@ -44,6 +45,7 @@ export const transactionController = (transactionService: TransactionService) =>
             vehicleId: payload.vehicleId,
             requestedAt: payload.requestedAt,
             startMeterValue: payload.startMeterValue,
+            websocketUrl: payload.websocketUrl,
           });
 
           set.status = 201;
@@ -82,6 +84,7 @@ export const transactionController = (transactionService: TransactionService) =>
           vehicleId: t.Optional(t.String()),
           requestedAt: t.Optional(t.String()),
           startMeterValue: t.Optional(t.Number()),
+          websocketUrl: t.Optional(t.String()),
         }),
       }
     )

@@ -398,7 +398,6 @@ Authenticate a user and receive access tokens.
         },
         body: t.Object({
           phoneNumber: t.Optional(t.String()),
-          email: t.Optional(t.String()),
           password: t.String()
         })
       }

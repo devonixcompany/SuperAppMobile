@@ -9,6 +9,7 @@ export interface CreateTransactionRequest {
   userId: string;
   vehicleId?: string;
   startTime?: string;
+  websocketUrl?: string;
 }
 
 export interface CreateTransactionResponse {
