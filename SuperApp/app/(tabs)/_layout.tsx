@@ -10,6 +10,7 @@ export default function TabLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const isQRScannerRoute = pathname?.includes("qr-scanner");
+  const isChargingRoute = pathname?.includes("charging");
 
   return (
     // Tabs component จาก expo-router ใช้สำหรับจัดการหน้าต่างๆ แบบ tab
@@ -25,7 +26,7 @@ export default function TabLayout() {
         <BottomNavigation
           // ส่งชื่อ tab ที่กำลังใช้งานอยู่ โดยดึงจาก state.index (ลำดับปัจจุบัน)
           activeTab={props.state.routeNames[props.state.index]}
-          hidden={Boolean(isQRScannerRoute)}
+          hidden={Boolean(isQRScannerRoute || isChargingRoute)}
           // ฟังก์ชันที่ทำงานเมื่อกดที่ tab ใดๆ
           onTabPress={(tab) => {
             // หาลำดับของ tab ที่ถูกกดจากชื่อ tab
@@ -46,11 +47,10 @@ export default function TabLayout() {
         />
       )}
     >
-      {/* กำหนด screens ที่จะแสดงใน tabs */}
-      <Tabs.Screen name="home" /> {/* หน้า Home */}
-      <Tabs.Screen name="charging" /> {/* หน้า Charging */}
-      <Tabs.Screen name="card" /> {/* หน้า Card */}
-      <Tabs.Screen name="settings" /> {/* หน้า Settings */}
+      <Tabs.Screen name="home" />
+      <Tabs.Screen name="charging" />
+      <Tabs.Screen name="card" />
+      <Tabs.Screen name="settings" />
     </Tabs>
   );
 }
