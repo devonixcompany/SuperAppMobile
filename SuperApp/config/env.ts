@@ -5,6 +5,7 @@ interface EnvConfig {
   apiUrl: string;
   appEnv: string;
   omisePublicKey?: string;
+  googleMapsApiKey?: string;
 }
 
 const getEnvVars = (): EnvConfig => {
@@ -13,6 +14,7 @@ const getEnvVars = (): EnvConfig => {
   const apiUrl = extras?.apiUrl;
   const appEnv = extras?.appEnv || "development";
   const omisePublicKey = extras?.omisePublicKey;
+  const googleMapsApiKey = extras?.googleMapsApiKey;
 
   // Fallback to default if not set
   if (!apiUrl) {
@@ -21,6 +23,7 @@ const getEnvVars = (): EnvConfig => {
       apiUrl: "http://localhost:8080",
       appEnv: "development",
       omisePublicKey,
+      googleMapsApiKey,
     };
   }
 
@@ -28,6 +31,7 @@ const getEnvVars = (): EnvConfig => {
     apiUrl,
     appEnv,
     omisePublicKey,
+    googleMapsApiKey,
   };
 };
 
