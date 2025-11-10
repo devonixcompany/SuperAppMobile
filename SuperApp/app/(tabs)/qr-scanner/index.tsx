@@ -1,26 +1,26 @@
 import env from "@/config/env";
 import { ApiError, chargepointService } from "@/services/api";
 import {
-    clearCredentials,
-    clearTokens,
-    getCredentials,
-    getTokens,
+  clearCredentials,
+  clearTokens,
+  getCredentials,
+  getTokens,
 } from "@/utils/keychain";
 import {
-    normalizeUrlToDevice,
-    normalizeWebSocketUrlToDevice,
+  normalizeUrlToDevice,
+  normalizeWebSocketUrlToDevice,
 } from "@/utils/network";
 import { Ionicons } from "@expo/vector-icons";
 import { BarcodeScanningResult, Camera, CameraView } from "expo-camera";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -515,11 +515,7 @@ export default function QRScannerScreen() {
           {/* Camera Overlay Content */}
           <View style={StyleSheet.absoluteFillObject} className="flex-1">
             {/* Top Status Bar */}
-            <View className="absolute top-0 left-0 right-0 bg-black/30 p-4 z-20">
-              <Text className="text-white text-center text-sm">
-                📱 กำลังสแกน QR Code...
-              </Text>
-            </View>
+    
 
             {/* Center Scanning Frame */}
             <View className="flex-1 items-center justify-center">
@@ -537,33 +533,17 @@ export default function QRScannerScreen() {
                   วาง QR Code ในกรอบ
                 </Text>
                 <Text className="text-white/90 text-center leading-6">
-                  สแกน QR Code เพื่อเริ่มชาร์จ EV{"\n"}
-                  หรือทำธุรกรรมอื่นๆ
+                  สแกน QR Code เพื่อเริ่มชาร์จ EV
                 </Text>
               </View>
             </View>
 
-            {/* Bottom Info Panel */}
-            <View className="absolute bottom-0 left-0 right-0 bg-black/40 p-4 z-20">
-              <Text className="text-white/80 text-center text-xs mb-2">
-                💡 เคล็ดลับ: ใช้ไฟฉายหากแสงไม่เพียงพอ
-              </Text>
-              <View className="flex-row justify-center space-x-4">
-                <View className="flex-row items-center">
-                  <View className="w-2 h-2 bg-green-500 rounded-full mr-2" />
-                  <Text className="text-white text-xs">พร้อมสแกน</Text>
-                </View>
-                <View className="flex-row items-center">
-                  <Ionicons name="shield-checkmark" size={12} color="#51BC8E" />
-                  <Text className="text-white text-xs ml-1">ปลอดภัย</Text>
-                </View>
-              </View>
-            </View>
+       
           </View>
         </CameraView>
       </View>
 
-      <View className="px-6 pb-6 z-10">
+    {/*   <View className="px-6 pb-6 z-10">
         <Text className="text-white/70 text-sm mb-4">การดำเนินการด่วน</Text>
         <View className="flex-row justify-between">
           {[
@@ -587,7 +567,7 @@ export default function QRScannerScreen() {
           ))}
         </View>
       </View>
-
+ */}
       {isProcessing && (
         <View className="absolute inset-0 bg-black/60 items-center justify-center">
           <ActivityIndicator size="large" color="#51BC8E" />

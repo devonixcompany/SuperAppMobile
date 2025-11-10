@@ -1805,6 +1805,21 @@ export default function ChargeSessionScreen() {
                   </LinearGradient>
                 </TouchableOpacity>
               )}
+
+              {/* ปุ่มทดสอบ UI ใหม่ */}
+              <TouchableOpacity
+                style={styles.testUIButton}
+                onPress={() => router.push('/charge-session-ui-new')}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['rgba(0, 229, 255, 0.2)', 'rgba(0, 229, 255, 0.1)']}
+                  style={styles.testUIButtonGradient}
+                >
+                  <Ionicons name="flask-outline" size={20} color="#00E5FF" />
+                  <Text style={styles.testUIButtonText}>ทดสอบ UI ใหม่</Text>
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
 
             {helperText && (
@@ -2369,6 +2384,28 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1.5,
     borderColor: "rgba(220, 53, 69, 0.5)",
+  },
+  testUIButton: {
+    marginTop: 14,
+    height: 56,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: "rgba(0, 229, 255, 0.5)",
+    backgroundColor: "rgba(0, 229, 255, 0.1)",
+  },
+  testUIButtonGradient: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  testUIButtonText: {
+    color: "#00E5FF",
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
   secondaryButtonGradient: {
     flex: 1,
