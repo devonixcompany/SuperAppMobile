@@ -709,6 +709,7 @@ export default function ChargeSessionScreen() {
           chargePointIdentity,
           connectorId: connectorToUse,
           userId: resolvedUserId,
+          websocketUrl: normalizedWsUrl,
         });
         console.log("respone crate transaction", response.data);
         if (!response.success || !response.data?.transactionId) {
@@ -1614,6 +1615,80 @@ export default function ChargeSessionScreen() {
           </LinearGradient>
         </Animated.View>
 
+        {/* Real-time Charging Metrics Card */}
+        {(isCharging || activeTransactionId) && (
+          <Animated.View style={[
+            styles.metricsCard,
+            isCharging && {
+              transform: [{ scale: pulseAnim }]
+            }
+          ]}>
+            <LinearGradient
+              colors={['rgba(12, 196, 108, 0.15)', 'rgba(0, 229, 255, 0.15)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.metricsCardGradient}
+            >
+              <View style={styles.metricsHeader}>
+                <Ionicons name="speedometer" size={24} color={COLORS.glowGreen} />
+                <Text style={styles.metricsTitle}>ข้อมูลการชาร์จแบบ Real-time</Text>
+              </View>
+
+              <View style={styles.metricsGrid}>
+                {/* Current Power */}
+                <View style={styles.metricItem}>
+                  <View style={styles.metricIconContainer}>
+                    <LinearGradient
+                      colors={[COLORS.glow, COLORS.glowGreen]}
+                      style={styles.metricIconGradient}
+                    >
+                      <Ionicons name="flash" size={20} color="#FFFFFF" />
+                    </LinearGradient>
+                  </View>
+                  <Text style={styles.metricLabel}>กำลังไฟฟ้า</Text>
+                  <Animated.Text
+                    style={[
+                      styles.metricValue,
+                      isCharging && {
+                        textShadowColor: COLORS.glowGreen,
+                        textShadowRadius: 10,
+                        textShadowOffset: { width: 0, height: 0 }
+                      }
+                    ]}
+                  >
+                    {formatNumber(chargingData?.currentPower ?? 0, 2)}
+                  </Animated.Text>
+                  <Text style={styles.metricUnit}>kW</Text>
+                </View>
+
+                {/* Voltage */}
+                
+
+             
+
+                {/* Temperature */}
+                {chargingData?.temperature != null && (
+                  <View style={styles.metricItem}>
+                    <View style={styles.metricIconContainer}>
+                      <LinearGradient
+                        colors={['#FF6B6B', '#FF8E53']}
+                        style={styles.metricIconGradient}
+                      >
+                        <Ionicons name="thermometer" size={20} color="#FFFFFF" />
+                      </LinearGradient>
+                    </View>
+                    <Text style={styles.metricLabel}>อุณหภูมิ</Text>
+                    <Text style={styles.metricValue}>
+                      {formatNumber(chargingData.temperature, 1)}
+                    </Text>
+                    <Text style={styles.metricUnit}>°C</Text>
+                  </View>
+                )}
+              </View>
+            </LinearGradient>
+          </Animated.View>
+        )}
+
         {/* Enhanced station card */}
         <View style={styles.stationCard}>
           <LinearGradient
@@ -1730,6 +1805,21 @@ export default function ChargeSessionScreen() {
                   </LinearGradient>
                 </TouchableOpacity>
               )}
+
+              {/* ปุ่มทดสอบ UI ใหม่ */}
+              <TouchableOpacity
+                style={styles.testUIButton}
+                onPress={() => router.push('/charge-session-ui-new')}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['rgba(0, 229, 255, 0.2)', 'rgba(0, 229, 255, 0.1)']}
+                  style={styles.testUIButtonGradient}
+                >
+                  <Ionicons name="flask-outline" size={20} color="#00E5FF" />
+                  <Text style={styles.testUIButtonText}>ทดสอบ UI ใหม่</Text>
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
 
             {helperText && (
@@ -2295,6 +2385,28 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "rgba(220, 53, 69, 0.5)",
   },
+  testUIButton: {
+    marginTop: 14,
+    height: 56,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: "rgba(0, 229, 255, 0.5)",
+    backgroundColor: "rgba(0, 229, 255, 0.1)",
+  },
+  testUIButtonGradient: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  testUIButtonText: {
+    color: "#00E5FF",
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
   secondaryButtonGradient: {
     flex: 1,
     flexDirection: 'row',
@@ -2364,5 +2476,77 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: COLORS.divider,
     marginVertical: 12,
+  },
+  metricsCard: {
+    marginTop: 24,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: COLORS.glowGreen,
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  metricsCardGradient: {
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(12, 196, 108, 0.3)',
+  },
+  metricsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  metricsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    flex: 1,
+  },
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    justifyContent: 'space-between',
+  },
+  metricItem: {
+    width: '47%',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  metricIconContainer: {
+    marginBottom: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  metricIconGradient: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+  metricLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  metricValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  metricUnit: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
   },
 });

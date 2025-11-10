@@ -2,8 +2,8 @@ import { http } from "@/services/api";
 import { getCredentials } from "@/utils/keychain";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -13,6 +13,17 @@ type RawTransaction = {
   status?: string;
   transactionStatus?: string;
   state?: string;
+  [key: string]: any;
+};
+
+type ChargingDataPayload = {
+  currentPower?: number;
+  voltage?: number;
+  current?: number;
+  temperature?: number;
+  energyDelivered?: number;
+  sessionDuration?: number;
+  estimatedCost?: number;
   [key: string]: any;
 };
 
@@ -256,6 +267,17 @@ export type ChargingStatusPopupData = {
   chargePointName?: string | null;
   connectorName?: string | null;
   transactionId?: number | string | null;
+  websocketUrl?: string | null;
+  chargePointIdentity?: string | null;
+  connectorId?: number | null;
+  stationName?: string | null;
+  stationLocation?: string | null;
+  powerRating?: number | null;
+  baseRate?: number | null;
+  currency?: string | null;
+  pricingTierName?: string | null;
+  chargePointBrand?: string | null;
+  protocol?: string | null;
 };
 
 type ChargingStatusPopupProps = {
@@ -280,35 +302,66 @@ const loadActiveTransaction = async (): Promise<ChargingStatusResult> => {
     }
 
     const endpoint = `/api/transactions/user/${credentials.id}`;
+    console.log('🔍 [POPUP] Fetching active transaction from:', endpoint);
     const response = await http.get<any>(endpoint);
+    console.log('📦 [POPUP] Raw API response:', response);
     const payload = response?.data ?? response;
+    console.log('📦 [POPUP] Payload:', payload);
     const activeTransaction = extractActiveTransaction(payload);
+    console.log('🎯 [POPUP] Active transaction:', activeTransaction);
 
     if (!activeTransaction) {
+      console.log('❌ [POPUP] No active transaction found');
       return { data: null, hadError: false };
     }
 
     const status = getStatusString(activeTransaction);
+    console.log('📊 [POPUP] Transaction status:', status);
     if (!status || status.toUpperCase() !== ACTIVE_TRANSACTION_STATUS) {
+      console.log('❌ [POPUP] Status is not ACTIVE');
       return { data: null, hadError: false };
     }
 
     const { seconds, minutes } = deriveRemainingTime(activeTransaction);
 
+    // Extract chargePoint data
+    const chargePoint = activeTransaction.chargePoint;
+    const connector = activeTransaction.connector;
+    const station = chargePoint?.Station ?? chargePoint?.station;
+
+    console.log('🔌 [POPUP] ChargePoint:', chargePoint);
+    console.log('🔌 [POPUP] Connector:', connector);
+    console.log('🏢 [POPUP] Station:', station);
+
+    const popupData = {
+      status,
+      currentPowerKw: derivePowerKw(activeTransaction),
+      estimatedRemainingSeconds: seconds,
+      estimatedRemainingMinutes: minutes,
+      chargePointName: deriveChargePointName(activeTransaction),
+      connectorName: deriveConnectorName(activeTransaction),
+      transactionId:
+        activeTransaction.transactionId ??
+        activeTransaction.id ??
+        activeTransaction.transactionID ??
+        null,
+      websocketUrl: activeTransaction.websocketUrl ?? chargePoint?.urlwebSocket ?? chargePoint?.websocketUrl ?? null,
+      chargePointIdentity: chargePoint?.chargePointIdentity ?? activeTransaction.chargePointIdentity ?? null,
+      connectorId: connector?.connectorId ?? activeTransaction.connectorId ?? null,
+      stationName: station?.stationname ?? station?.name ?? chargePoint?.stationName ?? null,
+      stationLocation: station?.location ?? chargePoint?.location ?? null,
+      powerRating: chargePoint?.powerRating ?? chargePoint?.maxPower ?? null,
+      baseRate: station?.onPeakRate ?? station?.offPeakRate ?? null,
+      currency: 'บาท',
+      pricingTierName: station?.pricingTierName ?? null,
+      chargePointBrand: chargePoint?.brand ?? null,
+      protocol: chargePoint?.protocol ?? chargePoint?.ocppProtocolRaw ?? null,
+    };
+
+    console.log('✅ [POPUP] Final popup data:', popupData);
+
     return {
-      data: {
-        status,
-        currentPowerKw: derivePowerKw(activeTransaction),
-        estimatedRemainingSeconds: seconds,
-        estimatedRemainingMinutes: minutes,
-        chargePointName: deriveChargePointName(activeTransaction),
-        connectorName: deriveConnectorName(activeTransaction),
-        transactionId:
-          activeTransaction.transactionId ??
-          activeTransaction.id ??
-          activeTransaction.transactionID ??
-          null,
-      },
+      data: popupData,
       hadError: false,
     };
   } catch (error) {
@@ -441,19 +494,128 @@ const ChargingStatusCardContent: React.FC<ChargingStatusCardContentProps> = ({
   onClose,
   onNavigateToCharging,
 }) => {
-  const powerText = formatPower(data?.currentPowerKw);
+  const [realtimeData, setRealtimeData] = useState<ChargingDataPayload | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // Connect to WebSocket when websocketUrl is available
+  useEffect(() => {
+    if (!data?.websocketUrl) {
+      console.log('🔌 [POPUP WS] No websocketUrl, skipping connection');
+      return;
+    }
+
+    console.log('🔌 [POPUP WS] Connecting to:', data.websocketUrl);
+
+    try {
+      const ws = new WebSocket(data.websocketUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('✅ [POPUP WS] Connected');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          console.log('📨 [POPUP WS] Received:', message);
+
+          if (message.type === 'charging_data' && message.data) {
+            console.log('⚡ [POPUP WS] Charging data update:', message.data);
+            setRealtimeData(message.data);
+          }
+        } catch (error) {
+          console.error('❌ [POPUP WS] Parse error:', error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('❌ [POPUP WS] Error:', error);
+      };
+
+      ws.onclose = () => {
+        console.log('🔌 [POPUP WS] Disconnected');
+      };
+    } catch (error) {
+      console.error('❌ [POPUP WS] Connection error:', error);
+    }
+
+    return () => {
+      if (wsRef.current) {
+        console.log('🔌 [POPUP WS] Cleaning up connection');
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [data?.websocketUrl]);
+
+  // Use real-time data if available, otherwise fall back to data from API
+  const currentPower = realtimeData?.currentPower ?? data?.currentPowerKw ?? 0;
+  const energyDelivered = realtimeData?.energyDelivered ?? 0;
+  const sessionDuration = realtimeData?.sessionDuration ?? data?.estimatedRemainingSeconds ?? 0;
+
+  const powerText = formatPower(currentPower);
   const durationText = formatDuration(
-    data?.estimatedRemainingSeconds,
+    sessionDuration,
     data?.estimatedRemainingMinutes,
   );
 
   const handleNavigate = () => {
+    console.log('🚀 [POPUP NAV] handleNavigate called');
+    console.log('🚀 [POPUP NAV] onNavigateToCharging:', onNavigateToCharging);
+    console.log('🚀 [POPUP NAV] data:', data);
+
     if (onNavigateToCharging) {
+      console.log('🚀 [POPUP NAV] Using custom onNavigateToCharging');
       onNavigateToCharging();
       return;
     }
-    onClose?.();
+
+    // Navigate to charge session with all required parameters
+    console.log('🚀 [POPUP NAV] Checking required fields...');
+    console.log('🚀 [POPUP NAV] websocketUrl:', data?.websocketUrl);
+    console.log('🚀 [POPUP NAV] chargePointIdentity:', data?.chargePointIdentity);
+    console.log('🚀 [POPUP NAV] connectorId:', data?.connectorId);
+
+    if (data?.websocketUrl && data?.chargePointIdentity && data?.connectorId) {
+      const navParams = {
+        websocketUrl: data.websocketUrl,
+        chargePointIdentity: data.chargePointIdentity,
+        chargePointName: data.chargePointName ?? '',
+        connectorId: String(data.connectorId),
+        stationName: data.stationName ?? data.chargePointName ?? '',
+        stationLocation: data.stationLocation ?? '',
+        powerRating: data.powerRating ? String(data.powerRating) : '',
+        baseRate: data.baseRate ? String(data.baseRate) : '',
+        currency: data.currency ?? 'บาท',
+        pricingTierName: data.pricingTierName ?? '',
+        chargePointBrand: data.chargePointBrand ?? '',
+        protocol: data.protocol ?? '',
+      };
+
+      console.log('✅ [POPUP NAV] All required fields present, navigating...');
+      console.log('✅ [POPUP NAV] Navigation params:', navParams);
+
+      try {
+        router.push({
+          pathname: '/charge-session',
+          params: navParams,
+        });
+        console.log('✅ [POPUP NAV] Navigation successful');
+        onClose?.();
+      } catch (error) {
+        console.error('❌ [POPUP NAV] Navigation error:', error);
+      }
+    } else {
+      console.warn('❌ [POPUP NAV] Missing required data for navigation:', {
+        websocketUrl: data?.websocketUrl,
+        chargePointIdentity: data?.chargePointIdentity,
+        connectorId: data?.connectorId,
+      });
+      onClose?.();
+    }
   };
+
+  const hasRealTimeData = currentPower > 0;
 
   return (
     <>
@@ -477,20 +639,99 @@ const ChargingStatusCardContent: React.FC<ChargingStatusCardContentProps> = ({
                 {data.connectorName ? ` • ${data.connectorName}` : ""}
               </Text>
             ) : null}
+            {data?.stationLocation ? (
+              <Text className="mt-0.5 text-xs text-[#9CA3AF]">
+                📍 {data.stationLocation}
+              </Text>
+            ) : null}
           </View>
-          <Text className="mt-4 text-sm text-[#1D2144]">
-            การชาร์จปัจจุบัน{" "}
-            <Text className="font-semibold">{powerText} kW</Text>
-          </Text>
-          <Text className="mt-1 text-sm text-[#1D2144]">
-            เวลาที่คาดว่าจะเต็ม{" "}
-            <Text className="font-semibold">{durationText}</Text>
-          </Text>
+
+          {/* Show real-time data if available */}
+          {hasRealTimeData ? (
+            <View className="mt-4 space-y-2">
+              {/* Current Power */}
+              <View className="flex-row items-center justify-between px-3 py-2 bg-gradient-to-r from-[#2D6BAA]/10 to-[#48B59E]/10 rounded-lg">
+                <View className="flex-row items-center">
+                  <Ionicons name="flash" size={16} color="#2D6BAA" />
+                  <Text className="ml-2 text-sm text-[#6B7280]">กำลังไฟฟ้า</Text>
+                </View>
+                <Text className="text-base font-bold text-[#2D6BAA]">{powerText} kW</Text>
+              </View>
+
+              {/* Energy Delivered */}
+              {energyDelivered > 0 && (
+                <View className="flex-row items-center justify-between px-3 py-2 bg-[#F3F4F6] rounded-lg">
+                  <View className="flex-row items-center">
+                    <Ionicons name="battery-charging" size={16} color="#48B59E" />
+                    <Text className="ml-2 text-sm text-[#6B7280]">พลังงานที่ได้รับ</Text>
+                  </View>
+                  <Text className="text-base font-semibold text-[#1D2144]">
+                    {energyDelivered.toFixed(2)} kWh
+                  </Text>
+                </View>
+              )}
+
+              {/* Voltage and Current */}
+              {(realtimeData?.voltage != null || realtimeData?.current != null) && (
+                <View className="flex-row gap-2">
+                  {realtimeData?.voltage != null && (
+                    <View className="flex-1 px-3 py-2 bg-[#F3F4F6] rounded-lg">
+                      <Text className="text-xs text-[#9CA3AF]">แรงดัน</Text>
+                      <Text className="text-sm font-semibold text-[#1D2144] mt-0.5">
+                        {realtimeData.voltage.toFixed(1)} V
+                      </Text>
+                    </View>
+                  )}
+                  {realtimeData?.current != null && (
+                    <View className="flex-1 px-3 py-2 bg-[#F3F4F6] rounded-lg">
+                      <Text className="text-xs text-[#9CA3AF]">กระแส</Text>
+                      <Text className="text-sm font-semibold text-[#1D2144] mt-0.5">
+                        {realtimeData.current.toFixed(1)} A
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Session Duration */}
+              {sessionDuration > 0 && (
+                <View className="flex-row items-center justify-between px-3 py-2 bg-[#F3F4F6] rounded-lg">
+                  <View className="flex-row items-center">
+                    <Ionicons name="time" size={16} color="#6B7280" />
+                    <Text className="ml-2 text-sm text-[#6B7280]">เวลาที่ใช้</Text>
+                  </View>
+                  <Text className="text-base font-semibold text-[#1D2144]">{durationText}</Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <>
+              {/* Show power rating if no real-time data */}
+              {data?.powerRating && (
+                <View className="mt-3 px-3 py-2 bg-[#F3F4F6] rounded-lg">
+                  <Text className="text-xs text-[#6B7280]">
+                    กำลังไฟสูงสุด
+                  </Text>
+                  <Text className="text-base font-semibold text-[#1D2144] mt-0.5">
+                    {data.powerRating} kW
+                  </Text>
+                </View>
+              )}
+              <View className="mt-4 px-3 py-2 bg-blue-50 rounded-lg border border-blue-100">
+                <View className="flex-row items-center">
+                  <Ionicons name="sync" size={14} color="#2D6BAA" />
+                  <Text className="ml-2 text-xs text-[#2D6BAA] italic">
+                    กำลังเชื่อมต่อเพื่อรับข้อมูล Real-time...
+                  </Text>
+                </View>
+              </View>
+            </>
+          )}
         </View>
       </View>
       <TouchableOpacity onPress={handleNavigate} className="self-end mt-6">
         <Text className="text-base font-semibold text-[#36B18F]">
-          กลับสู่หน้าการชาร์จ
+          ดูรายละเอียดการชาร์จ →
         </Text>
       </TouchableOpacity>
     </>
