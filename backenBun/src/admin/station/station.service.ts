@@ -215,6 +215,11 @@ export class AdminStationService {
             serialNumber: true,
             brand: true,
             createdAt: true,
+            User: {
+              select: {
+                phoneNumber: true,
+              },
+            },
             connectors: {
               select: {
                 connectorId: true,
@@ -223,6 +228,11 @@ export class AdminStationService {
                 connectorstatus: true,
               },
               orderBy: { connectorId: 'asc' },
+            },
+            _count: {
+              select: {
+                transactions: true,
+              },
             },
           },
         },
@@ -233,42 +243,51 @@ export class AdminStationService {
       throw new Error('Station not found');
     }
 
-    const chargePointDetails = station.charge_points.map((cp) => ({
-      stationname: station.stationname,
-      imageUrl: station.imageUrl,
-      openclosedays: station.openclosedays,
-      onPeakRate: station.onPeakRate,
-      onPeakStartTime: station.onPeakStartTime,
-      onPeakEndTime: station.onPeakEndTime,
-      onPeakbaseRate: station.onPeakbaseRate,
-      offPeakRate: station.offPeakRate,
-      offPeakStartTime: station.offPeakStartTime,
-      offPeakEndTime: station.offPeakEndTime,
-      offPeakbaseRate: station.offPeakbaseRate,
-      chargepointname: cp.chargepointname,
-      serialNumber: cp.serialNumber,
-      brand: cp.brand,
-    }));
-
-    return chargePointDetails.length
-      ? chargePointDetails
-      : [
-          {
-            stationname: station.stationname,
-            imageUrl: station.imageUrl,
-            openclosedays: station.openclosedays,
-            onPeakRate: station.onPeakRate,
-            onPeakStartTime: station.onPeakStartTime,
-            onPeakEndTime: station.onPeakEndTime,
-            onPeakbaseRate: station.onPeakbaseRate,
-            offPeakRate: station.offPeakRate,
-            offPeakStartTime: station.offPeakStartTime,
-            offPeakEndTime: station.offPeakEndTime,
-            offPeakbaseRate: station.offPeakbaseRate,
-            chargepointname: null,
-            serialNumber: null,
-            brand: null,
+    const chargePoints = await Promise.all(
+      station.charge_points.map(async (cp) => {
+        const revenueResult = await prisma.transactions.aggregate({
+          where: {
+            chargePointId: cp.id,
+            status: 'COMPLETED',
           },
-        ];
+          _sum: {
+            totalCost: true,
+          },
+        });
+
+        return {
+          chargepointname: cp.chargepointname,
+          serialNumber: cp.serialNumber,
+          brand: cp.brand,
+          totalTransactions: cp._count.transactions,
+          totalRevenue: revenueResult._sum.totalCost ?? 0,
+          connectors: cp.connectors.map((connector) => ({
+            connectorId: connector.connectorId,
+            type: connector.type,
+            maxPower: connector.maxPower,
+            connectorstatus: connector.connectorstatus,
+            startTime: cp.createdAt?.toISOString() ?? null,
+            phoneNumber: cp.User?.phoneNumber ?? null,
+          })),
+        };
+      }),
+    );
+
+    return {
+      station: {
+        stationname: station.stationname,
+        imageUrl: station.imageUrl,
+        openclosedays: station.openclosedays,
+        onPeakRate: station.onPeakRate,
+        onPeakStartTime: station.onPeakStartTime,
+        onPeakEndTime: station.onPeakEndTime,
+        onPeakbaseRate: station.onPeakbaseRate,
+        offPeakRate: station.offPeakRate,
+        offPeakStartTime: station.offPeakStartTime,
+        offPeakEndTime: station.offPeakEndTime,
+        offPeakbaseRate: station.offPeakbaseRate,
+        chargePoint: chargePoints,
+      },
+    };
   }
 }
