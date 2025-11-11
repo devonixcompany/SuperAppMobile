@@ -90,7 +90,7 @@ export class AdminConnectorsService {
           ...(data.id ? { id: data.id } : {}),
           chargePointId,
           connectorId,
-        type,
+          type,
           connectorstatus,
           typeDescription: data.typeDescription?.trim() ?? null,
           maxPower: this.normalizeFloat(
@@ -112,7 +112,6 @@ export class AdminConnectorsService {
         where: { id: chargePointId },
         data: {
           connectorCount: totalConnectors,
-          updatedAt: new Date(),
         },
       });
 
@@ -122,7 +121,7 @@ export class AdminConnectorsService {
     logger.info({
       msg: 'Admin created connector',
       connectorId: connector.id,
-      chargePointId: connector.charge_point_id,
+      chargePointId: connector.chargePointId,
     });
 
     return connector;

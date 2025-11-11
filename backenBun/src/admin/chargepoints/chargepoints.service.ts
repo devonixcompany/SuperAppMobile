@@ -18,18 +18,29 @@ export type CreateChargePointConnectorData = Omit<
 export interface CreateChargePointData {
   id?: string;
   chargepointname: string;
-  stationId: string;
+  stationId?: string;
   brand: string;
   serialNumber: string;
   powerRating: number;
   powerSystem?: number;
   connectorCount?: number;
+  protocol: OCPPVersion;
   csmsUrl?: string | null;
   chargePointIdentity: string;
-  protocol: OCPPVersion;
-  organization_id?: string;
-  chargePointModel?: string;
-  chargePointVendor?: string;
+  maxPower?: number;
+  heartbeatIntervalSec?: number;
+  vendor?: string;
+  model?: string;
+  firmwareVersion?: string;
+  ocppProtocolRaw?: string;
+  ocppSessionId?: string;
+  isWhitelisted?: boolean;
+  ownerId?: string;
+  ownershipType?: 'PUBLIC' | 'PRIVATE' | 'SHARED';
+  isPublic?: boolean;
+  urlwebSocket?: string;
+  openingHours?: string;
+  is24Hours?: boolean;
   connectors?: CreateChargePointConnectorData[];
 }
 
@@ -62,13 +73,16 @@ export class AdminChargePointsService {
       "Charge point identity"
     );
 
-    const stationId = this.trimRequired(data.stationId, "Station ID");
-    const stationExists = await prisma.station.findUnique({
-      where: { id: stationId },
-      select: { id: true },
-    });
-    if (!stationExists) {
-      throw new Error("Referenced station not found");
+    let stationId = data.stationId;
+    if (stationId) {
+      stationId = this.trimRequired(data.stationId, "Station ID");
+      const stationExists = await prisma.station.findUnique({
+        where: { id: stationId },
+        select: { id: true },
+      });
+      if (!stationExists) {
+        throw new Error("Referenced station not found");
+      }
     }
 
     const existingSerial = await prisma.charge_points.findUnique({
@@ -129,17 +143,9 @@ export class AdminChargePointsService {
       throw new Error("Connector count must be at least 1");
     }
 
-    // Generate required fields that aren't provided
-    const chargePointId = data.chargePointIdentity || `CP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-    // Use a real organization ID from the database
-    const organizationId = data.organization_id || "c3dac355-3cbe-412f-a509-4901f58f8bee";
-
     const chargePoint = await prisma.charge_points.create({
       data: {
         ...(data.id ? { id: data.id } : {}),
-        charge_point_id: chargePointId,
-        name: chargepointname,
         chargepointname,
         stationId,
         brand,
@@ -147,13 +153,23 @@ export class AdminChargePointsService {
         powerRating: Number(data.powerRating),
         powerSystem: data.powerSystem ?? 1,
         connectorCount: resolvedConnectorCount,
+        protocol: data.protocol,
         csmsUrl: this.normalizeId(data.csmsUrl ?? null),
         chargePointIdentity,
-        protocol: data.protocol,
-        organization_id: organizationId,
-        charge_point_model: data.chargePointModel || "Unknown Model",
-        charge_point_vendor: data.chargePointVendor || data.brand,
-        updatedAt: new Date(),
+        maxPower: data.maxPower,
+        heartbeatIntervalSec: data.heartbeatIntervalSec,
+        vendor: data.vendor,
+        model: data.model,
+        firmwareVersion: data.firmwareVersion,
+        ocppProtocolRaw: data.ocppProtocolRaw,
+        ocppSessionId: data.ocppSessionId,
+        isWhitelisted: data.isWhitelisted ?? true,
+        ownerId: data.ownerId,
+        ownershipType: data.ownershipType || 'PUBLIC',
+        isPublic: data.isPublic ?? true,
+        urlwebSocket: data.urlwebSocket,
+        openingHours: data.openingHours,
+        is24Hours: data.is24Hours || false,
       },
     });
 

@@ -111,8 +111,7 @@ export class AdminStationService {
         offPeakStartTime: data.offPeakStartTime ?? undefined,
         offPeakEndTime: data.offPeakEndTime ?? undefined,
         offPeakbaseRate: data.offPeakbaseRate ?? undefined,
-        updatedAt: new Date(),
-      },
+              },
     });
 
     let createdChargePoints = [];
@@ -244,12 +243,12 @@ export class AdminStationService {
         createdAt: true,
         connectors: {
           select: {
-            connector_id: true,
-            connector_type: true,
-            max_power: true,
-            status: true,
+            connectorId: true,
+            type: true,
+            maxPower: true,
+            connectorstatus: true,
           },
-          orderBy: { connector_id: 'asc' },
+          orderBy: { connectorId: 'asc' },
         },
         _count: {
           select: {
@@ -265,9 +264,9 @@ export class AdminStationService {
       charge_points: chargePoints.map(cp => ({
         ...cp,
         connectorId: cp.id, // Map id to connectorId for compatibility
-        connectorstatus: cp.connectors[0]?.status || 'Available',
-        maxPower: cp.connectors[0]?.max_power,
-        type: cp.connectors[0]?.connector_type,
+        connectorstatus: cp.connectors[0]?.connectorstatus || 'AVAILABLE',
+        maxPower: cp.connectors[0]?.maxPower,
+        type: cp.connectors[0]?.type,
       }))
     };
 
@@ -276,10 +275,10 @@ export class AdminStationService {
         // Get revenue for this charge point
         const revenueResult = await prisma.transactions.aggregate({
           where: {
-            charge_point_id: cp.id,
+            chargePointId: cp.id,
           },
           _sum: {
-            cost: true,
+            totalCost: true,
           },
         });
 
@@ -288,12 +287,12 @@ export class AdminStationService {
           serialNumber: cp.serialNumber || 'Unknown',
           brand: cp.brand || 'Unknown',
           totalTransactions: cp._count.transactions,
-          totalRevenue: revenueResult._sum.cost ?? 0,
+          totalRevenue: revenueResult._sum.totalCost ?? 0,
           connectors: cp.connectors.map((connector) => ({
-            connectorId: connector.connector_id,
-            type: connector.connector_type || 'Unknown',
-            maxPower: connector.max_power,
-            connectorstatus: connector.status || 'Available',
+            connectorId: connector.connectorId,
+            type: connector.type || 'TYPE_2',
+            maxPower: connector.maxPower,
+            connectorstatus: connector.connectorstatus || 'AVAILABLE',
             startTime: cp.createdAt?.toISOString() ?? null,
             phoneNumber: null, // No User relation in this schema
           })),
@@ -379,8 +378,6 @@ export class AdminStationService {
       updateData.longitude = this.toDecimal(data.longitude);
     }
 
-    updateData.updatedAt = new Date();
-
     const updatedStation = await prisma.station.update({
       where: { id },
       data: updateData,
@@ -426,8 +423,7 @@ export class AdminStationService {
           offPeakStartTime: data.offPeakStartTime ?? undefined,
           offPeakEndTime: data.offPeakEndTime ?? undefined,
           offPeakbaseRate: data.offPeakbaseRate ?? undefined,
-          updatedAt: new Date(),
-        },
+                  },
       });
     } else {
       station = await prisma.station.create({
@@ -448,8 +444,7 @@ export class AdminStationService {
           offPeakStartTime: data.offPeakStartTime ?? undefined,
           offPeakEndTime: data.offPeakEndTime ?? undefined,
           offPeakbaseRate: data.offPeakbaseRate ?? undefined,
-          updatedAt: new Date(),
-        },
+                  },
       });
     }
 

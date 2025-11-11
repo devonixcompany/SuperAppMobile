@@ -7,6 +7,152 @@ import {
   UpdateChargePointData
 } from './controlchar.service';
 
+// Types for request body
+interface CreateChargePointRequestBody {
+  chargepointname: string;
+  stationId?: string | null;
+  location: string;
+  latitude?: number;
+  longitude?: number;
+  openingHours?: string | null;
+  is24Hours?: boolean;
+  brand: string;
+  serialNumber: string;
+  powerRating: number;
+  powerSystem?: number;
+  connectorCount?: number;
+  protocol: 'OCPP16' | 'OCPP20' | 'OCPP21';
+  csmsUrl?: string | null;
+  chargePointIdentity: string;
+  maxPower?: number;
+  heartbeatIntervalSec?: number;
+  vendor?: string | null;
+  model?: string | null;
+  firmwareVersion?: string | null;
+  ocppProtocolRaw?: string | null;
+  isWhitelisted?: boolean;
+  ownerId?: string | null;
+  ownershipType?: 'PUBLIC' | 'PRIVATE';
+  isPublic?: boolean;
+  onPeakRate?: number;
+  onPeakStartTime?: string;
+  onPeakEndTime?: string;
+  offPeakRate?: number;
+  offPeakStartTime?: string;
+  offPeakEndTime?: string;
+  urlwebSocket?: string | null;
+}
+
+interface UpdateChargePointRequestBody {
+  chargepointname?: string;
+  stationId?: string;
+  location?: string;
+  latitude?: number;
+  longitude?: number;
+  openingHours?: string;
+  is24Hours?: boolean;
+  brand?: string;
+  serialNumber?: string;
+  powerRating?: number;
+  powerSystem?: number;
+  connectorCount?: number;
+  protocol?: 'OCPP16' | 'OCPP20' | 'OCPP21';
+  csmsUrl?: string;
+  chargePointIdentity?: string;
+  maxPower?: number;
+  heartbeatIntervalSec?: number;
+  vendor?: string;
+  model?: string;
+  firmwareVersion?: string;
+  ocppProtocolRaw?: string;
+  isWhitelisted?: boolean;
+  ownerId?: string;
+  ownershipType?: 'PUBLIC' | 'PRIVATE';
+  isPublic?: boolean;
+  onPeakRate?: number;
+  onPeakStartTime?: string;
+  onPeakEndTime?: string;
+  offPeakRate?: number;
+  offPeakStartTime?: string;
+  offPeakEndTime?: string;
+  urlwebSocket?: string;
+}
+
+// Helper function to map request body to service data
+const mapToCreateChargePointData = (body: CreateChargePointRequestBody): CreateChargePointData => {
+  return {
+    name: body.chargepointname,
+    stationId: body.stationId || undefined,
+    location: body.location,
+    latitude: body.latitude,
+    longitude: body.longitude,
+    openingHours: body.openingHours || undefined,
+    is24Hours: body.is24Hours,
+    brand: body.brand,
+    serialNumber: body.serialNumber,
+    powerRating: body.powerRating,
+    powerSystem: body.powerSystem,
+    connectorCount: body.connectorCount,
+    protocol: body.protocol,
+    csmsUrl: body.csmsUrl || undefined,
+    chargePointIdentity: body.chargePointIdentity,
+    maxPower: body.maxPower,
+    heartbeatIntervalSec: body.heartbeatIntervalSec,
+    vendor: body.vendor || undefined,
+    model: body.model || undefined,
+    firmwareVersion: body.firmwareVersion || undefined,
+    ocppProtocolRaw: body.ocppProtocolRaw || undefined,
+    isWhitelisted: body.isWhitelisted,
+    ownerId: body.ownerId || undefined,
+    ownershipType: body.ownershipType,
+    isPublic: body.isPublic,
+    onPeakRate: body.onPeakRate,
+    onPeakStartTime: body.onPeakStartTime,
+    onPeakEndTime: body.onPeakEndTime,
+    offPeakRate: body.offPeakRate,
+    offPeakStartTime: body.offPeakStartTime,
+    offPeakEndTime: body.offPeakEndTime,
+    urlwebSocket: body.urlwebSocket || undefined
+  };
+};
+
+const mapToUpdateChargePointData = (body: UpdateChargePointRequestBody): UpdateChargePointData => {
+  return {
+    name: body.chargepointname,
+    stationId: body.stationId,
+    location: body.location,
+    latitude: body.latitude,
+    longitude: body.longitude,
+    openingHours: body.openingHours,
+    is24Hours: body.is24Hours,
+    brand: body.brand,
+    serialNumber: body.serialNumber,
+    powerRating: body.powerRating,
+    powerSystem: body.powerSystem,
+    connectorCount: body.connectorCount,
+    protocol: body.protocol,
+    csmsUrl: body.csmsUrl,
+    chargePointIdentity: body.chargePointIdentity,
+    maxPower: body.maxPower,
+    heartbeatIntervalSec: body.heartbeatIntervalSec,
+    vendor: body.vendor,
+    model: body.model,
+    firmwareVersion: body.firmwareVersion,
+    ocppProtocolRaw: body.ocppProtocolRaw,
+    isWhitelisted: body.isWhitelisted,
+    ownerId: body.ownerId,
+    ownershipType: body.ownershipType,
+    isPublic: body.isPublic,
+    onPeakRate: body.onPeakRate,
+    onPeakStartTime: body.onPeakStartTime,
+    onPeakEndTime: body.onPeakEndTime,
+    offPeakRate: body.offPeakRate,
+    offPeakStartTime: body.offPeakStartTime,
+    offPeakEndTime: body.offPeakEndTime,
+    urlwebSocket: body.urlwebSocket
+  };
+};
+
 export const adminChargePointController = (jwtService: JWTService) => {
   console.log('🏭 Creating admin chargepoint controller with jwtService');
   const authMiddleware = requireAdminAuth(jwtService);
@@ -19,18 +165,18 @@ export const adminChargePointController = (jwtService: JWTService) => {
     async ({ body, set, adminChargePointService }) => {
       console.log('🎯 Admin chargepoint create route called');
       try {
-        const payload = body as CreateChargePointData;
+        const payload = mapToCreateChargePointData(body as CreateChargePointRequestBody);
         const result = await adminChargePointService.createChargePoint(payload);
         return {
           success: true,
           message: 'สร้างจุดชาร์จสำเร็จ',
           data: result
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         set.status = 400;
         return {
           success: false,
-          message: error.message || 'เกิดข้อผิดพลาดในการสร้างจุดชาร์จ'
+          message: error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการสร้างจุดชาร์จ'
         };
       }
     },
@@ -266,18 +412,18 @@ export const adminChargePointController = (jwtService: JWTService) => {
     '/update/:id',
     async ({ params, body, set, adminChargePointService }) => {
       try {
-        const payload = body as UpdateChargePointData;
+        const payload = mapToUpdateChargePointData(body as UpdateChargePointRequestBody);
         const result = await adminChargePointService.updateChargePoint(params.id, payload);
         return {
           success: true,
           message: 'อัปเดตจุดชาร์จสำเร็จ',
           data: result
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         set.status = 400;
         return {
           success: false,
-          message: error.message || 'เกิดข้อผิดพลาดในการอัปเดตจุดชาร์จ'
+          message: error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการอัปเดตจุดชาร์จ'
         };
       }
     },
@@ -385,11 +531,11 @@ export const adminChargePointController = (jwtService: JWTService) => {
           success: true,
           message: 'ลบจุดชาร์จสำเร็จ'
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         set.status = 400;
         return {
           success: false,
-          message: error.message || 'เกิดข้อผิดพลาดในการลบจุดชาร์จ'
+          message: error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการลบจุดชาร์จ'
         };
       }
     },
@@ -425,11 +571,11 @@ export const adminChargePointController = (jwtService: JWTService) => {
           message: 'ดึงข้อมูลจุดชาร์จสำเร็จ',
           data: result
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         set.status = 400;
         return {
           success: false,
-          message: error.message || 'เกิดข้อผิดพลาดในการดึงข้อมูลจุดชาร์จ'
+          message: error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงข้อมูลจุดชาร์จ'
         };
       }
     },
@@ -512,11 +658,11 @@ export const adminChargePointController = (jwtService: JWTService) => {
           message: 'ดึงข้อมูลจุดชาร์จสำเร็จ',
           data: result
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         set.status = 404;
         return {
           success: false,
-          message: error.message || 'ไม่พบจุดชาร์จ'
+          message: error instanceof Error ? error.message : 'ไม่พบจุดชาร์จ'
         };
       }
     },
