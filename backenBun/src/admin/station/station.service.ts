@@ -14,6 +14,7 @@ export interface CreateStationData {
   latitude?: number | string | null;
   longitude?: number | string | null;
   openclosedays?: string | null;
+  flatRate?: number;
   onPeakRate?: number;
   onPeakStartTime?: string;
   onPeakEndTime?: string;
@@ -32,6 +33,10 @@ export type CreateStationChargePointData = Omit<
   stationId?: string;
 };
 
+export type UpdateStationData = Partial<Omit<CreateStationData, 'id' | 'chargePoints'>> & {
+  chargePoints?: CreateStationChargePointData[];
+};
+
 export interface StationListParams {
   page?: number;
   limit?: number;
@@ -44,6 +49,7 @@ export interface StationListResult {
     stationname: string;
     imageUrl: string | null;
     openclosedays: string | null;
+    flatRate: number;
   }>;
   meta: {
     page: number;
@@ -96,6 +102,7 @@ export class AdminStationService {
         latitude,
         longitude,
         openclosedays: data.openclosedays ?? null,
+        flatRate: data.flatRate ?? undefined,
         onPeakRate: data.onPeakRate ?? undefined,
         onPeakStartTime: data.onPeakStartTime ?? undefined,
         onPeakEndTime: data.onPeakEndTime ?? undefined,
@@ -173,6 +180,7 @@ export class AdminStationService {
           stationname: true,
           imageUrl: true,
           openclosedays: true,
+          flatRate: true,
         },
       }),
     ]);
@@ -278,6 +286,7 @@ export class AdminStationService {
         stationname: station.stationname,
         imageUrl: station.imageUrl,
         openclosedays: station.openclosedays,
+        flatRate: station.flatRate,
         onPeakRate: station.onPeakRate,
         onPeakStartTime: station.onPeakStartTime,
         onPeakEndTime: station.onPeakEndTime,
@@ -289,5 +298,90 @@ export class AdminStationService {
         chargePoint: chargePoints,
       },
     };
+  }
+
+  async updateStation(id: string, data: UpdateStationData) {
+    const station = await prisma.station.findUnique({ where: { id } });
+    if (!station) {
+      throw new Error('Station not found');
+    }
+
+    const updateData: Prisma.StationUpdateInput = {};
+
+    if (data.stationname !== undefined) {
+      const trimmed = data.stationname.trim();
+      if (!trimmed) {
+        throw new Error('Station name cannot be empty');
+      }
+      const duplicate = await prisma.station.findFirst({
+        where: { stationname: trimmed, NOT: { id } },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw new Error('Station name already exists');
+      }
+      updateData.stationname = trimmed;
+    }
+
+    if (data.location !== undefined) {
+      const trimmed = data.location.trim();
+      if (!trimmed) {
+        throw new Error('Location cannot be empty');
+      }
+      updateData.location = trimmed;
+    }
+
+    if (data.imageUrl !== undefined) {
+      updateData.imageUrl = data.imageUrl;
+    }
+
+    if (data.openclosedays !== undefined) {
+      updateData.openclosedays = data.openclosedays ?? null;
+    }
+
+    if (data.flatRate !== undefined) {
+      updateData.flatRate = data.flatRate;
+    }
+
+    if (data.onPeakRate !== undefined) updateData.onPeakRate = data.onPeakRate;
+    if (data.onPeakStartTime !== undefined) updateData.onPeakStartTime = data.onPeakStartTime;
+    if (data.onPeakEndTime !== undefined) updateData.onPeakEndTime = data.onPeakEndTime;
+    if (data.onPeakbaseRate !== undefined) updateData.onPeakbaseRate = data.onPeakbaseRate;
+    if (data.offPeakRate !== undefined) updateData.offPeakRate = data.offPeakRate;
+    if (data.offPeakStartTime !== undefined) updateData.offPeakStartTime = data.offPeakStartTime;
+    if (data.offPeakEndTime !== undefined) updateData.offPeakEndTime = data.offPeakEndTime;
+    if (data.offPeakbaseRate !== undefined) updateData.offPeakbaseRate = data.offPeakbaseRate;
+
+    if (data.latitude !== undefined) {
+      updateData.latitude = this.toDecimal(data.latitude);
+    }
+    if (data.longitude !== undefined) {
+      updateData.longitude = this.toDecimal(data.longitude);
+    }
+
+    updateData.updatedAt = new Date();
+
+    const updatedStation = await prisma.station.update({
+      where: { id },
+      data: updateData,
+    });
+
+    return updatedStation;
+  }
+
+  async deleteStation(id: string) {
+    const station = await prisma.station.findUnique({ where: { id } });
+    if (!station) {
+      throw new Error('Station not found');
+    }
+
+    await prisma.charge_points.updateMany({
+      where: { stationId: id },
+      data: { stationId: null },
+    });
+
+    await prisma.station.delete({ where: { id } });
+
+    return { success: true };
   }
 }

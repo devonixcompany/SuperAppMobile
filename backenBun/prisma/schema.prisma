@@ -50,6 +50,7 @@ model Station {
   latitude             Decimal?
   longitude            Decimal?
   openclosedays        String?
+  flatRate             Float            @default(10.0)
   onPeakRate           Float            @default(10.0)
   onPeakStartTime      String           @default("10:00")
   onPeakEndTime        String           @default("12:00")

@@ -9,6 +9,14 @@ import { serviceContainer } from './user';
 // Get services from container
 const { jwtService } = serviceContainer;
 
+type RequestUser = {
+  id: string;
+  phoneNumber: string | null;
+  status: string | null;
+  typeUser: string | null;
+  createdAt: Date;
+};
+
 const port = Number(process.env.PORT ?? 8080);
 const serverUrl = process.env.BASE_URL ?? `localhost:${port}`;
 
@@ -189,7 +197,7 @@ export const app = new Elysia()
   }))
   // ✅ CRITICAL: Authentication middleware that runs BEFORE derive middleware
   .use((app: any) => {
-    let currentUser = null; // Store user at wrapper level
+    let currentUser: RequestUser | null = null; // Store user at wrapper level
     
     return app.onBeforeHandle(async ({ request, set, cookie }: any) => {
     if (request.method === "OPTIONS") {

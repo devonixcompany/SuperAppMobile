@@ -6,7 +6,7 @@ export interface CreateConnectorData {
   id?: string;
   chargePointId: string;
   connectorId: number;
-  type?: ConnectorType;
+  type?: ConnectorType | string | null;
   connectorstatus?: ConnectorStatus;
   maxPower?: number | string | null;
   maxCurrent?: number | string | null;
@@ -57,7 +57,7 @@ export class AdminConnectorsService {
       data.connectorId,
       'Connector ID',
     );
-    const type = data.type ?? ConnectorType.TYPE_2;
+    const type = this.normalizeConnectorType(data.type);
     const connectorstatus = data.connectorstatus ?? ConnectorStatus.AVAILABLE;
 
     const chargePoint = await prisma.charge_points.findUnique({
@@ -90,7 +90,7 @@ export class AdminConnectorsService {
           ...(data.id ? { id: data.id } : {}),
           chargePointId,
           connectorId,
-          type,
+        type,
           connectorstatus,
           typeDescription: data.typeDescription?.trim() ?? null,
           maxPower: this.normalizeFloat(
@@ -125,5 +125,41 @@ export class AdminConnectorsService {
     });
 
     return connector;
+  }
+
+  private normalizeConnectorType(value?: ConnectorType | string | null) {
+    if (!value) {
+      return ConnectorType.TYPE_2;
+    }
+
+    if (Object.values(ConnectorType).includes(value as ConnectorType)) {
+      return value as ConnectorType;
+    }
+
+    const mapped = (value as string).toUpperCase();
+    switch (mapped) {
+      case 'CCS':
+      case 'CCS2':
+      case 'CCS_COMBO_2':
+        return ConnectorType.CCS_COMBO_2;
+      case 'CCS1':
+      case 'CCS_COMBO_1':
+        return ConnectorType.CCS_COMBO_1;
+      case 'TYPE1':
+      case 'TYPE_1':
+        return ConnectorType.TYPE_1;
+      case 'TYPE2':
+      case 'TYPE_2':
+        return ConnectorType.TYPE_2;
+      case 'CHADEMO':
+        return ConnectorType.CHADEMO;
+      case 'TESLA':
+        return ConnectorType.TESLA;
+      case 'GB_T':
+      case 'GBT':
+        return ConnectorType.GB_T;
+      default:
+        return ConnectorType.TYPE_2;
+    }
   }
 }
