@@ -364,18 +364,6 @@ export const app = new Elysia()
     console.log('Admin connector controller registered');
     return adminConnectorCtrl;
   })())
-  .derive(({ request }: any) => {
-    // Extract user from request and make it available in context
-    const user = (request as any).user;
-    console.log('🔧 [DERIVE] Extracting user from request:', {
-      hasUser: !!user,
-      userId: user?.id,
-      path: request.url
-    });
-    return {
-      user: user
-    };
-  })
   .use(serviceContainer.getTransactionController())
   // Payment controller also needs user context, no need for wrapper since derive middleware is now available
   .use(serviceContainer.getPaymentController())

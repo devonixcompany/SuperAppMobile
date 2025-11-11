@@ -58,6 +58,7 @@ export const API_CONFIG = {
         `/api/payment/cards/${cardId}/default`,
       PROCESS_PAYMENT: '/api/payment/process',
       PAYMENT_HISTORY: '/api/payment/history',
+      STATUS: (paymentId: string) => `/api/payment/status/${encodeURIComponent(paymentId)}`,
     },
     
     // Notifications

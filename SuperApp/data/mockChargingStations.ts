@@ -6,13 +6,13 @@ import { ChargingStation } from '../types/charging.types';
  */
 
 export const mockChargingStationsThai: ChargingStation[] = [
-  // ===== กรุงเทพและปริมณฑล (20 สถานี) =====
+  // จำลองเครื่องชาร์จแค่จุดเดียวสำหรับทดสอบ
   {
-    id: 'bkk_001',
-    name: 'สเตชั่น สามาบางเขน',
-    address: '522 ถ.วิภาวดี Thareang, Bang Khen, Bangkok 10220',
-    latitude: 13.8848,
-    longitude: 100.5773,
+    id: 'test_001',
+    name: 'สเตชั่นทดสอบ เซ็นทรัลพระราม 9',
+    address: '999/9 ถ.พระราม 9, ห้วยขวาง, กรุงเทพฯ 10310',
+    latitude: 13.7543,
+    longitude: 100.5677,
     status: 'available',
     acCount: 2,
     dcCount: 1,
@@ -21,6 +21,7 @@ export const mockChargingStationsThai: ChargingStation[] = [
     openTime: '08.00',
     closeTime: '20.00',
   },
+  // สถานีเดิมทั้งหมดถูกลบออกเพื่อทดสอบกับจุดเดียว
   {
     id: 'bkk_002',
     name: 'สเตชั่น ลาดพร้าว',

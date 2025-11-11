@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,16 +18,16 @@ import {
 } from "react-native";
 
 const COLORS = {
-  primary: "#1D2144",
-  accent: "#0CC46C",
-  background: "#0A0E27",
-  card: "rgba(255, 255, 255, 0.05)",
-  cardLight: "rgba(255, 255, 255, 0.1)",
-  textPrimary: "#FFFFFF",
-  textSecondary: "#A0A6C5",
-  divider: "rgba(255, 255, 255, 0.1)",
-  glow: "#00E5FF",
-  glowGreen: "#0CC46C",
+  primary: "#1F274B",
+  accent: "#51BC8E",
+  background: "#EEF0F6",
+  card: "#FFFFFF",
+  cardLight: "#E5E7EB",
+  textPrimary: "#1F274B",
+  textSecondary: "#6B7280",
+  divider: "#E5E7EB",
+  glow: "#51BC8E",
+  glowGreen: "#51BC8E",
 };
 
 const formatNumber = (value?: number | null, fractionDigits = 2) => {
@@ -87,6 +87,7 @@ type ChargeSummaryParams = {
   chargePointName?: string;
   currency?: string;
   rate?: string;
+  selectedCardId?: string;
 };
 
 export default function ChargeSummaryScreen() {
@@ -109,12 +110,25 @@ export default function ChargeSummaryScreen() {
   const chargePointNameParam = resolveParam(params.chargePointName);
   const currencyParam = resolveParam(params.currency);
   const rateParam = resolveParam(params.rate);
+  const selectedCardIdParam = resolveParam(params.selectedCardId);
 
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [isPaymentModalVisible, setPaymentModalVisible] = useState(false);
   const [isProcessingPayment, setProcessingPayment] = useState(false);
   const [isLoadingCards, setLoadingCards] = useState(true);
+  const [isWaiting3DS, setIsWaiting3DS] = useState(false);
+  const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
+  const pollerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollerRef.current) {
+      clearInterval(pollerRef.current);
+      pollerRef.current = null;
+    }
+    setIsWaiting3DS(false);
+    setPendingPaymentId(null);
+  }, []);
 
   const loadPaymentCards = useCallback(async () => {
     setLoadingCards(true);
@@ -134,6 +148,49 @@ export default function ChargeSummaryScreen() {
       setLoadingCards(false);
     }
   }, []);
+
+  const startPollingPayment = useCallback((paymentId: string) => {
+    stopPolling();
+    setIsWaiting3DS(true);
+    setPendingPaymentId(paymentId);
+
+    let attempts = 0;
+    const maxAttempts = 12; // ~30s total
+    const intervalMs = 2500;
+
+    pollerRef.current = setInterval(async () => {
+      attempts += 1;
+      try {
+        const statusResp = await paymentService.getPaymentStatus(paymentId);
+        if (statusResp.success && statusResp.data) {
+          const { status, failureMessage } = statusResp.data;
+          if (status === 'SUCCESS' || status === 'FAILED') {
+            stopPolling();
+            if (status === 'SUCCESS') {
+              setPaymentModalVisible(false);
+              await loadPaymentCards();
+              try { await WebBrowser.dismissBrowser(); } catch {}
+              Alert.alert(
+                'ชำระเงินสำเร็จ',
+                'บันทึกการชำระเงินเรียบร้อยแล้ว',
+                [{ text: 'ตกลง', onPress: () => router.replace('/(tabs)/home') }]
+              );
+            } else {
+              Alert.alert('ชำระเงินไม่สำเร็จ', failureMessage ?? 'ไม่สามารถชำระเงินได้');
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Polling payment history error:', err);
+      }
+
+      if (attempts >= maxAttempts) {
+        stopPolling();
+        Alert.alert('หมดเวลา', 'การตรวจสอบการยืนยัน 3DS หมดเวลา กรุณาลองใหม่');
+      }
+    }, intervalMs);
+  }, [loadPaymentCards, stopPolling]);
+
 
   const energyKWh = useMemo(() => {
     const parsed = Number(energyParam);
@@ -168,6 +225,13 @@ export default function ChargeSummaryScreen() {
   useEffect(() => {
     loadPaymentCards();
   }, [loadPaymentCards]);
+
+  // Update selected card when returning from card selection screen
+  useEffect(() => {
+    if (selectedCardIdParam) {
+      setSelectedCardId(selectedCardIdParam);
+    }
+  }, [selectedCardIdParam]);
 
   const selectedCard = useMemo(
     () => paymentCards.find((card) => card.id === selectedCardId) ?? null,
@@ -230,16 +294,25 @@ export default function ChargeSummaryScreen() {
         return;
       }
 
-      setPaymentModalVisible(false);
-
-      if (result.requiresAction && result.authorizeUri) {
+      // 3DS flow: keep modal open, start polling for result
+      if (result.requiresAction && result.authorizeUri && result.paymentId) {
+        setIsWaiting3DS(true);
+        setPendingPaymentId(result.paymentId);
+        startPollingPayment(result.paymentId);
         await WebBrowser.openBrowserAsync(result.authorizeUri);
-        Alert.alert('ต้องยืนยันเพิ่มเติม', 'กรุณาทำตามขั้นตอนกับธนาคารของคุณเพื่อยืนยันการชำระเงิน');
         return;
       }
 
+      // No 3DS required: close modal and refresh cards
+      setPaymentModalVisible(false);
+
       await loadPaymentCards();
-      Alert.alert('ชำระเงินสำเร็จ', 'บันทึกการชำระเงินเรียบร้อยแล้ว');
+      try { await WebBrowser.dismissBrowser(); } catch {}
+      Alert.alert(
+        'ชำระเงินสำเร็จ',
+        'บันทึกการชำระเงินเรียบร้อยแล้ว',
+        [{ text: 'ตกลง', onPress: () => router.replace('/(tabs)/home') }]
+      );
     } catch (error: any) {
       console.error('Process payment error:', error);
       const message =
@@ -252,13 +325,27 @@ export default function ChargeSummaryScreen() {
     }
   }, [loadPaymentCards, selectedCardId, transactionId]);
 
+  // Stop polling if modal is closed or on unmount
+  useEffect(() => {
+    if (!isPaymentModalVisible) {
+      stopPolling();
+    }
+  }, [isPaymentModalVisible, stopPolling]);
+
+  useEffect(() => {
+    return () => stopPolling();
+  }, [stopPolling]);
+
+  // Calculate VAT (7%) and base cost
+  const vatRate = 0.07;
+  const baseChargeCost = totalCost ? totalCost / (1 + vatRate) : 0;
+  const vatAmount = totalCost ? totalCost - baseChargeCost : 0;
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <LinearGradient
-        colors={["#0A0E27", "#1a1f3a", "#0A0E27"]}
-        style={styles.backgroundGradient}
-      >
+      <View style={styles.backgroundGradient}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
@@ -270,119 +357,134 @@ export default function ChargeSummaryScreen() {
             <View style={styles.headerPlaceholder} />
           </View>
 
-          <LinearGradient
-            colors={["rgba(12, 196, 108, 0.25)", "rgba(0, 229, 255, 0.15)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.summaryHero}
-          >
-            <View style={styles.heroIconWrapper}>
-              <Ionicons name="checkmark-done" size={28} color="#FFFFFF" />
-            </View>
-            <Text style={styles.heroTitle}>การชาร์จเสร็จสิ้น</Text>
-            <Text style={styles.heroSubtitle}>
+          {/* Summary Section */}
+          <View style={styles.summarySection}>
+            <Text style={styles.sectionLabel}>รายละเอียด</Text>
+            <Text style={styles.stationName}>
               {chargePointNameParam ?? chargePointIdentityParam ?? "ไม่ระบุสถานี"}
             </Text>
-          </LinearGradient>
+            <Text style={styles.dateTime}>{formatDateTime(startTimeParam)}</Text>
 
-          <View style={styles.metricsCard}>
-            <View style={styles.metricsColumn}>
-              <Text style={styles.metricLabel}>พลังงานที่ใช้</Text>
-              <Text style={styles.metricValue}>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>เวลาการชาร์จ</Text>
+              <Text style={styles.detailValue}>{formatDuration(durationSeconds)}</Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>พลังงาน</Text>
+              <Text style={styles.detailValue}>
                 {energyKWh != null ? `${formatNumber(energyKWh, 2)} kWh` : "-"}
               </Text>
             </View>
-            <View style={styles.dividerVertical} />
-            <View style={styles.metricsColumn}>
-              <Text style={styles.metricLabel}>ค่าใช้จ่ายโดยประมาณ</Text>
-              <Text style={[styles.metricValue, { color: COLORS.glowGreen }]}>
-                {totalCost != null
-                  ? formatCurrency(totalCost, currencyLabel)
-                  : "-"}
+          </View>
+
+          {/* Service Fee Section */}
+          <View style={styles.feeSection}>
+            <Text style={styles.sectionLabel}>ค่าบริการ</Text>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>ค่าบริการชาร์จ</Text>
+              <Text style={styles.detailValue}>{formatCurrency(baseChargeCost, currencyLabel)}</Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>VAT</Text>
+              <Text style={styles.detailValue}>{formatCurrency(vatAmount, currencyLabel)}</Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>ค่าบริการรวม</Text>
+              <Text style={styles.detailValue}>
+                {totalCost != null ? formatCurrency(totalCost, currencyLabel) : "-"}
+              </Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>ยอดที่ต้องชำระ</Text>
+              <Text style={styles.amountToPay}>
+                {totalCost != null ? formatCurrency(totalCost, currencyLabel) : "-"}
               </Text>
             </View>
           </View>
 
-          <View style={styles.detailsCard}>
-            <Text style={styles.sectionTitle}>รายละเอียดการชาร์จ</Text>
+          {/* Payment Method Section */}
+          <View style={styles.paymentSection}>
+            <Text style={styles.sectionLabel}>ช่องทางการชำระเงิน</Text>
 
-            <InfoRow label="หมายเลขธุรกรรม" value={transactionId ?? "-"} />
-            <InfoRow label="สถานี" value={chargePointNameParam ?? chargePointIdentityParam ?? "-"} />
-            <InfoRow label="หัวชาร์จ" value={connectorLabel} />
-            <InfoRow label="เริ่มชาร์จ" value={formatDateTime(startTimeParam)} />
-            <InfoRow label="สิ้นสุด" value={formatDateTime(endTimeParam)} />
-            <InfoRow label="ระยะเวลา" value={formatDuration(durationSeconds)} />
-            <InfoRow
-              label="ค่ามิเตอร์เริ่มต้น"
-              value={
-                meterStart != null
-                  ? `${formatNumber(meterStart, 3)}`
-                  : "-"
-              }
-            />
-            <InfoRow
-              label="ค่ามิเตอร์สิ้นสุด"
-              value={
-                meterStop != null
-                  ? `${formatNumber(meterStop, 3)}`
-                  : "-"
-              }
-            />
-            <InfoRow
-              label="อัตราค่าบริการ"
-              value={
-                appliedRate != null
-                  ? `${formatCurrency(appliedRate, currencyLabel)}/kWh`
-                  : "-"
-              }
-            />
-            <InfoRow label="เหตุผลการหยุด" value={stopReasonParam || "AUTO"} />
+            {isLoadingCards ? (
+              <View style={styles.paymentDropdown}>
+                <ActivityIndicator color={COLORS.accent} />
+              </View>
+            ) : paymentCards.length > 0 ? (
+              <TouchableOpacity
+                style={styles.paymentDropdown}
+                onPress={() => {
+                  router.push({
+                    pathname: '/charge-session/select-credit-card',
+                    params: {
+                      transactionId: transactionId,
+                      energy: energyParam,
+                      cost: costParam,
+                      durationSeconds: durationParam,
+                      startTime: startTimeParam,
+                      endTime: endTimeParam,
+                      meterStart: meterStartParam,
+                      meterStop: meterStopParam,
+                      stopReason: stopReasonParam,
+                      connectorId: connectorIdParam,
+                      chargePointIdentity: chargePointIdentityParam,
+                      chargePointName: chargePointNameParam,
+                      currency: currencyParam,
+                      rate: rateParam,
+                      returnPath: '/charge-session/summary',
+                    },
+                  });
+                }}
+              >
+                <View style={styles.dropdownContent}>
+                  <View style={styles.cardIconWrapper}>
+                    <Ionicons name="card" size={20} color={COLORS.accent} />
+                  </View>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardBrand}>
+                      {selectedCard?.brand?.toUpperCase() ?? "บัตรเครดิต"}
+                    </Text>
+                    {selectedCard?.lastDigits && (
+                      <Text style={styles.cardNumber}>
+                        **** **** **** {selectedCard.lastDigits}
+                      </Text>
+                    )}
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={24}
+                    color={COLORS.textPrimary}
+                  />
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.paymentDropdown}
+                onPress={handleAddNewCard}
+              >
+                <View style={styles.dropdownContent}>
+                  <Ionicons name="card-outline" size={20} color={COLORS.textSecondary} />
+                  <Text style={styles.emptyCardText}>เพิ่มบัตรเพื่อชำระเงิน</Text>
+                </View>
+              </TouchableOpacity>
+            )}
           </View>
 
-          {paymentCards.length > 0 ? (
-            <View style={styles.paymentCardSection}>
-              <View style={styles.paymentCardHeader}>
-                <Text style={styles.paymentCardTitle}>บัตรสำหรับการชำระเงิน</Text>
-                <TouchableOpacity onPress={handleOpenPaymentModal}>
-                  <Text style={styles.paymentCardAction}>เปลี่ยนบัตร</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.paymentCardBody}>
-                <View style={styles.paymentCardIcon}>
-                  <Ionicons name="card" size={22} color="#FFFFFF" />
-                </View>
-                <View style={styles.paymentCardInfo}>
-                  <Text style={styles.paymentCardBrand}>
-                    {selectedCard?.brand?.toUpperCase() ?? "บัตรเครดิต"}
-                  </Text>
-                  <Text style={styles.paymentCardNumber}>
-                    {selectedCard?.lastDigits
-                      ? `**** **** **** ${selectedCard.lastDigits}`
-                      : "เลือกบัตรสำหรับชำระเงิน"}
-                  </Text>
-                  {selectedCard?.isDefault && (
-                    <Text style={styles.paymentCardBadge}>บัตรหลัก</Text>
-                  )}
-                </View>
-              </View>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.paymentCardEmpty}
-              activeOpacity={0.85}
-              onPress={handleOpenPaymentModal}
-            >
-              <Ionicons name="card-outline" size={20} color={COLORS.textSecondary} />
-              <View style={styles.paymentCardEmptyTextWrapper}>
-                <Text style={styles.paymentCardEmptyTitle}>เพิ่มบัตรเพื่อชำระเงิน</Text>
-                <Text style={styles.paymentCardEmptySubtitle}>
-                  ผูกบัตรเครดิตเพื่อชำระค่าชาร์จได้รวดเร็ว
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
-
+          {/* Action Buttons */}
           <View style={styles.actions}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              activeOpacity={0.85}
+              onPress={() => router.replace("/(tabs)/home")}
+            >
+              <Text style={styles.secondaryButtonText}>กลับหน้าหลัก</Text>
+            </TouchableOpacity>
+
             {canInitiatePayment && (
               <TouchableOpacity
                 style={styles.paymentButton}
@@ -390,44 +492,19 @@ export default function ChargeSummaryScreen() {
                 onPress={handleOpenPaymentModal}
               >
                 <LinearGradient
-                  colors={["#4ADE80", "#22D3EE"]}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
+                  colors={["#5EC1A0", "#67C1A5", "#589FAF", "#395F85", "#1F274B"]}
+                  start={{ x: 1, y: 0.5 }}
+                  end={{ x: 0, y: 0.5 }}
                   style={styles.paymentButtonGradient}
                 >
-                  <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.paymentButtonText}>ชำระค่าใช้จ่าย</Text>
+                  <Text style={styles.paymentButtonText}>ชำระเงิน</Text>
                 </LinearGradient>
               </TouchableOpacity>
             )}
-
-            <TouchableOpacity
-              style={styles.primaryButton}
-              activeOpacity={0.85}
-              onPress={() => router.replace("/(tabs)/home")}
-            >
-              <LinearGradient
-                colors={[COLORS.glowGreen, COLORS.glow]}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={styles.primaryButtonGradient}
-              >
-                <Ionicons name="home-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.primaryButtonText}>กลับหน้าหลัก</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              activeOpacity={0.85}
-              onPress={() => router.replace("/(tabs)/charging")}
-            >
-              <Ionicons name="repeat-outline" size={20} color={COLORS.glow} />
-              <Text style={styles.secondaryButtonText}>เริ่มชาร์จใหม่</Text>
-            </TouchableOpacity>
           </View>
         </ScrollView>
 
+        {/* Payment Modal */}
         <Modal
           visible={isPaymentModalVisible}
           transparent
@@ -440,7 +517,7 @@ export default function ChargeSummaryScreen() {
               <View style={styles.modalCardList}>
                 {isLoadingCards ? (
                   <View style={styles.modalLoader}>
-                    <ActivityIndicator color="#2563EB" />
+                    <ActivityIndicator color={COLORS.accent} />
                   </View>
                 ) : paymentCards.length === 0 ? (
                   <TouchableOpacity
@@ -448,7 +525,7 @@ export default function ChargeSummaryScreen() {
                     onPress={handleAddNewCard}
                     activeOpacity={0.85}
                   >
-                    <Ionicons name="card-outline" size={24} color="#2563EB" />
+                    <Ionicons name="card-outline" size={24} color={COLORS.accent} />
                     <Text style={styles.modalEmptyStateText}>
                       ยังไม่มีบัตรที่ผูกไว้
                     </Text>
@@ -470,7 +547,7 @@ export default function ChargeSummaryScreen() {
                         activeOpacity={0.85}
                       >
                         <View style={styles.modalCardIconWrapper}>
-                          <Ionicons name="card" size={20} color="#2563EB" />
+                          <Ionicons name="card" size={20} color={COLORS.accent} />
                         </View>
                         <View style={styles.modalCardInfo}>
                           <Text style={styles.modalCardBrand}>
@@ -483,7 +560,7 @@ export default function ChargeSummaryScreen() {
                           </Text>
                         </View>
                         {isSelected ? (
-                          <Ionicons name="radio-button-on" size={20} color="#2563EB" />
+                          <Ionicons name="radio-button-on" size={20} color={COLORS.accent} />
                         ) : (
                           <Ionicons name="radio-button-off" size={20} color="#CBD5F5" />
                         )}
@@ -497,7 +574,7 @@ export default function ChargeSummaryScreen() {
                 style={styles.modalAddCardButton}
                 onPress={handleAddNewCard}
               >
-                <Ionicons name="add" size={16} color="#2563EB" />
+                <Ionicons name="add" size={16} color={COLORS.accent} />
                 <Text style={styles.modalAddCardLabel}>เพิ่มบัตรใหม่</Text>
               </TouchableOpacity>
 
@@ -505,19 +582,19 @@ export default function ChargeSummaryScreen() {
                 <TouchableOpacity
                   style={styles.modalSecondaryButton}
                   onPress={() => setPaymentModalVisible(false)}
-                  disabled={isProcessingPayment}
+                  disabled={isProcessingPayment || isWaiting3DS}
                 >
                   <Text style={styles.modalSecondaryLabel}>ยกเลิก</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.modalPrimaryButton,
-                    (!selectedCardId || isProcessingPayment) && styles.modalPrimaryButtonDisabled,
+                    (!selectedCardId || isProcessingPayment || isWaiting3DS) && styles.modalPrimaryButtonDisabled,
                   ]}
                   onPress={handleProcessPayment}
-                  disabled={!selectedCardId || isProcessingPayment}
+                  disabled={!selectedCardId || isProcessingPayment || isWaiting3DS}
                 >
-                  {isProcessingPayment ? (
+                  {isProcessingPayment || isWaiting3DS ? (
                     <ActivityIndicator color="#FFFFFF" />
                   ) : (
                     <Text style={styles.modalPrimaryLabel}>ชำระเงิน</Text>
@@ -527,17 +604,10 @@ export default function ChargeSummaryScreen() {
             </View>
           </View>
         </Modal>
-      </LinearGradient>
+      </View>
     </SafeAreaView>
   );
 }
-
-const InfoRow = ({ label, value }: { label: string; value: string }) => (
-  <View style={styles.infoRow}>
-    <Text style={styles.infoLabel}>{label}</Text>
-    <Text style={styles.infoValue}>{value}</Text>
-  </View>
-);
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -546,9 +616,11 @@ const styles = StyleSheet.create({
   },
   backgroundGradient: {
     flex: 1,
+    backgroundColor: COLORS.background,
   },
   content: {
-    padding: 20,
+    paddingTop: 48,
+    paddingHorizontal: 40,
     paddingBottom: 40,
   },
   header: {
@@ -560,12 +632,8 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.cardLight,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.05)",
   },
   headerTitle: {
     fontSize: 20,
@@ -576,225 +644,120 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
   },
-  summaryHero: {
-    borderRadius: 20,
-    paddingVertical: 32,
-    paddingHorizontal: 20,
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  heroIconWrapper: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-  },
-  heroSubtitle: {
-    marginTop: 6,
-    fontSize: 14,
-    color: COLORS.textSecondary,
-  },
-  metricsCard: {
-    flexDirection: "row",
-    borderRadius: 18,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.cardLight,
-    marginBottom: 20,
-    overflow: "hidden",
-  },
-  metricsColumn: {
-    flex: 1,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    alignItems: "center",
-  },
-  metricLabel: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginBottom: 8,
-  },
-  metricValue: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-  },
-  dividerVertical: {
-    width: 1,
-    backgroundColor: COLORS.divider,
-  },
-  detailsCard: {
-    borderRadius: 18,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.cardLight,
-    padding: 20,
+  summarySection: {
     marginBottom: 24,
   },
-  sectionTitle: {
-    fontSize: 16,
+  sectionLabel: {
+    fontSize: 18,
+    fontWeight: "300",
     color: COLORS.textPrimary,
-    fontWeight: "700",
-    marginBottom: 16,
-  },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  infoLabel: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
-  infoValue: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: COLORS.textPrimary,
-    textAlign: "right",
-    marginLeft: 12,
-  },
-  paymentCardSection: {
-    borderRadius: 18,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.cardLight,
-    padding: 18,
-    marginBottom: 24,
-  },
-  paymentCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     marginBottom: 12,
   },
-  paymentCardTitle: {
-    fontSize: 15,
+  stationName: {
+    fontSize: 18,
     fontWeight: "600",
     color: COLORS.textPrimary,
+    marginBottom: 12,
   },
-  paymentCardAction: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.glow,
+  dateTime: {
+    fontSize: 18,
+    fontWeight: "300",
+    color: COLORS.textPrimary,
+    marginBottom: 12,
   },
-  paymentCardBody: {
+  detailRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 12,
   },
-  paymentCardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "rgba(37,99,235,0.28)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 16,
-  },
-  paymentCardInfo: {
-    marginLeft: 16,
-  },
-  paymentCardBrand: {
-    fontSize: 15,
-    fontWeight: "700",
+  detailLabel: {
+    fontSize: 18,
+    fontWeight: "300",
     color: COLORS.textPrimary,
   },
-  paymentCardNumber: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginTop: 4,
+  detailValue: {
+    fontSize: 18,
+    fontWeight: "300",
+    color: COLORS.textPrimary,
   },
-  paymentCardBadge: {
-    marginTop: 6,
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#22D3EE",
-  },
-  paymentCardEmpty: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: COLORS.cardLight,
-    padding: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
+  feeSection: {
     marginBottom: 24,
   },
-  paymentCardEmptyTextWrapper: {
+  amountToPay: {
+    fontSize: 18,
+    fontWeight: "300",
+    color: COLORS.accent,
+  },
+  paymentSection: {
+    marginBottom: 32,
+  },
+  paymentDropdown: {
+    backgroundColor: COLORS.card,
+    borderRadius: 8,
+    padding: 16,
+  },
+  dropdownContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  cardIconWrapper: {
+    marginRight: 12,
+  },
+  cardInfo: {
     flex: 1,
   },
-  paymentCardEmptyTitle: {
+  cardBrand: {
     fontSize: 15,
     fontWeight: "600",
     color: COLORS.textPrimary,
   },
-  paymentCardEmptySubtitle: {
-    fontSize: 12,
+  cardNumber: {
+    fontSize: 13,
+    fontWeight: "400",
     color: COLORS.textSecondary,
     marginTop: 4,
   },
+  emptyCardText: {
+    fontSize: 15,
+    fontWeight: "400",
+    color: COLORS.textSecondary,
+    marginLeft: 12,
+  },
   actions: {
-    gap: 12,
+    gap: 16,
+    marginTop: 40,
+  },
+  secondaryButton: {
+    backgroundColor: COLORS.card,
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryButtonText: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: COLORS.accent,
   },
   paymentButton: {
-    borderRadius: 16,
+    borderRadius: 8,
     overflow: "hidden",
   },
   paymentButtonGradient: {
-    flexDirection: "row",
+    paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    paddingVertical: 16,
   },
   paymentButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: "700",
-  },
-  primaryButton: {
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  primaryButtonGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 16,
-  },
-  primaryButtonText: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  secondaryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.glow,
-    backgroundColor: "rgba(0,229,255,0.08)",
-  },
-  secondaryButtonText: {
-    color: COLORS.glow,
-    fontSize: 15,
-    fontWeight: "600",
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
   },
   modalContainer: {
@@ -808,7 +771,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#0F172A",
+    color: COLORS.textPrimary,
     marginBottom: 16,
   },
   modalCardList: {
@@ -822,22 +785,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 14,
+    borderColor: COLORS.divider,
+    borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 12,
     marginBottom: 12,
     backgroundColor: "#FFFFFF",
   },
   modalCardRowSelected: {
-    borderColor: "#2563EB",
-    backgroundColor: "rgba(37,99,235,0.08)",
+    borderColor: COLORS.accent,
+    backgroundColor: "rgba(81, 188, 142, 0.1)",
   },
   modalCardIconWrapper: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "rgba(37,99,235,0.12)",
+    backgroundColor: "rgba(81, 188, 142, 0.15)",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -848,11 +811,11 @@ const styles = StyleSheet.create({
   modalCardBrand: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#0F172A",
+    color: COLORS.textPrimary,
   },
   modalCardDigits: {
     fontSize: 13,
-    color: "#475569",
+    color: COLORS.textSecondary,
     marginTop: 4,
   },
   modalAddCardButton: {
@@ -865,7 +828,7 @@ const styles = StyleSheet.create({
   modalAddCardLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#2563EB",
+    color: COLORS.accent,
   },
   modalActions: {
     flexDirection: "row",
@@ -878,7 +841,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#CBD5F5",
+    borderColor: COLORS.divider,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
@@ -886,18 +849,19 @@ const styles = StyleSheet.create({
   modalSecondaryLabel: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#1E293B",
+    color: COLORS.textPrimary,
   },
   modalPrimaryButton: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: "#2563EB",
+    backgroundColor: COLORS.accent,
     alignItems: "center",
     justifyContent: "center",
   },
   modalPrimaryButtonDisabled: {
-    backgroundColor: "#93C5FD",
+    backgroundColor: COLORS.textSecondary,
+    opacity: 0.5,
   },
   modalPrimaryLabel: {
     fontSize: 15,
@@ -907,7 +871,7 @@ const styles = StyleSheet.create({
   modalEmptyState: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#CBD5F5",
+    borderColor: COLORS.divider,
     paddingVertical: 24,
     alignItems: "center",
     gap: 6,
@@ -915,10 +879,10 @@ const styles = StyleSheet.create({
   modalEmptyStateText: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#1E293B",
+    color: COLORS.textPrimary,
   },
   modalEmptyStateHint: {
     fontSize: 12,
-    color: "#64748B",
+    color: COLORS.textSecondary,
   },
 });

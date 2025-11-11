@@ -1,22 +1,24 @@
 import env from "@/config/env";
 import { transactionService } from "@/services/api";
-import { http } from "@/services/api/client";
 import { getCredentials } from "@/utils/keychain";
 import { normalizeWebSocketUrlToDevice } from "@/utils/network";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Stack, router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
+  Dimensions,
   Easing,
-  Image,
   ScrollView,
+  StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type ConnectionState = "connecting" | "connected" | "error" | "closed";
 
@@ -62,6 +64,8 @@ type TransactionSummaryPayload = {
   appliedRate: number | null;
   stopReason?: string | null;
 };
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const COLORS = {
   primary: "#1D2144",
@@ -110,17 +114,12 @@ const formatNumber = (value?: number, fractionDigits = 2) => {
 
 const formatDuration = (seconds?: number | null) => {
   if (seconds === undefined || seconds === null || Number.isNaN(seconds)) {
-    return "0 นาที 00 วินาที";
+    return "0 ชม. 00 นาที";
   }
-  const total = Math.max(0, Math.floor(seconds));
+  const total = Math.max(0, Math.round(seconds));
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
-  const secs = total % 60;
-
-  if (hours > 0) {
-    return `${hours} ชม. ${minutes.toString().padStart(2, "0")} นาที ${secs.toString().padStart(2, "0")} วินาที`;
-  }
-  return `${minutes} นาที ${secs.toString().padStart(2, "0")} วินาที`;
+  return `${hours} ชม. ${minutes.toString().padStart(2, "0")} นาที`;
 };
 
 const formatDateTime = (value?: string | number | Date | null) => {
@@ -180,13 +179,10 @@ export default function ChargeSessionScreen() {
   }, [params.connectorId]);
 
   const baseRate = useMemo(() => {
-    // ใช้ stationRate ที่ดึงมาจาก API เป็นลำดับแรก
-    if (stationRate != null) return stationRate;
-    // fallback ไปที่ params.baseRate
     if (!params.baseRate) return undefined;
     const parsed = Number(params.baseRate);
     return Number.isFinite(parsed) ? parsed : undefined;
-  }, [stationRate, params.baseRate]);
+  }, [params.baseRate]);
 
   // คำนวณข้อความกำลังไฟด้วย useMemo เพื่อป้องกันการคำนวณซ้ำในทุกการ render
   const powerLabel = useMemo(() => {
@@ -234,11 +230,6 @@ export default function ChargeSessionScreen() {
   const [backendTransactionId, setBackendTransactionId] = useState<string | null>(null);
   const [isCreatingTransaction, setIsCreatingTransaction] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
-  const [stationRate, setStationRate] = useState<number | null>(null);
-  const [isLoadingStationRate, setIsLoadingStationRate] = useState(false);
-  const stationRateRetryCountRef = useRef(0);
-  const MAX_STATION_RATE_RETRIES = 3;
-  const [hasAttemptedStationFetch, setHasAttemptedStationFetch] = useState(false);
   const [transactionSummary, setTransactionSummary] = useState<TransactionSummaryPayload | null>(null);
   const [isFetchingSummary, setIsFetchingSummary] = useState(false);
   const [hasFetchedSummary, setHasFetchedSummary] = useState(false);
@@ -327,86 +318,28 @@ export default function ChargeSessionScreen() {
     };
   }, [normalizedWsUrl, appendLog]);
 
-  // ดึงข้อมูลสถานีชาร์จเพื่อเอาราคาแค่ครั้งเดียว
   useEffect(() => {
-    const fetchStationRate = async () => {
-      const chargePointIdentity = params.chargePointIdentity;
-
-      // ใช้การตรวจสอบแบบครอบคลุมทั้ง null และ undefined
-      if (!chargePointIdentity || isLoadingStationRate || stationRate !== null) {
-        return;
-      }
-
-      try {
-        setIsLoadingStationRate(true);
-        console.log('💰 [STATION] Fetching station rate for:', chargePointIdentity);
-
-        const response = await http.get<any>(`/api/chargepoints/${encodeURIComponent(chargePointIdentity)}`);
-        console.log('💰 [STATION] Response:', response);
-        
-        const chargePoint = response?.data;
-        const station = chargePoint?.Station ?? chargePoint?.station;
-        const rate = station?.onPeakRate ?? station?.offPeakRate ?? null;
-
-        if (rate != null) {
-          console.log('✅ [STATION] Got rate:', rate);
-          setStationRate(rate);
-        } else {
-          console.log('❌ [STATION] No rate found in station data');
-          // ถ้าไม่มี rate ให้ตั้งค่าเป็น undefined เพื่อหยุดการ retry
-          setStationRate(undefined);
-        }
-      } catch (error: any) {
-        // ถ้าเป็น 401 Unauthorized, ให้หยุดพยายามต่อไป
-        if (error?.status === 401) {
-          console.log('🔒 [STATION] Authentication failed, stopping retry attempts');
-        }
-        
-        // ตั้งค่าเป็น undefined เพื่อหยุดการ retry ในอนาคตไม่ว่าจะเกิดอะไรขึ้น
-        setStationRate(undefined);
-      } finally {
-        setIsLoadingStationRate(false);
-      }
-    };
-
-    fetchStationRate();
-  }, [params.chargePointIdentity, isLoadingStationRate, stationRate]);
-
-  useEffect(() => {
-    // ดึงเวลาเริ่มจาก transaction startTime (จาก backend หรือ WebSocket)
-    const startTimeValue = transactionSummary?.startTime ?? sessionStartTime ?? chargingData?.startTime;
-
-    console.log('⏱️ [ELAPSED TIME] startTimeValue:', startTimeValue, {
-      fromSummary: transactionSummary?.startTime,
-      fromSession: sessionStartTime,
-      fromChargingData: chargingData?.startTime
-    });
-
-    if (!startTimeValue) {
+    if (!sessionStartTime && !chargingData?.startTime) {
       setElapsedSeconds(0);
       return;
     }
 
-    const start = new Date(startTimeValue as string).getTime();
+    const start = new Date(
+      sessionStartTime ?? (chargingData?.startTime as string),
+    ).getTime();
     if (Number.isNaN(start)) {
-      console.log('❌ [ELAPSED TIME] Invalid start time:', startTimeValue);
       setElapsedSeconds(0);
       return;
     }
 
-    console.log('✅ [ELAPSED TIME] Starting timer with start time:', new Date(start).toISOString());
-
-    // คำนวณเวลาที่ผ่านไปโดยการลบเวลาปัจจุบันกับเวลาเริ่มต้น
     const update = () => {
-      const elapsed = Math.max(0, Math.floor((Date.now() - start) / 1000));
-      setElapsedSeconds(elapsed);
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
     };
 
-    // อัพเดททันทีและทุกๆ 1 วินาทีอย่างเนียนๆ
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [transactionSummary?.startTime, sessionStartTime, chargingData?.startTime]);
+  }, [sessionStartTime, chargingData?.startTime]);
 
   const fetchTransactionSummary = useCallback(
     async (transactionId: string | null | undefined, force: boolean = false) => {
@@ -493,15 +426,10 @@ export default function ChargeSessionScreen() {
         });
       } catch (error: any) {
         console.error("ไม่สามารถดึงสรุปธุรกรรมได้:", error);
-        // ถ้า force = true (real-time fetch) ไม่แสดง error เพราะ transaction อาจยังไม่พร้อม
-        if (!force) {
-          appendLog(
-            "error",
-            error?.message ?? "ไม่สามารถดึงข้อมูลสรุปธุรกรรมได้ กรุณาลองอีกครั้ง",
-          );
-        } else {
-          console.log("💰 [REAL-TIME] Transaction not ready yet, will retry in next interval");
-        }
+        appendLog(
+          "error",
+          error?.message ?? "ไม่สามารถดึงข้อมูลสรุปธุรกรรมได้ กรุณาลองอีกครั้ง",
+        );
         setHasFetchedSummary(false);
         setHasNavigatedToSummary(false);
       } finally {
@@ -808,16 +736,12 @@ export default function ChargeSessionScreen() {
       setHasFetchedSummary(false);
       setIsFetchingSummary(false);
 
-      // ตั้งค่าเวลาเริ่มชาร์จทันที
-      const startTimestamp = new Date().toISOString();
-      setSessionStartTime(startTimestamp);
-
       const payload = {
         type: "RemoteStartTransaction",
         data: {
           connectorId: connectorToUse,
           idTag: transactionIdToUse,
-          timestamp: startTimestamp,
+          timestamp: new Date().toISOString(),
         },
       };
 
@@ -922,7 +846,7 @@ export default function ChargeSessionScreen() {
   // คำนวณค่าพลังงานและค่าใช้จ่าย (ย้ายมาไว้ก่อน useEffect เพื่อใช้ใน navigation)
   const energyKWh = transactionSummary?.totalEnergy ?? chargingData?.energyDelivered;
 
-  const costEstimate = useMemo(() => {
+  const costEstimate = (() => {
     // ใช้ appliedRate จาก backend เป็น fallback ถ้า baseRate ไม่มี
     const effectiveRate = baseRate ?? transactionSummary?.appliedRate;
 
@@ -930,7 +854,6 @@ export default function ChargeSessionScreen() {
       summaryTotalCost: transactionSummary?.totalCost,
       chargingDataCost: chargingData?.cost,
       energyKWh,
-      stationRate,
       baseRate,
       appliedRate: transactionSummary?.appliedRate,
       effectiveRate,
@@ -959,7 +882,7 @@ export default function ChargeSessionScreen() {
 
     console.log("💰 No cost available, returning undefined");
     return undefined;
-  }, [transactionSummary?.totalCost, transactionSummary?.appliedRate, chargingData?.cost, energyKWh, baseRate, stationRate]);
+  })();
 
   useEffect(() => {
     const isFinalizedStatus =
@@ -983,10 +906,10 @@ export default function ChargeSessionScreen() {
       !isFetchingSummary;
 
     // เพิ่มการตรวจสอบสำหรับสถานะที่ควร fetch summary ทันที
-    const shouldFetchSummaryByStatus =
+    const shouldFetchSummaryByStatus = 
       !!summaryCandidateId &&
-      (normalizedStatus === "suspended_ev" ||
-       normalizedStatus === "suspended_evse" ||
+      (normalizedStatus === "suspended_ev" || 
+       normalizedStatus === "suspended_evse" || 
        normalizedStatus === "finishing") &&
       !transactionSummary &&
       !hasFetchedSummary &&
@@ -1281,29 +1204,17 @@ export default function ChargeSessionScreen() {
 
   if (!normalizedWsUrl) {
     return (
-      <>
-        <Stack.Screen
-          options={{
-            headerShown: true,
-            title: "เริ่มชาร์จ",
-            headerTitleAlign: "center",
-            headerShadowVisible: false,
-            headerStyle: { backgroundColor: "#EEF0F6" },
-            headerTintColor: "#1F274B",
-          }}
-        />
-        <View className="flex-1 bg-[#EEF0F6] justify-center items-center pt-12">
-          <Text className="text-[#1F274B] text-center text-base leading-6">
-            ไม่พบข้อมูล WebSocket URL สำหรับเชื่อมต่อ
-          </Text>
-          <TouchableOpacity
-            className="mt-6 px-6 py-3 rounded-xl bg-[#1F274B]"
-            onPress={() => router.replace("/qr-scanner")}
-          >
-            <Text className="text-white font-semibold text-[15px]">กลับไปสแกนใหม่</Text>
-          </TouchableOpacity>
-        </View>
-      </>
+      <SafeAreaView style={[styles.safeArea, styles.centered]}>
+        <Text style={styles.missingWsText}>
+          ไม่พบข้อมูล WebSocket URL สำหรับเชื่อมต่อ
+        </Text>
+        <TouchableOpacity
+          style={styles.missingWsButton}
+          onPress={() => router.replace("/qr-scanner")}
+        >
+          <Text style={styles.missingWsButtonText}>กลับไปสแกนใหม่</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
     );
   }
 
@@ -1315,9 +1226,8 @@ export default function ChargeSessionScreen() {
     chargingData?.estimatedRemainingSeconds ?? chargingData?.duration,
   );
   const elapsedLabel = formatDuration(elapsedSeconds);
-  // ดึงเวลาเริ่มชาร์จจาก transaction (จาก backend หรือ WebSocket)
   const startTimeLabel = formatDateTime(
-    transactionSummary?.startTime ?? sessionStartTime ?? chargingData?.startTime,
+    sessionStartTime ?? chargingData?.startTime,
   );
   const costDisplay = costEstimate != null
     ? formatCurrency(costEstimate, params.currency ?? "บาท")
@@ -1338,6 +1248,13 @@ export default function ChargeSessionScreen() {
       : connectionState === "connecting"
         ? "Connecting..."
         : "Disconnected";
+
+  const statusBadgeStyle =
+    connectionState === "connected"
+      ? styles.badgeConnected
+      : connectionState === "connecting"
+        ? styles.badgeConnecting
+        : styles.badgeDisconnected;
 
   const stationRows: { label: string; value: string }[] = [
     {
@@ -1434,207 +1351,1202 @@ export default function ChargeSessionScreen() {
       : "ไม่พร้อมใช้งาน";
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: "เริ่มชาร์จ",
-          headerTitleAlign: "center",
-          headerShadowVisible: false,
-          headerStyle: { backgroundColor: "#EEF0F6" },
-          headerTintColor: "#1F274B",
-        }}
-      />
-      <View className="flex-1 bg-[#EEF0F6] pt-12">
-        <ScrollView
-          className="flex-1"
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
-          showsVerticalScrollIndicator={false}
+    <SafeAreaView style={styles.safeArea}>
+      {/* Background with animated gradients */}
+      <LinearGradient
+        colors={['#0A0E27', '#1a1f3a', '#0A0E27']}
+        style={styles.backgroundGradient}
+      >
+        {/* Animated background particles */}
+        {isCharging && (
+          <>
+            {[...Array(6)].map((_, i) => (
+              <Animated.View
+                key={i}
+                style={[
+                  styles.backgroundParticle,
+                  {
+                    left: `${(i * 20 + 10)}%`,
+                    opacity: particleOpacity,
+                    transform: [
+                      { translateY: particleY },
+                      { scale: pulseAnim }
+                    ]
+                  }
+                ]}
+              >
+                <LinearGradient
+                  colors={[COLORS.glow, COLORS.glowPurple, COLORS.glowGreen]}
+                  style={styles.particleGradient}
+                />
+              </Animated.View>
+            ))}
+          </>
+        )}
+      </LinearGradient>
+
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
         >
-          {/* Container with top alignment and padding */}
-          <View className="flex flex-col items-center">
-            {/* Status Card */}
-            <View className="rounded-2xl flex-col w-full max-w-sm self-center">
-              {/* Top section: Status and Power */}
-              <View className="flex-row items-center justify-center w-full pb-4">
-                <Ionicons name="flash" size={32} color="black" />
-                <View className="ml-4">
-                  <Text className="text-xl font-bold text-[#1F274B]">{currentPower} KW</Text>
-                  <Text className="text-sm text-gray-600">
-                    {connectionState === "connected"
-                      ? statusDisplayText
-                      : connectionState === "connecting"
-                        ? "กำลังเชื่อมต่อ..."
-                        : "ยังไม่พร้อมใช้งาน"}
-                  </Text>
-                </View>
-              </View>
+          <Ionicons name="chevron-back" size={24} color={COLORS.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>เริ่มชาร์จ</Text>
+        <View style={styles.headerPlaceholder} />
+      </View>
 
-              {/* Divider */}
-              <View className="w-full border-b border-gray-200" />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Main charging display card */}
+        <Animated.View style={[
+          styles.statusCard,
+          isCharging && {
+            transform: [{ translateY: floatY }]
+          }
+        ]}>
+          <LinearGradient
+            colors={isCharging
+              ? ['rgba(0, 229, 255, 0.15)', 'rgba(184, 79, 255, 0.15)', 'rgba(12, 196, 108, 0.15)']
+              : ['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.02)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.statusCardGradient}
+          >
+            {isCharging && (
+              <Animated.View style={[styles.glowRing, {
+                opacity: glowIntensity,
+                transform: [{ scale: pulseAnim }]
+              }]}>
+                <LinearGradient
+                  colors={[COLORS.glow, 'transparent']}
+                  style={styles.glowRingGradient}
+                />
+              </Animated.View>
+            )}
 
-              {/* Middle section: Current Charge and Time */}
-              <View className="flex-row justify-around w-full py-2">
-                <View className="items-center">
-                  <Text className="text-xs text-gray-500 mb-1">การชาร์จปัจจุบัน</Text>
-                  <Text className="text-lg font-semibold text-[#1F274B]">{energyDeliveredDisplay} kWh</Text>
-                </View>
-                <View className="items-center">
-                  <Text className="text-xs text-gray-500 mb-1">เวลาที่คาดว่าจะเต็ม</Text>
-                  <Text className="text-lg font-semibold text-[#1F274B]">{estimatedTimeText}</Text>
-                </View>
-              </View>
+            {/* Energy display with enhanced styling */}
+            <View style={styles.energyDisplayContainer}>
+              {energyKWh != null ? (
+                <Animated.Text
+                  style={[
+                    styles.energyText,
+                    isCharging && {
+                      textShadowColor: COLORS.glow,
+                      textShadowRadius: 20,
+                      textShadowOffset: { width: 0, height: 0 }
+                    }
+                  ]}
+                >
+                  {energyDeliveredDisplay}
+                  <Text style={styles.energyUnit}> kWh</Text>
+                </Animated.Text>
+              ) : (
+                <Text style={styles.energyText}>
+                  --
+                  <Text style={styles.energyUnit}> kWh</Text>
+                </Text>
+              )}
             </View>
 
-            {/* Car Image */}
-            <View className="items-center w-full">
-              <Image
-                source={require("../../assets/images/image.png")}
-                style={{ width: 350, height: 200 }}
-                resizeMode="contain"
+            <Text style={styles.statusSubText}>
+              {connectionState === "connected"
+                ? statusDisplayText
+                : connectionState === "connecting"
+                  ? "กำลังเชื่อมต่อ..."
+                  : "ยังไม่พร้อมใช้งาน"}
+            </Text>
+
+            {/* Enhanced progress display */}
+            {(isCharging || activeTransactionId) && chargingData?.chargingPercentage != null && (
+              <View style={styles.progressWrapper}>
+                <Animated.View style={[
+                  styles.percentageCircle,
+                  { transform: [{ scale: circleScale }, { rotate: rotateInterpolate }] }
+                ]}>
+                  {isCharging && (
+                    <Animated.View style={[styles.circleGlow, {
+                      opacity: glowIntensity
+                    }]}>
+                      <LinearGradient
+                        colors={[COLORS.glow, COLORS.glowPurple, COLORS.glowGreen]}
+                        style={styles.circleGlowGradient}
+                      />
+                    </Animated.View>
+                  )}
+                  <View style={styles.percentageInner}>
+                    <Ionicons name="flash" size={32} color={COLORS.glowGreen} />
+                    <Text style={styles.percentageText}>
+                      {chargingData.chargingPercentage.toFixed(1)}%
+                    </Text>
+                  </View>
+                </Animated.View>
+
+                <View style={styles.progressTrack}>
+                  <Animated.View
+                    style={[
+                      styles.progressFill,
+                      {
+                        width: `${Math.min(
+                          Math.max(chargingData.chargingPercentage, 0),
+                          100,
+                        )}%`,
+                      },
+                    ]}
+                  >
+                    <LinearGradient
+                      colors={[COLORS.glow, COLORS.glowGreen]}
+                      start={{ x: 0, y: 0.5 }}
+                      end={{ x: 1, y: 0.5 }}
+                      style={styles.progressGradient}
+                    />
+                    {isCharging && (
+                      <Animated.View
+                        style={[
+                          styles.progressPulse,
+                          {
+                            opacity: chargingGlow,
+                            transform: [{ translateX: glowTranslate }]
+                          },
+                        ]}
+                      />
+                    )}
+                  </Animated.View>
+                </View>
+                <Text style={styles.progressLabel}>
+                  ระดับการชาร์จ
+                </Text>
+              </View>
+            )}
+          </LinearGradient>
+        </Animated.View>
+
+        {/* Enhanced illustration card */}
+        <Animated.View style={[
+          styles.illustrationCard,
+          isCharging && {
+            transform: [{ scale: pulseAnim }]
+          }
+        ]}>
+          <LinearGradient
+            colors={isCharging
+              ? ['rgba(0, 229, 255, 0.25)', 'rgba(184, 79, 255, 0.25)', 'rgba(12, 196, 108, 0.25)']
+              : ['rgba(28, 34, 68, 0.95)', 'rgba(12, 196, 108, 0.7)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.illustrationGradient}
+          >
+            {/* Rotating ring effect */}
+            {isCharging && (
+              <Animated.View style={[
+                styles.rotatingRing,
+                { transform: [{ rotate: rotateInterpolate }] }
+              ]}>
+                <LinearGradient
+                  colors={['transparent', COLORS.glow, 'transparent']}
+                  style={styles.rotatingRingGradient}
+                />
+              </Animated.View>
+            )}
+
+            <Animated.View style={[
+              styles.illustrationContent,
+              isCharging && {
+                transform: [{ translateY: floatY }]
+              }
+            ]}>
+              <Ionicons name="car-sport-outline" size={80} color="#FFFFFF" />
+              <Animated.View style={[
+                styles.flashIcon,
+                isCharging && {
+                  opacity: glowIntensity,
+                  transform: [{ scale: pulseAnim }]
+                }
+              ]}>
+                <Ionicons name="flash" size={36} color={COLORS.glowGreen} />
+              </Animated.View>
+              <Ionicons name="hardware-chip-outline" size={34} color="white" />
+            </Animated.View>
+
+            {isCharging && (
+              <>
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.chargingGlow,
+                    {
+                      transform: [{ translateX: glowTranslate }],
+                    },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={[
+                      "rgba(255,255,255,0)",
+                      "rgba(0, 229, 255, 0.8)",
+                      "rgba(255,255,255,0)",
+                    ]}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    style={styles.chargingGlowGradient}
+                  />
+                </Animated.View>
+
+                {/* Energy sparks */}
+                {[...Array(3)].map((_, i) => (
+                  <Animated.View
+                    key={i}
+                    style={[
+                      styles.energySpark,
+                      {
+                        left: `${30 + i * 20}%`,
+                        opacity: particleOpacity,
+                        transform: [{ translateY: particleY }]
+                      }
+                    ]}
+                  >
+                    <Ionicons name="flash" size={16} color={COLORS.glow} />
+                  </Animated.View>
+                ))}
+              </>
+            )}
+          </LinearGradient>
+        </Animated.View>
+
+        {/* Real-time Charging Metrics Card */}
+        {(isCharging || activeTransactionId) && (
+          <Animated.View style={[
+            styles.metricsCard,
+            isCharging && {
+              transform: [{ scale: pulseAnim }]
+            }
+          ]}>
+            <LinearGradient
+              colors={['rgba(12, 196, 108, 0.15)', 'rgba(0, 229, 255, 0.15)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.metricsCardGradient}
+            >
+              <View style={styles.metricsHeader}>
+                <Ionicons name="speedometer" size={24} color={COLORS.glowGreen} />
+                <Text style={styles.metricsTitle}>ข้อมูลการชาร์จแบบ Real-time</Text>
+              </View>
+
+              <View style={styles.metricsGrid}>
+                {/* Current Power */}
+                <View style={styles.metricItem}>
+                  <View style={styles.metricIconContainer}>
+                    <LinearGradient
+                      colors={[COLORS.glow, COLORS.glowGreen]}
+                      style={styles.metricIconGradient}
+                    >
+                      <Ionicons name="flash" size={20} color="#FFFFFF" />
+                    </LinearGradient>
+                  </View>
+                  <Text style={styles.metricLabel}>กำลังไฟฟ้า</Text>
+                  <Animated.Text
+                    style={[
+                      styles.metricValue,
+                      isCharging && {
+                        textShadowColor: COLORS.glowGreen,
+                        textShadowRadius: 10,
+                        textShadowOffset: { width: 0, height: 0 }
+                      }
+                    ]}
+                  >
+                    {formatNumber(chargingData?.currentPower ?? 0, 2)}
+                  </Animated.Text>
+                  <Text style={styles.metricUnit}>kW</Text>
+                </View>
+
+                {/* Voltage */}
+                
+
+             
+
+                {/* Temperature */}
+                {chargingData?.temperature != null && (
+                  <View style={styles.metricItem}>
+                    <View style={styles.metricIconContainer}>
+                      <LinearGradient
+                        colors={['#FF6B6B', '#FF8E53']}
+                        style={styles.metricIconGradient}
+                      >
+                        <Ionicons name="thermometer" size={20} color="#FFFFFF" />
+                      </LinearGradient>
+                    </View>
+                    <Text style={styles.metricLabel}>อุณหภูมิ</Text>
+                    <Text style={styles.metricValue}>
+                      {formatNumber(chargingData.temperature, 1)}
+                    </Text>
+                    <Text style={styles.metricUnit}>°C</Text>
+                  </View>
+                )}
+              </View>
+            </LinearGradient>
+          </Animated.View>
+        )}
+
+        {/* Enhanced station card */}
+        <View style={styles.stationCard}>
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.03)']}
+            style={styles.stationCardGradient}
+          >
+            <View style={styles.stationHeader}>
+              <LinearGradient
+                colors={[COLORS.glow, COLORS.glowGreen]}
+                style={styles.stationHeaderIcon}
+              >
+                <Ionicons name="flash" size={20} color="#FFFFFF" />
+              </LinearGradient>
+              <View style={styles.stationHeaderTextContainer}>
+                <Text style={styles.stationHeaderTitle}>{powerLabel}</Text>
+                <Text style={styles.stationHeaderSubtitle}>{headerSubtitle}</Text>
+              </View>
+              <View style={[styles.statusBadge, statusBadgeStyle]}>
+                <View style={styles.statusDot} />
+                <Text style={styles.statusBadgeText}>{statusBadgeText}</Text>
+              </View>
+            </View>
+            <View style={styles.stationBody}>
+              {stationRows.map((row, index) => (
+                <View key={row.label} style={styles.stationRow}>
+                  <Text style={styles.rowLabel}>{row.label}</Text>
+                  <Text style={styles.rowValue}>{row.value}</Text>
+                  {index < stationRows.length - 1 && (
+                    <View style={styles.rowDivider} />
+                  )}
+                </View>
+              ))}
+            </View>
+          </LinearGradient>
+        </View>
+
+        {/* Enhanced controls card */}
+        <View style={styles.controlsCard}>
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.03)']}
+            style={styles.controlsCardGradient}
+          >
+            <Text style={styles.controlsTitle}>ควบคุมการชาร์จ</Text>
+            <View style={styles.helperBadge}>
+              <Ionicons name="information-circle" size={16} color={COLORS.glow} />
+              <Text style={styles.helperBadgeText}>
+                สถานะ: {statusDisplayText}
+              </Text>
+            </View>
+
+            <Text style={styles.inputLabel}>ID Tag</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="person-circle-outline" size={20} color={COLORS.textSecondary} />
+              <TextInput
+                value={idTag}
+                editable={false}
+                selectTextOnFocus={false}
+                placeholder="ระบบจะสร้างให้อัตโนมัติ"
+                placeholderTextColor={COLORS.textSecondary}
+                style={[
+                  styles.textInput,
+                  !idTag && styles.textInputDisabled,
+                ]}
               />
             </View>
 
-            {/* Station Details Card */}
-            <View className="w-full max-w-sm bg-white rounded-2xl p-6 self-center">
-              {/* Card Header: Dark blue section with charger info */}
-              <View className="bg-[#1D2144] rounded-t-2xl p-4 flex-row items-center justify-between -mt-6 -mx-6 mb-6">
-                <View className="bg-white p-2 rounded-lg mr-4">
-                  <Ionicons name="flash" size={24} color="green" />
-                </View>
-                <View className="flex flex-col items-end">
-                  <Text className="text-white font-bold text-lg">{powerLabel}</Text>
-                  <Text className="text-white text-[13px] mt-0.5">{headerSubtitle}</Text>
-                </View>
-              </View>
+            <View style={styles.buttonsRow}>
+              <TouchableOpacity
+                disabled={!canStartCharging || isCreatingTransaction}
+                activeOpacity={0.8}
+                onPress={handleStartCharging}
+                style={[
+                  styles.primaryButtonWrapper,
+                  (!canStartCharging || isCreatingTransaction) &&
+                    styles.primaryButtonDisabledWrapper,
+                ]}
+              >
+                {(!canStartCharging || isCreatingTransaction) ? (
+                  <View style={[styles.primaryButton, styles.primaryButtonDisabled]}>
+                    <Ionicons
+                      name={isCreatingTransaction ? "time-outline" : "flash-off"}
+                      size={20}
+                      color="rgba(255, 255, 255, 0.6)"
+                    />
+                    <Text style={styles.primaryButtonText}>
+                      {isCreatingTransaction ? "กำลังเตรียม..." : primaryButtonLabel}
+                    </Text>
+                  </View>
+                ) : (
+                  <LinearGradient
+                    colors={[COLORS.glow, COLORS.glowGreen]}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    style={styles.primaryButton}
+                  >
+                    <Ionicons name="flash" size={20} color="#FFFFFF" />
+                    <Text style={styles.primaryButtonText}>{primaryButtonLabel}</Text>
+                  </LinearGradient>
+                )}
+              </TouchableOpacity>
 
-              {/* Session Details Section */}
-              <View className="flex-col gap-6">
-                {/* Station Name */}
-                <View className="flex-row justify-between">
-                  <Text className="text-[#1F274B] text-[14px] font-[400]">สถานีชาร์จ</Text>
-                  <Text className="text-[#1F274B] text-[14px] font-[300]">
-                    {params.stationName ?? params.chargePointName ?? params.chargePointIdentity ?? "-"}
-                  </Text>
-                </View>
-                {/* Start Time */}
-                <View className="flex-row justify-between">
-                  <Text className="text-[#1F274B] text-[14px] font-[400]">เริ่มชาร์จ</Text>
-                  <Text className="text-[#1F274B] text-[14px] font-[300]">{startTimeLabel}</Text>
-                </View>
-                {/* Duration */}
-                <View className="flex-row justify-between">
-                  <Text className="text-[#1F274B] text-[14px] font-[400]">เวลาผ่านไป</Text>
-                  <Text className="text-[#1F274B] text-[14px] font-[300]">{elapsedLabel}</Text>
-                </View>
-                {/* Energy Delivered */}
-                <View className="flex-row justify-between">
-                  <Text className="text-[#1F274B] text-[14px] font-[400]">พลังงานที่ได้รับ</Text>
-                  <Text className="text-[#1F274B] text-[14px] font-[300]">{energyDeliveredDisplay} kWh</Text>
-                </View>
-                {/* Cost */}
-                <View className="flex-row justify-between">
-                  <Text className="text-[#1F274B] text-[14px] font-[400]">ค่าบริการ</Text>
-                  <Text className="text-[#1F274B] text-[14px] font-[300]">{costDisplay ?? "0.00 บาท"}</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Action Buttons */}
-            <View className="w-full max-w-sm self-center mt-10">
-              {canStartCharging && (
+              {canStopCharging && (
                 <TouchableOpacity
-                  className="rounded-lg overflow-hidden mb-3"
-                  onPress={handleStartCharging}
-                  disabled={isCreatingTransaction}
+                  style={styles.secondaryButton}
+                  onPress={handleStopCharging}
                   activeOpacity={0.8}
                 >
-                  {/* @ts-ignore */}
                   <LinearGradient
-                    colors={["#5EC1A0", "#67C1A5", "#589FAF", "#395F85", "#1F274B"]}
-                    start={{ x: 1, y: 0.5 }}
-                    end={{ x: 0, y: 0.5 }}
+                    colors={['rgba(220, 53, 69, 0.2)', 'rgba(220, 53, 69, 0.1)']}
+                    style={styles.secondaryButtonGradient}
                   >
-                    <View className="bg-transparent p-4 items-center justify-center">
-                      <Text className="text-white text-xl font-bold">
-                        {isCreatingTransaction ? "กำลังเตรียม..." : "เริ่มชาร์จ"}
-                      </Text>
-                    </View>
+                    <Ionicons name="stop-circle-outline" size={20} color="#DC3545" />
+                    <Text style={styles.secondaryButtonText}>หยุดชาร์จ</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               )}
 
-              {canStopCharging && (
-                <TouchableOpacity
-                  className="bg-[#DC3545] py-4 rounded-lg items-center justify-center"
-                  onPress={handleStopCharging}
-                  activeOpacity={0.8}
+              {/* ปุ่มทดสอบ UI ใหม่ */}
+              <TouchableOpacity
+                style={styles.testUIButton}
+                onPress={() => router.push('/charge-session-ui-new')}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['rgba(0, 229, 255, 0.2)', 'rgba(0, 229, 255, 0.1)']}
+                  style={styles.testUIButtonGradient}
                 >
-                  <Text className="text-white text-base font-bold">หยุดชาร์จ</Text>
-                </TouchableOpacity>
-              )}
+                  <Ionicons name="flask-outline" size={20} color="#00E5FF" />
+                  <Text style={styles.testUIButtonText}>ทดสอบ UI ใหม่</Text>
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
 
-            {transactionSummary && (
-              <View className="mt-4 rounded-2xl p-5 bg-white shadow-sm">
-                <Text className="text-base font-bold text-[#1F274B] mb-3">สรุปการชาร์จ</Text>
-                <View className="flex-row justify-between items-center mb-2">
-                  <Text className="text-[13px] text-gray-500">เริ่ม</Text>
-                  <Text className="text-[15px] font-semibold text-[#1F274B]">
-                    {summaryStartTimeText ?? '-'}
-                  </Text>
-                </View>
-                <View className="flex-row justify-between items-center mb-2">
-                  <Text className="text-[13px] text-gray-500">สิ้นสุด</Text>
-                  <Text className="text-[15px] font-semibold text-[#1F274B]">
-                    {summaryEndTimeText ?? '-'}
-                  </Text>
-                </View>
-                <View className="flex-row justify-between items-center mb-2">
-                  <Text className="text-[13px] text-gray-500">ระยะเวลา</Text>
-                  <Text className="text-[15px] font-semibold text-[#1F274B]">
-                    {summaryDurationText ?? '-'}
-                  </Text>
-                </View>
-                <View className="h-[1px] bg-gray-200 my-3" />
-                {transactionSummary.appliedRate != null && (
-                  <View className="flex-row justify-between items-center mb-2">
-                    <Text className="text-[13px] text-gray-500">อัตราค่าบริการ</Text>
-                    <Text className="text-[15px] font-semibold text-[#1F274B]">
-                      {formatCurrency(transactionSummary.appliedRate, params.currency ?? "บาท")}/kWh
-                    </Text>
-                  </View>
-                )}
-                <View className="flex-row justify-between items-center mb-2">
-                  <Text className="text-[13px] text-gray-500">พลังงานรวม</Text>
-                  <Text className="text-[15px] font-semibold text-[#1F274B]">
-                    {energyKWh != null ? `${formatNumber(energyKWh, 2)} kWh` : '-'}
-                  </Text>
-                </View>
-                <View className="flex-row justify-between items-center mb-2">
-                  <Text className="text-[13px] text-gray-500">ค่าใช้จ่ายโดยประมาณ</Text>
-                  <Text className="text-[15px] font-semibold text-[#1F274B]">
-                    {costDisplay ?? '-'}
-                  </Text>
-                </View>
-              </View>
-            )}
-
             {helperText && (
-              <View className="mt-4 flex-row items-start p-3.5 rounded-xl bg-[#1F274B]/5">
-                <Ionicons name="alert-circle-outline" size={18} color="#1F274B" />
-                <Text className="flex-1 ml-2.5 text-[13px] leading-5 text-[#1F274B]">{helperText}</Text>
+              <View style={styles.helperTextContainer}>
+                <Ionicons name="alert-circle-outline" size={18} color={COLORS.glow} />
+                <Text style={styles.helperText}>{helperText}</Text>
               </View>
             )}
+          </LinearGradient>
+        </View>
 
-            {lastHeartbeat && (
-              <Text className="mt-3 text-xs text-gray-500 text-center">
-                Heartbeat ล่าสุด: {formatDateTime(lastHeartbeat)}
+        {transactionSummary && (
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>สรุปการชาร์จ</Text>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>เริ่ม</Text>
+              <Text style={styles.summaryValue}>
+                {summaryStartTimeText ?? '-'}
               </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>สิ้นสุด</Text>
+              <Text style={styles.summaryValue}>
+                {summaryEndTimeText ?? '-'}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>ระยะเวลา</Text>
+              <Text style={styles.summaryValue}>
+                {summaryDurationText ?? '-'}
+              </Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            {transactionSummary.appliedRate != null && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>อัตราค่าบริการ</Text>
+                <Text style={styles.summaryValue}>
+                  {formatCurrency(transactionSummary.appliedRate, params.currency ?? "บาท")}/kWh
+                </Text>
+              </View>
             )}
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>พลังงานรวม</Text>
+              <Text style={styles.summaryValue}>
+                {energyKWh != null ? `${formatNumber(energyKWh, 2)} kWh` : '-'}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>ค่าใช้จ่ายโดยประมาณ</Text>
+              <Text style={styles.summaryValue}>
+                {costDisplay ?? '-'}
+              </Text>
+            </View>
+    
           </View>
-        </ScrollView>
-      </View>
-    </>
+        )}
+
+        {lastHeartbeat && (
+          <Text style={styles.heartbeatText}>
+            Heartbeat ล่าสุด: {formatDateTime(lastHeartbeat)}
+          </Text>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  backgroundGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: -1,
+  },
+  backgroundParticle: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    bottom: '20%',
+  },
+  particleGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 4,
+  },
+  centered: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  missingWsText: {
+    color: COLORS.textPrimary,
+    textAlign: "center",
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  missingWsButton: {
+    marginTop: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.glow,
+  },
+  missingWsButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+    fontSize: 15,
+  },
+  header: {
+    height: 56,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    zIndex: 1,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: COLORS.textPrimary,
+  },
+  headerPlaceholder: {
+    width: 40,
+    height: 40,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  statusCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: COLORS.glow,
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  statusCardGradient: {
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  glowRing: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 24,
+  },
+  glowRingGradient: {
+    flex: 1,
+    borderRadius: 24,
+  },
+  energyDisplayContainer: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  energyText: {
+    fontSize: 48,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+    letterSpacing: 1,
+  },
+  energyUnit: {
+    fontSize: 24,
+    fontWeight: "400",
+    color: COLORS.textSecondary,
+  },
+  statusSubText: {
+    fontSize: 15,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.divider,
+    width: "100%",
+    marginVertical: 12,
+  },
+  progressWrapper: {
+    width: "100%",
+    marginTop: 20,
+    alignItems: "center",
+  },
+  percentageCircle: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+    position: "relative",
+    overflow: 'visible',
+  },
+  circleGlow: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    top: -10,
+    left: -10,
+  },
+  circleGlowGradient: {
+    flex: 1,
+    borderRadius: 80,
+  },
+  percentageInner: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 3,
+    borderColor: COLORS.glowGreen,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: COLORS.glowGreen,
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  percentageText: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+    marginTop: 8,
+  },
+  progressTrack: {
+    width: "100%",
+    height: 18,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    overflow: "hidden",
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 12,
+    position: "relative",
+    overflow: 'hidden',
+  },
+  progressGradient: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  progressPulse: {
+    position: "absolute",
+    top: 0,
+    width: 100,
+    height: '100%',
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+  },
+  progressLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  illustrationCard: {
+    marginTop: 24,
+    marginHorizontal: 0,
+    borderRadius: 24,
+    overflow: "hidden",
+    shadowColor: COLORS.glowPurple,
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  illustrationGradient: {
+    width: "100%",
+    minHeight: 200,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    paddingVertical: 32,
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  rotatingRing: {
+    position: 'absolute',
+    width: '90%',
+    height: '90%',
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  rotatingRingGradient: {
+    flex: 1,
+    borderRadius: 999,
+  },
+  illustrationContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-evenly",
+    width: '100%',
+    zIndex: 1,
+  },
+  flashIcon: {
+    padding: 12,
+    borderRadius: 999,
+    backgroundColor: 'rgba(12, 196, 108, 0.2)',
+  },
+  chargingGlow: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 100,
+    opacity: 0.8,
+  },
+  chargingGlowGradient: {
+    flex: 1,
+  },
+  energySpark: {
+    position: 'absolute',
+    bottom: '30%',
+  },
+  stationCard: {
+    marginTop: 24,
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: COLORS.glow,
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  stationCardGradient: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  stationHeader: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+  },
+  stationHeaderIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+    shadowColor: COLORS.glow,
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  stationHeaderTextContainer: {
+    flex: 1,
+  },
+  stationHeaderTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+  },
+  stationHeaderSubtitle: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  statusBadge: {
+    marginLeft: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+  },
+  badgeConnected: {
+    backgroundColor: "rgba(12,196,108,0.25)",
+  },
+  badgeConnecting: {
+    backgroundColor: "rgba(255,193,7,0.25)",
+  },
+  badgeDisconnected: {
+    backgroundColor: "rgba(220,53,69,0.25)",
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  stationBody: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  stationRow: {
+    marginBottom: 16,
+    position: 'relative',
+  },
+  rowLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginBottom: 6,
+  },
+  rowValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: COLORS.textPrimary,
+  },
+  rowDivider: {
+    height: 1,
+    backgroundColor: COLORS.divider,
+    position: 'absolute',
+    bottom: -8,
+    left: 0,
+    right: 0,
+  },
+  controlsCard: {
+    marginTop: 24,
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: COLORS.glowPurple,
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  controlsCardGradient: {
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  controlsTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+    marginBottom: 16,
+  },
+  helperBadge: {
+    alignSelf: "flex-start",
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(0, 229, 255, 0.1)",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.2)',
+  },
+  helperBadgeText: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  inputLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginBottom: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    marginBottom: 8,
+  },
+  textInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: COLORS.textPrimary,
+    fontWeight: '500',
+  },
+  textInputDisabled: {
+    color: COLORS.textSecondary,
+  },
+  buttonsRow: {
+    marginTop: 24,
+  },
+  primaryButtonWrapper: {
+    width: "100%",
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: COLORS.glow,
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  primaryButtonDisabledWrapper: {
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  primaryButton: {
+    height: 56,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  primaryButtonDisabled: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+  },
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  secondaryButton: {
+    marginTop: 14,
+    height: 56,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: "rgba(220, 53, 69, 0.5)",
+  },
+  testUIButton: {
+    marginTop: 14,
+    height: 56,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: "rgba(0, 229, 255, 0.5)",
+    backgroundColor: "rgba(0, 229, 255, 0.1)",
+  },
+  testUIButtonGradient: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  testUIButtonText: {
+    color: "#00E5FF",
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  secondaryButtonGradient: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  secondaryButtonText: {
+    color: "#DC3545",
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  helperTextContainer: {
+    marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 229, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.15)',
+  },
+  helperText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 20,
+    color: COLORS.textPrimary,
+  },
+  heartbeatText: {
+    marginTop: 12,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+  },
+  summaryCard: {
+    marginTop: 16,
+    borderRadius: 18,
+    padding: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 12,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  summaryLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  summaryValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: COLORS.divider,
+    marginVertical: 12,
+  },
+  metricsCard: {
+    marginTop: 24,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: COLORS.glowGreen,
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  metricsCardGradient: {
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(12, 196, 108, 0.3)',
+  },
+  metricsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  metricsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    flex: 1,
+  },
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    justifyContent: 'space-between',
+  },
+  metricItem: {
+    width: '47%',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  metricIconContainer: {
+    marginBottom: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  metricIconGradient: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+  metricLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  metricValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  metricUnit: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+  },
+});

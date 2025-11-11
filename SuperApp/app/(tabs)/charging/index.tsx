@@ -42,10 +42,10 @@ export default function ChargingScreen() {
   const [loading, setLoading] = useState(true);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [region, setRegion] = useState<Region>({
-    latitude: 13.7563, // ใจกลางประเทศไทย
-    longitude: 100.5018,
-    latitudeDelta: 12.0, // ซูมออกเพื่อเห็นทั้งประเทศ
-    longitudeDelta: 8.0,
+    latitude: 13.7543, // ตำแหน่งสถานีทดสอบที่เซ็นทรัลพระราม 9
+    longitude: 100.5677,
+    latitudeDelta: 0.02, // ซูมเข้าใกล้เพื่อเห็นจุดเดียวชัดเจน
+    longitudeDelta: 0.02,
   });
   // เก็บ region ล่าสุดเพื่อใช้ใน callback โดยไม่ต้องใส่ dependency
   const regionRef = useRef(region);
@@ -136,8 +136,8 @@ export default function ChargingScreen() {
 
         // ตั้งค่า region เริ่มต้นเฉพาะครั้งแรกเท่านั้น
         if (
-          regionRef.current.latitude === 13.7563 &&
-          regionRef.current.longitude === 100.5018
+          regionRef.current.latitude === 13.7543 &&
+          regionRef.current.longitude === 100.5677
         ) {
           regionRef.current = newRegion;
           setRegion(newRegion);
