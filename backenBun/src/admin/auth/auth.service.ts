@@ -1,7 +1,8 @@
 import { JWTService } from "../../lib/jwt";
-import { logAuthEvent, logger } from "../../lib/logger";
 import { hashPassword, verifyPassword } from "../../lib/password";
+import { logAuthEvent } from "../../lib/pino-helpers";
 import { prisma } from "../../lib/prisma";
+import { logger } from "../../shared/logger";
 
 export interface RefreshTokenResponse {
   success: boolean;
@@ -97,7 +98,7 @@ export class AdminAuthService {
       };
     } catch (error: any) {
       logAuthEvent('Admin Registration Failed', data.email, false, undefined, error.message);
-      logger.error('Admin registration error:', error);
+      logger.error({ error: error.message, stack: error.stack }, 'Admin registration error');
       throw error;
     }
   }
@@ -155,7 +156,7 @@ export class AdminAuthService {
       };
     } catch (error: any) {
       logAuthEvent('Admin Login Failed', data.email, false, undefined, error.message);
-      logger.error('Admin login error:', error);
+      logger.error({ error: error.message, stack: error.stack }, 'Admin login error');
       throw error;
     }
   }
@@ -200,7 +201,7 @@ export class AdminAuthService {
         }
       };
     } catch (error: any) {
-      logger.error('Token refresh error:', error);
+      logger.error({ error: error.message, stack: error.stack }, 'Token refresh error');
       return {
         success: false,
         message: error.message || "Token refresh failed"

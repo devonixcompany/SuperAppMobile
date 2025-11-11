@@ -1,12 +1,13 @@
 import { Elysia } from "elysia";
 import { adminServiceContainer } from "./admin";
-import { logger, requestLogger } from "./lib/logger";
-import { serviceContainer } from "./user";
-import { corsConfig } from "./config/cors";
-import { jwtConfig } from "./config/jwt";
-import { openapiConfig, models } from "./config/openapi";
+import { pinoRequestLogger } from "./lib/pino-request-logger";
 import { createAuthMiddleware } from "./middleware/auth";
 import { registerRoutes } from "./routes";
+import { corsConfig } from "./shared/config/cors";
+import { jwtConfig } from "./shared/config/jwt";
+import { models, openapiConfig } from "./shared/config/openapi";
+import { logger } from "./shared/logger";
+import { serviceContainer } from "./user";
 
 // Get services from container
 const { jwtService } = serviceContainer;
@@ -15,7 +16,7 @@ const port = Number(process.env.PORT ?? 8080);
 const serverUrl = process.env.BASE_URL ?? `localhost:${port}`;
 
 export const app = new Elysia()
-  .use(requestLogger)
+  .use(pinoRequestLogger)
   .use(corsConfig)
   .model(models)
   .use(openapiConfig)
@@ -34,46 +35,46 @@ export const app = new Elysia()
   .use(serviceContainer.getChargePointController())
   .use(
     (() => {
-      console.log("🔧 Registering admin auth controller");
+      logger.info("🔧 Registering admin auth controller");
       const adminAuthCtrl = adminServiceContainer.getAuthController();
-      console.log("✅ Admin auth controller registered");
+      logger.info("✅ Admin auth controller registered");
       return adminAuthCtrl;
     })()
   )
   .use(
     (() => {
-      console.log("🔧 Registering admin chargepoint controller");
+      logger.info("🔧 Registering admin chargepoint controller");
       const adminChargePointCtrl =
         adminServiceContainer.getChargePointsCrudController();
-      console.log("✅ Admin chargepoint controller registered");
+      logger.info("✅ Admin chargepoint controller registered");
       return adminChargePointCtrl;
     })()
   )
   .use(
     (() => {
-      console.log("Registering admin station controller");
+      logger.info("Registering admin station controller");
       const adminStationCtrl = adminServiceContainer.getStationController();
-      console.log("Admin station controller registered");
+      logger.info("Admin station controller registered");
       return adminStationCtrl;
     })()
   )
   .use(
     (() => {
-      console.log("Registering admin connector controller");
+      logger.info("Registering admin connector controller");
       const adminConnectorCtrl =
         adminServiceContainer.getChargePointConnectorController();
-      console.log("Admin connector controller registered");
+      logger.info("Admin connector controller registered");
       return adminConnectorCtrl;
     })()
   )
   .derive(({ request }: any) => {
     // Extract user from request and make it available in context
     const user = (request as any).user;
-    console.log("🔧 [DERIVE] Extracting user from request:", {
+    logger.debug({
       hasUser: !!user,
       userId: user?.id,
       path: request.url,
-    });
+    }, "🔧 [DERIVE] Extracting user from request");
     return {
       user: user,
     };
@@ -119,13 +120,13 @@ export const app = new Elysia()
   });
 
 app.listen(port, () => {
-  console.log(`🦊 Server is running on port ${port}`);
-  console.log(`📚 OpenAPI Documentation: ${serverUrl}/openapi`);
-  console.log(`📄 OpenAPI Schema: ${serverUrl}/openapi/json`);
-  console.log(`📝 API Endpoints:`);
-  console.log(`   POST /api/auth/register - User registration`);
-  console.log(`   POST /api/auth/login - User login`);
-  console.log(`   POST /api/auth/refresh - Refresh token`);
-  console.log(`   GET /api/profile - Get user profile (protected)`);
-  console.log(`   GET /health - Health check`);
+  logger.info(`🦊 Server is running on port ${port}`);
+  logger.info(`📚 OpenAPI Documentation: ${serverUrl}/openapi`);
+  logger.info(`📄 OpenAPI Schema: ${serverUrl}/openapi/json`);
+  logger.info(`📝 API Endpoints:`);
+  logger.info(`   POST /api/auth/register - User registration`);
+  logger.info(`   POST /api/auth/login - User login`);
+  logger.info(`   POST /api/auth/refresh - Refresh token`);
+  logger.info(`   GET /api/profile - Get user profile (protected)`);
+  logger.info(`   GET /health - Health check`);
 });

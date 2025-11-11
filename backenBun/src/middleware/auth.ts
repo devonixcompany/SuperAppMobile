@@ -1,6 +1,6 @@
 import { RequestUser } from "../types/request";
 import { isGatewayRoute, extractGatewayKey, GATEWAY_API_KEY } from "./gateway";
-import { logger } from "../lib/logger";
+import { logger } from "../shared/logger";
 
 const PUBLIC_ROUTES = [
   "/health",
@@ -168,7 +168,8 @@ export const createAuthMiddleware = (jwtService: any) => {
         }
 
         console.log("❌ [AUTH] Invalid gateway key");
-        logger.warn("Unauthorized gateway access attempt", {
+        logger.warn({
+          msg: "Unauthorized gateway access attempt",
           path,
           method,
           status: 401,
@@ -189,7 +190,8 @@ export const createAuthMiddleware = (jwtService: any) => {
           reason: "Authentication failed or no valid token",
         });
 
-        logger.warn("Unauthorized user API access blocked", {
+        logger.warn({
+          msg: "Unauthorized user API access blocked",
           path,
           method,
           status: 401,

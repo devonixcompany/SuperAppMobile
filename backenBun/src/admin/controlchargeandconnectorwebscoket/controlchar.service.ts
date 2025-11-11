@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma';
-import { logger } from '../../lib/logger';
+import { logger } from '../../shared/logger';
 
 export interface CreateChargePointData {
   name: string;
@@ -162,11 +162,11 @@ export class AdminChargePointService {
         }
       });
 
-      logger.info(`Charge point created: ${chargePoint.id}`);
+      logger.info({ chargePointId: chargePoint.id }, 'Charge point created');
 
       return chargePoint;
     } catch (error: any) {
-      logger.error('Create charge point error:', error);
+      logger.error({ error: error.message, stack: error.stack }, 'Create charge point error');
       throw error;
     }
   }
@@ -259,11 +259,11 @@ export class AdminChargePointService {
         }
       });
 
-      logger.info(`Charge point updated: ${id}`);
+      logger.info({ chargePointId: id }, 'Charge point updated');
 
       return updatedChargePoint;
     } catch (error: any) {
-      logger.error('Update charge point error:', error);
+      logger.error({ error: error.message, stack: error.stack }, 'Update charge point error');
       throw error;
     }
   }
@@ -284,9 +284,9 @@ export class AdminChargePointService {
         where: { id }
       });
 
-      logger.info(`Charge point deleted: ${id}`);
+      logger.info({ chargePointId: id }, 'Charge point deleted');
     } catch (error: any) {
-      logger.error('Delete charge point error:', error);
+      logger.error({ error: error.message, stack: error.stack }, 'Delete charge point error');
       throw error;
     }
   }
@@ -340,7 +340,7 @@ export class AdminChargePointService {
         }
       };
     } catch (error: any) {
-      logger.error('Get charge points error:', error);
+      logger.error({ error: error.message, stack: error.stack }, 'Get charge points error');
       throw error;
     }
   }
@@ -360,7 +360,7 @@ export class AdminChargePointService {
 
       return chargePoint;
     } catch (error: any) {
-      logger.error('Get charge point by ID error:', error);
+      logger.error({ error: error.message, stack: error.stack }, 'Get charge point by ID error');
       throw error;
     }
   }

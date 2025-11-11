@@ -13,7 +13,7 @@ export class PaymentService {
   static async addPaymentCard(userId: string, token: string, setDefault?: boolean) {
     try {
       // Get or create Omise customer
-      let user = await prisma.user.findUnique({
+      const user = await prisma.user.findUnique({
         where: { id: userId },
         include: {
           paymentCards: {

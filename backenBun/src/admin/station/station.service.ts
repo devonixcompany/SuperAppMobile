@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
-import { logger } from '../../lib/logger';
+import { logger } from '../../shared/logger';
 import {
   AdminChargePointsService,
   CreateChargePointData,
@@ -68,7 +68,7 @@ export class AdminStationService {
     try {
       return new Prisma.Decimal(value);
     } catch (error) {
-      logger.warn('Invalid decimal value for station coordinate', { value, error });
+      logger.warn({ value, error }, 'Invalid decimal value for station coordinate');
       throw new Error('Latitude/Longitude must be numeric values');
     }
   }
@@ -138,7 +138,7 @@ export class AdminStationService {
       }
     }
 
-    logger.info('Admin created station', { stationId: station.id });
+    logger.info({ stationId: station.id }, 'Admin created station');
 
     if (createdChargePoints.length) {
       return {
@@ -406,7 +406,7 @@ export class AdminStationService {
     });
 
     let station;
-    let createdChargePoints = [];
+    const createdChargePoints = [];
 
     if (existingStation) {
       station = await prisma.station.update({
@@ -475,7 +475,7 @@ export class AdminStationService {
       }
     }
 
-    logger.info('Admin upserted station', { stationId: station.id, isNew: !existingStation });
+    logger.info({ stationId: station.id, isNew: !existingStation }, 'Admin upserted station');
 
     if (createdChargePoints.length) {
       return {

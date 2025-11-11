@@ -10,7 +10,7 @@
  */
 
 import { prisma } from "../src/lib/prisma";
-import { logger } from "../src/lib/logger";
+import { logger } from "../src/shared/logger";
 
 interface StationSummary {
   id: string;

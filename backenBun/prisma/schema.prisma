@@ -8,435 +8,265 @@ datasource db {
 }
 
 model Admin {
-  id                   String                 @id @default(dbgenerated("(gen_random_uuid())::text"))
+  id                   String                 @id @default(uuid())
   email                String                 @unique
   password             String
   role                 AdminRole              @default(STAFF)
   firstName            String?
   lastName             String?
   isActive             Boolean                @default(true)
-  createdAt            DateTime               @default(now()) @db.Timestamptz(6)
-  updatedAt            DateTime               @default(now()) @updatedAt @db.Timestamptz(6)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
   admin_refresh_tokens admin_refresh_tokens[]
 }
 
+model SsTaxInvoiceProfile {
+  id            String       @id @default(uuid())
+  userId        String
+  taxpayerType  TaxpayerType
+  fullName      String?
+  companyName   String?
+  taxId         String       @db.VarChar(20)
+  branchType    BranchType?
+  branchCode    String?      @db.VarChar(5)
+  addressLine1  String
+  addressLine2  String?
+  provinceId    String
+  districtId    String
+  subdistrictId String
+  postalCode    String       @db.VarChar(10)
+  isDefault     Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([userId, taxId, branchCode])
+  @@index([userId])
+}
+
 model Station {
-  id               String   @id @default(dbgenerated("(gen_random_uuid())::text"))
-  stationname      String   @unique
-  location         String
-  imageUrl         String?  @db.VarChar(512)
-  latitude         Decimal? @db.Decimal
-  longitude        Decimal? @db.Decimal
-  openclosedays    String?
-  flatRate         Float    @default(10.0)
-  onPeakRate       Float    @default(10.0)
-  onPeakStartTime  String   @default("10:00")
-  onPeakEndTime    String   @default("12:00")
-  onPeakbaseRate   Float    @default(20.0)
-  offPeakRate      Float    @default(20.0)
-  offPeakStartTime String   @default("16:00")
-  offPeakEndTime   String   @default("22:00")
-  offPeakbaseRate  Float    @default(20.0)
-  createdAt        DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  id                   String           @id @default(uuid())
+  stationname          String           @unique
+  location             String
+  imageUrl             String?          @db.VarChar(512)
+  latitude             Decimal?
+  longitude            Decimal?
+  openclosedays        String?
+  flatRate             Float            @default(10.0)
+  onPeakRate           Float            @default(10.0)
+  onPeakStartTime      String           @default("10:00")
+  onPeakEndTime        String           @default("12:00")
+  onPeakbaseRate       Float            @default(20.0)
+  offPeakRate          Float            @default(20.0)
+  offPeakStartTime     String           @default("16:00")
+  offPeakEndTime       String           @default("22:00")
+  offPeakbaseRate      Float            @default(20.0)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  charge_points        charge_points[]
 }
 
 model User {
-  id              String    @id @default(dbgenerated("(gen_random_uuid())::text"))
-  firebaseUid     String    @unique
-  email           String    @unique
-  phoneNumber     String    @unique
-  fullName        String?
-  password        String
-  status          String    @default("PENDING")
-  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime  @default(now()) @db.Timestamptz(6)
+  id              String          @id @default(uuid())             // รหัสผู้ใช้
+  firebaseUid     String          @unique                          // รหัสผู้ใช้จาก Firebase Authentication
+  email           String          @unique                          // อีเมลผู้ใช้
+  phoneNumber     String          @unique                          // หมายเลขโทรศัพท์ผู้ใช้
+  fullName        String?                                          // ชื่อเต็มของผู้ใช้
+  password        String                                           // รหัสผ่านผู้ใช้ (hashed)
+  status          String          @default("PENDING")              // สถานะผู้ใช้ (ACTIVE, BLOCKED, EXPIRED)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
   typeUser        UserType?
-  refresh_token   String?
-  omiseCustomerId String?   @unique
+  refresh_token   String?                                          // โทเค็นรีเฟรชสำหรับการยืนยันตัวตน
+  omiseCustomerId String?         @unique                          // cus_XXX จาก Omise
+  charge_points   charge_points[]
+  transactions    transactions[]
+  user_vehicles   user_vehicles[]
+  paymentCards    PaymentCard[]
+  payments        Payment[]
 }
 
 model admin_refresh_tokens {
-  id        String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  id        String    @id @default(uuid())
   token     String    @unique
   adminId   String
-  expiresAt DateTime  @db.Timestamptz(6)
-  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
   isRevoked Boolean   @default(false)
-  revokedAt DateTime? @db.Timestamptz(6)
-  Admin     Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  revokedAt DateTime?
+  Admin     Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
 }
 
 model charge_points {
-  id                         String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id            String                     @db.Uuid
-  name                       String                     @db.VarChar(255)
-  charge_point_id            String                     @unique @db.VarChar(255)
-  charge_point_model         String                     @db.VarChar(255)
-  charge_point_vendor        String                     @db.VarChar(255)
-  charge_point_serial_number String?                    @db.VarChar(255)
-  charge_box_serial_number   String?                    @db.VarChar(255)
-  firmware_version           String?                    @db.VarChar(100)
-  iccid                      String?                    @db.VarChar(50)
-  imsi                       String?                    @db.VarChar(50)
-  meter_type                 String?                    @db.VarChar(100)
-  meter_serial_number        String?                    @db.VarChar(255)
-  is_online                  Boolean                    @default(false)
-  last_heartbeat             DateTime?                  @db.Timestamptz(6)
-  status                     charge_point_status        @default(Available)
-  latitude                   Float?
-  longitude                  Float?
-  address                    String?
-  city                       String?                    @db.VarChar(100)
-  country                    String?                    @db.VarChar(100)
-  postal_code                String?                    @db.VarChar(20)
-  configuration              Json?
-  created_at                 DateTime                   @default(now()) @db.Timestamptz(6)
-  updated_at                 DateTime                   @default(now()) @db.Timestamptz(6)
-  ocpp_version               String                     @default("1.6") @db.VarChar(20)
-  chargepointname            String?                    @db.VarChar(255)
-  stationId                  String?                    @db.VarChar(255)
-  openingHours               String?                    @db.VarChar(255)
-  is24Hours                  Boolean?                   @default(false)
-  brand                      String?                    @db.VarChar(255)
-  serialNumber               String?                    @unique(map: "serialNumber_unique") @db.VarChar(255)
-  powerRating                Float?
-  powerSystem                Int?                       @default(1)
-  connectorCount             Int?                       @default(1)
-  csmsUrl                    String?                    @db.VarChar(255)
-  chargePointIdentity        String?                    @unique(map: "chargePointIdentity_unique") @db.VarChar(255)
-  chargepointstatus          ChargePointStatus?         @default(AVAILABLE)
-  maxPower                   Float?
-  lastSeen                   DateTime?                  @db.Timestamptz(6)
-  heartbeatIntervalSec       Int?
-  vendor                     String?                    @db.VarChar(255)
-  model                      String?                    @db.VarChar(255)
-  firmwareVersion            String?                    @db.VarChar(255)
-  ocppProtocolRaw            String?                    @db.VarChar(255)
-  ocppSessionId              String?                    @db.VarChar(255)
-  isWhitelisted              Boolean?                   @default(true)
-  ownerId                    String?                    @db.VarChar(255)
-  ownershipType              OwnershipType?             @default(PUBLIC)
-  isPublic                   Boolean?                   @default(true)
-  urlwebSocket               String?                    @db.VarChar(255)
-  createdAt                  DateTime?                  @default(now()) @db.Timestamptz(6)
-  updatedAt                  DateTime?                  @default(now()) @db.Timestamptz(6)
-  protocol                   OCPPVersion                @default(OCPP16)
-  charge_point_connections   charge_point_connections[]
-  organizations              organizations              @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  charging_profiles          charging_profiles[]
-  connectors                 connectors[]
-  ocpp_logs                  ocpp_logs[]
-  transactions               transactions[]
+  id              String  @id @default(uuid())
+  chargepointname String
+  stationId       String?
 
-  @@index([charge_point_id], map: "idx_charge_points_charge_point_id")
-  @@index([is_online], map: "idx_charge_points_is_online")
-  @@index([organization_id], map: "idx_charge_points_organization_id")
-  @@index([status], map: "idx_charge_points_status")
+  openingHours   String?
+  is24Hours      Boolean     @default(false)
+  brand          String
+  serialNumber   String      @unique
+  powerRating    Float
+  powerSystem    Int         @default(1)
+  connectorCount Int         @default(1)
+  protocol       OCPPVersion
+  csmsUrl        String?
+
+  chargePointIdentity  String            @unique
+  chargepointstatus    ChargePointStatus @default(AVAILABLE)
+  maxPower             Float?
+  lastSeen             DateTime?
+  heartbeatIntervalSec Int?
+  vendor               String?
+  model                String?
+  firmwareVersion      String?
+  ocppProtocolRaw      String?
+  ocppSessionId        String?
+  isWhitelisted        Boolean           @default(true)
+  ownerId              String?
+  ownershipType        OwnershipType     @default(PUBLIC)
+  isPublic             Boolean           @default(true)
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  urlwebSocket String?
+  User         User?          @relation(fields: [ownerId], references: [id])
+  Station      Station?       @relation(fields: [stationId], references: [id])
+  connectors   connectors[]
+  transactions transactions[]
 }
 
 model connectors {
-  id                     String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  charge_point_id        String           @db.Uuid
-  connector_id           Int
-  status                 connector_status @default(Available)
-  current_transaction_id String?          @db.Uuid
-  max_current            Int?
-  max_power              Int?
-  connector_type         String?          @db.VarChar(50)
-  created_at             DateTime         @default(now()) @db.Timestamptz(6)
-  updated_at             DateTime         @default(now()) @db.Timestamptz(6)
-  charge_points          charge_points    @relation(fields: [charge_point_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id              String          @id @default(uuid())
+  chargePointId   String?                                              // รหัสจุดชาร์จที่คอนเน็กเตอร์นี้เชื่อมต่อ
+  connectorId     Int                                                 // หมายเลขประจำคอนเน็กเตอร์ภายในจุดชาร์จ
+  type            ConnectorType   @default(TYPE_2)                    // ประเภทของคอนเน็กเตอร์
+  typeDescription String?                                             // คำอธิบายเพิ่มเติมเกี่ยวกับประเภทของคอนเน็กเตอร์
+  connectorstatus ConnectorStatus @default(AVAILABLE)                 // สถานะปัจจุบันของคอนเน็กเตอร์
+  maxPower        Float?                                              // กำลังไฟสูงสุดที่คอนเน็กเตอร์สามารถจ่ายได้
+  maxCurrent      Float?                                              // กระแสไฟฟ้าสูงสุดที่คอนเน็กเตอร์สามารถจ่ายได้
+  charge_points   charge_points?   @relation(fields: [chargePointId], references: [id]) // ความสัมพันธ์กับจุดชาร์จที่คอนเน็กเตอร์นี้เชื่อมต่อ
+  transactions    transactions[]                                      // ความสัมพันธ์กับธุรกรรมการชาร์จที่เกิดขึ้นที่คอนเน็กเตอร์นี้
 
-  @@unique([charge_point_id, connector_id])
-  @@index([charge_point_id], map: "idx_connectors_charge_point_id")
-  @@index([current_transaction_id], map: "idx_connectors_current_transaction_id")
-  @@index([status], map: "idx_connectors_status")
+  @@unique([chargePointId, connectorId])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  transactionId  String
+  userId         String
+  provider       String        @default("OMISE")                        // อาจรองรับ Stripe, Paypal ในอนาคต
+  amount         Float                                                  // จำนวนเงินทั้งหมด (รวมภาษีแล้ว)
+  currency       String        @default("THB")                          // สกุลเงิน
+  status         PaymentStatus @default(PENDING)                        // WAITING, SUCCESS, FAILED, CANCELED
+  chargeId       String?       @unique                                  // รหัส charge จาก Omise (เช่น chrg_test_...)
+  cardId         String?                                                // รหัสบัตรจาก Omise (ถ้ามี)
+  failureMessage String?                                                // ข้อความแสดงข้อผิดพลาด (ถ้ามี)
+  authorizeUri   String?                                                // ลิงก์สำหรับการยืนยันการชำระเงิน (ถ้ามี)
+  paidAt         DateTime?                                              // เวลาที่ชำระเงินสำเร็จ (ถ้ามี)
+  refundedAt     DateTime?                                              // เวลาที่คืนเงิน (ถ้ามี)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  transaction transactions @relation(fields: [transactionId], references: [id])
+  user        User         @relation(fields: [userId], references: [id])
+  paymentLogs PaymentLog[]
+
+  @@index([transactionId])
+  @@index([userId])
+}
+
+model PaymentCard {
+  id              String    @id @default(cuid())
+  userId          String
+  omiseCardId     String    @unique                                     // card_XXX จาก Omise
+  omiseCustomerId String?   @unique                                       // cus_XXX จาก Omise
+  brand           String?                                               // ยี่ห้อบัตร เช่น Visa, MasterCard
+  lastDigits      String?                                               // 4 หลักสุดท้ายของบัตร
+  expirationMonth Int?                                                  // เดือนหมดอายุ
+  expirationYear  Int?                                                  // ปีหมดอายุ
+  isDefault       Boolean   @default(false)                             // บัตรเริ่มต้นสำหรับการชำระเงิน
+  deletedAt       DateTime?                                             // เวลาที่บัตรถูกลบ (ถ้ามี)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model PaymentLog {
+  id          String   @id @default(cuid())
+  paymentId   String
+  rawRequest  Json
+  rawResponse Json
+  eventType   String // เช่น "CHARGE_CREATE", "CHARGE_FAILED"
+  createdAt   DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  @@index([paymentId])
+}
+
+model notifications {
+  id        String           @id @default(uuid())
+  userId    String?
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+model ocpp_messages {
+  id            String           @id @default(uuid())
+  messageId     String
+  chargePointId String
+  direction     MessageDirection
+  action        String
+  payload       Json
+  timestamp     DateTime         @default(now())
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 }
 
 model transactions {
-  id                  String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  charge_point_id     String                   @db.Uuid
-  connector_id        Int
-  organization_id     String                   @db.Uuid
-  transaction_id      Int
-  id_token            String?                  @db.VarChar(255)
-  id_token_type       id_token_type?
-  start_time          DateTime                 @default(now()) @db.Timestamptz(6)
-  end_time            DateTime?                @db.Timestamptz(6)
-  stop_reason         transaction_stop_reason?
-  meter_start         BigInt
-  meter_stop          BigInt?
-  energy_imported     BigInt?
-  energy_exported     BigInt?
-  current             Int?
-  voltage             Int?
-  power               Int?
-  cost                Float?
-  currency            String?                  @db.VarChar(3)
-  billing_status      billing_status           @default(Pending)
-  reservation_id      String?                  @db.Uuid
-  charging_profile_id String?                  @db.Uuid
-  created_at          DateTime                 @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime                 @default(now()) @db.Timestamptz(6)
-  charge_point_name   String?                  @db.VarChar(255)
-  charging_profiles   charging_profiles[]
-  meter_values        meter_values[]
-  charge_points       charge_points            @relation(fields: [charge_point_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  organizations       organizations            @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@unique([charge_point_id, transaction_id], map: "idx_transactions_unique_transaction")
-  @@index([billing_status], map: "idx_transactions_billing_status")
-  @@index([charge_point_id], map: "idx_transactions_charge_point_id")
-  @@index([end_time], map: "idx_transactions_end_time")
-  @@index([id_token], map: "idx_transactions_id_token")
-  @@index([organization_id], map: "idx_transactions_organization_id")
-  @@index([start_time], map: "idx_transactions_start_time")
-  @@index([transaction_id], map: "idx_transactions_transaction_id")
+  id                String            @id @default(uuid())
+  transactionId     String            @unique
+  ocppTransactionId String?           @unique
+  userId            String
+  vehicleId         String?
+  chargePointId     String
+  connectorId       String
+  websocketUrl      String?
+  startTime         DateTime
+  endTime           DateTime?
+  startMeterValue   Float             @default(0)
+  endMeterValue     Float?                                  // ค่ามิเตอร์เมื่อสิ้นสุดการชาร์จ (kWh)
+  totalEnergy       Float?                                  // ปริมาณพลังงานรวมที่ใช้ในการชาร์จ (kWh)
+  totalCost         Float?                                  // ราคารวมทั้งหมดก่อนภาษี
+  appliedRate       Float?                                  // อัตราค่าบริการที่ใช้ในการคำนวณราคารวม
+  status            TransactionStatus @default(ACTIVE)
+  stopReason        String?
+  charge_points     charge_points     @relation(fields: [chargePointId], references: [id])
+  connectors        connectors        @relation(fields: [connectorId], references: [id])
+  User              User              @relation(fields: [userId], references: [id])
+  user_vehicles     user_vehicles?    @relation(fields: [vehicleId], references: [id])
+  payments          Payment[]
 }
 
-model sqlx_migrations {
-  version        BigInt   @id
-  description    String
-  installed_on   DateTime @default(now()) @db.Timestamptz(6)
-  success        Boolean
-  checksum       Bytes
-  execution_time BigInt
-
-  @@map("_sqlx_migrations")
-}
-
-model charge_point_connections {
-  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  charge_point_id String        @db.Uuid
-  connected_at    DateTime      @default(now()) @db.Timestamptz(6)
-  disconnected_at DateTime?     @db.Timestamptz(6)
-  ip_address      String?       @db.Inet
-  protocol        String        @default("OCPP") @db.VarChar(50)
-  created_at      DateTime      @default(now()) @db.Timestamptz(6)
-  charge_points   charge_points @relation(fields: [charge_point_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([charge_point_id], map: "idx_charge_point_connections_charge_point_id")
-  @@index([connected_at], map: "idx_charge_point_connections_connected_at")
-  @@index([ip_address], map: "idx_charge_point_connections_ip_address")
-}
-
-model charge_point_version_history {
-  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  charge_point_id  String        @db.VarChar(255)
-  organization_id  String        @db.Uuid
-  ocpp_version     String        @db.VarChar(10)
-  firmware_version String?       @db.VarChar(255)
-  changed_at       DateTime?     @default(now()) @db.Timestamptz(6)
-  changed_by       String?       @db.Uuid
-  created_at       DateTime?     @default(now()) @db.Timestamptz(6)
-  is_active        Boolean?      @default(true)
-  users            users?        @relation(fields: [changed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  organizations    organizations @relation(fields: [organization_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([charge_point_id], map: "idx_version_history_charge_point")
-}
-
-model charging_profiles {
-  id                    String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  charge_point_id       String?        @db.Uuid
-  organization_id       String         @db.Uuid
-  name                  String         @db.VarChar(255)
-  profile_type          String         @db.VarChar(50)
-  charging_profile_kind String         @db.VarChar(50)
-  recurrency_kind       String?        @db.VarChar(20)
-  valid_from            DateTime?      @db.Timestamptz(6)
-  valid_to              DateTime?      @db.Timestamptz(6)
-  stack_level           Int            @default(1)
-  min_charging_rate     Float?
-  charging_schedule     Json?
-  is_active             Boolean        @default(true)
-  created_at            DateTime       @default(now()) @db.Timestamptz(6)
-  updated_at            DateTime       @default(now()) @db.Timestamptz(6)
-  description           String?
-  charging_profile_id   Int?
-  profile_purpose       String?        @db.VarChar(50)
-  profile_kind          String?        @db.VarChar(50)
-  transaction_id        String?        @db.Uuid
-  charge_points         charge_points? @relation(fields: [charge_point_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  organizations         organizations  @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  transactions          transactions?  @relation(fields: [transaction_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([charge_point_id], map: "idx_charging_profiles_charge_point_id")
-  @@index([is_active], map: "idx_charging_profiles_is_active")
-  @@index([organization_id], map: "idx_charging_profiles_organization_id")
-  @@index([charging_profile_id], map: "idx_charging_profiles_profile_id")
-  @@index([valid_from], map: "idx_charging_profiles_valid_from")
-  @@index([valid_to], map: "idx_charging_profiles_valid_to")
-}
-
-model meter_values {
-  id             String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  transaction_id String                          @db.Uuid
-  timestamp      DateTime                        @default(now()) @db.Timestamptz(6)
-  sampled_value  Unsupported("_sampled_value")[]
-  created_at     DateTime                        @default(now()) @db.Timestamptz(6)
-  transactions   transactions                    @relation(fields: [transaction_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([timestamp], map: "idx_meter_values_timestamp")
-  @@index([transaction_id], map: "idx_meter_values_transaction_id")
-}
-
-model ocpp_logs {
-  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  charge_point_id String        @db.Uuid
-  message_type    String        @db.VarChar(50)
-  message_id      String?       @db.VarChar(100)
-  action          String?       @db.VarChar(100)
-  payload         Json?
-  direction       String        @db.VarChar(10)
-  timestamp       DateTime      @default(now()) @db.Timestamptz(6)
-  created_at      DateTime      @default(now()) @db.Timestamptz(6)
-  charge_points   charge_points @relation(fields: [charge_point_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([action], map: "idx_ocpp_logs_action")
-  @@index([charge_point_id], map: "idx_ocpp_logs_charge_point_id")
-  @@index([direction], map: "idx_ocpp_logs_direction")
-  @@index([message_type], map: "idx_ocpp_logs_message_type")
-  @@index([timestamp], map: "idx_ocpp_logs_timestamp")
-}
-
-model ocpp_message_logs {
-  id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  charge_point_id    String        @db.VarChar(255)
-  organization_id    String        @db.Uuid
-  message_id         String        @db.VarChar(255)
-  message_type       String
-  action             String?       @db.VarChar(255)
-  direction          String
-  raw_message        String
-  parsed_message     Json?
-  ocpp_version       String        @db.VarChar(10)
-  processing_time_ms Int?
-  error_code         String?       @db.VarChar(50)
-  error_message      String?
-  created_at         DateTime?     @default(now()) @db.Timestamptz(6)
-  organizations      organizations @relation(fields: [organization_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([charge_point_id], map: "idx_message_logs_charge_point")
-  @@index([created_at(sort: Desc)], map: "idx_message_logs_created")
-}
-
-model ocpp_versions {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  version      String   @unique @db.VarChar(50)
-  is_supported Boolean  @default(true)
-  created_at   DateTime @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime @default(now()) @db.Timestamptz(6)
-}
-
-model organization_users {
-  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id String            @db.Uuid
-  user_id         String            @db.Uuid
-  role            organization_role @default(Viewer)
-  is_active       Boolean           @default(true)
-  created_at      DateTime          @default(now()) @db.Timestamptz(6)
-  updated_at      DateTime          @default(now()) @db.Timestamptz(6)
-  organizations   organizations     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users           users             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@unique([organization_id, user_id])
-  @@index([organization_id], map: "idx_organization_users_organization_id")
-  @@index([role], map: "idx_organization_users_role")
-  @@index([user_id], map: "idx_organization_users_user_id")
-}
-
-model organizations {
-  id                           String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                         String                         @db.VarChar(255)
-  description                  String?
-  contact_email                String                         @db.VarChar(255)
-  contact_phone                String?                        @db.VarChar(20)
-  address                      String?
-  city                         String?                        @db.VarChar(100)
-  country                      String?                        @db.VarChar(100)
-  postal_code                  String?                        @db.VarChar(20)
-  tax_id                       String?                        @db.VarChar(50)
-  is_active                    Boolean                        @default(true)
-  subscription_plan            subscription_plan              @default(Basic)
-  subscription_expires_at      DateTime?                      @db.Timestamptz(6)
-  max_charge_points            Int                            @default(10)
-  api_key                      String                         @unique @default(dbgenerated("(gen_random_uuid())::text")) @db.VarChar(255)
-  webhook_url                  String?
-  timezone                     String                         @default("UTC") @db.VarChar(50)
-  currency                     String                         @default("USD") @db.VarChar(3)
-  created_at                   DateTime                       @default(now()) @db.Timestamptz(6)
-  updated_at                   DateTime                       @default(now()) @db.Timestamptz(6)
-  charge_point_version_history charge_point_version_history[]
-  charge_points                charge_points[]
-  charging_profiles            charging_profiles[]
-  ocpp_message_logs            ocpp_message_logs[]
-  organization_users           organization_users[]
-  transactions                 transactions[]
-
-  @@index([api_key], map: "idx_organizations_api_key")
-  @@index([contact_email], map: "idx_organizations_contact_email")
-  @@index([name], map: "idx_organizations_name")
-  @@index([subscription_plan], map: "idx_organizations_subscription_plan")
-}
-
-model permissions {
-  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name             String             @unique @db.VarChar(255)
-  resource         String             @db.VarChar(255)
-  action           String             @db.VarChar(255)
-  description      String?
-  created_at       DateTime           @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
-  role_permissions role_permissions[]
-
-  @@index([name], map: "idx_permissions_name")
-  @@index([resource, action], map: "idx_permissions_resource_action")
-}
-
-model role_permissions {
-  role_id       String      @db.Uuid
-  permission_id String      @db.Uuid
-  created_at    DateTime    @default(now()) @db.Timestamptz(6)
-  permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  roles         roles       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@id([role_id, permission_id])
-}
-
-model roles {
-  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name             String             @unique @db.VarChar(255)
-  description      String?
-  is_active        Boolean            @default(true)
-  created_at       DateTime           @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
-  role_permissions role_permissions[]
-  users            users[]
-
-  @@index([name], map: "idx_roles_name")
-}
-
-model users {
-  id                           String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                        String                         @unique @db.VarChar(255)
-  password_hash                String                         @db.VarChar(255)
-  first_name                   String                         @db.VarChar(100)
-  last_name                    String                         @db.VarChar(100)
-  is_active                    Boolean                        @default(true)
-  is_verified                  Boolean                        @default(false)
-  role_id                      String                         @db.Uuid
-  created_at                   DateTime                       @default(now()) @db.Timestamptz(6)
-  updated_at                   DateTime                       @default(now()) @db.Timestamptz(6)
-  last_login_at                DateTime?                      @db.Timestamptz(6)
-  charge_point_version_history charge_point_version_history[]
-  organization_users           organization_users[]
-  roles                        roles                          @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([email], map: "idx_users_email")
-  @@index([is_active], map: "idx_users_is_active")
-  @@index([role_id], map: "idx_users_role_id")
+model user_vehicles {
+  id           String         @id @default(uuid())
+  userId       String
+  licensePlate String         @unique
+  make         String?
+  model        String?
+  type         VehicleType    @default(ELECTRIC)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  transactions transactions[]
+  User         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum AdminRole {
@@ -451,14 +281,10 @@ enum BranchType {
 
 enum ChargePointStatus {
   AVAILABLE
-  PREPARING
-  CHARGING
-  SUSPENDED_EVSE
-  SUSPENDED_EV
-  FINISHING
-  RESERVED
+  OCCUPIED
   UNAVAILABLE
   FAULTED
+  MAINTENANCE
 }
 
 enum ConnectorStatus {
@@ -488,7 +314,7 @@ enum MessageDirection {
 }
 
 enum NotificationType {
-  CHARGING_STARTEDChargePoint
+  CHARGING_STARTED
   CHARGING_STOPPED
   CHARGING_COMPLETED
   PAYMENT_REQUIRED
@@ -505,6 +331,7 @@ enum OCPPVersion {
 enum OwnershipType {
   PUBLIC
   PRIVATE
+  SHARED
 }
 
 enum PricingTierType {
@@ -569,152 +396,4 @@ enum PaymentStatus {
   FAILED
   CANCELED
   REFUNDED
-}
-
-enum billing_status {
-  Pending
-  Billed
-  Failed
-  Refunded
-}
-
-enum charge_point_status {
-  Available
-  Occupied
-  Unavailable
-  Faulted
-  Maintenance
-}
-
-enum connector_status {
-  Available
-  Occupied
-  Reserved
-  Unavailable
-  Faulted
-}
-
-enum id_token_type {
-  Central
-  eMAID
-  ISO14443
-  KeyCode
-  Local
-  NoAuthorization
-  ISO15693
-}
-
-enum location {
-  Body
-  Cable
-  EV
-  Inlet
-  Outlet
-}
-
-enum measurand {
-  CurrentExport
-  CurrentImport
-  CurrentOffered
-  EnergyActiveExportRegister
-  EnergyActiveImportRegister
-  EnergyReactiveExportRegister
-  EnergyReactiveImportRegister
-  EnergyActiveExportInterval
-  EnergyActiveImportInterval
-  EnergyReactiveExportInterval
-  EnergyReactiveImportInterval
-  Frequency
-  PowerActiveExport
-  PowerActiveImport
-  PowerFactor
-  PowerOffered
-  PowerReactiveExport
-  PowerReactiveImport
-  RPM
-  SoC
-  Temperature
-  Voltage
-}
-
-enum organization_role {
-  Owner
-  Admin
-  Operator
-  Viewer
-}
-
-enum phase {
-  L1
-  L2
-  L3
-  N
-  L1N
-  L2N
-  L3N
-}
-
-enum reading_context {
-  InterruptionBegin
-  InterruptionEnd
-  Other
-  SampleClock
-  SamplePeriodic
-  TransactionBegin
-  TransactionEnd
-  Trigger
-}
-
-enum subscription_plan {
-  Basic
-  Professional
-  Enterprise
-  Custom
-}
-
-enum transaction_stop_reason {
-  DeAuthorized
-  EmergencyStop
-  EnergyLimitReached
-  EVDisconnected
-  GroundFault
-  ImmediateReset
-  Local
-  LocalOutOfCredit
-  MasterPass
-  OverCurrentFault
-  PowerLoss
-  PowerQuality
-  Reboot
-  Remote
-  SOCLimitReached
-  TimeLimitReached
-  TimerExpired
-  UnlockCommand
-}
-
-enum unit {
-  Wh
-  kWh
-  Varh
-  kVarh
-  W
-  kW
-  VA
-  kVA
-  VAR
-  kVAR
-  A
-  V
-  Celsius
-  Fahrenheit
-  K
-  Percent
-  Hz
-  Seconds
-}
-
-enum value_format {
-  Raw
-  SignedData
 }

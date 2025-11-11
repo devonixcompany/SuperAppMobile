@@ -10,7 +10,7 @@
  */
 
 import { prisma } from "../src/lib/prisma";
-import { logger } from "../src/lib/logger";
+import { logger } from "../src/shared/logger";
 
 async function main() {
   console.log("🧹 เริ่มต้นล้างข้อมูลสถานีและ Charge Points...");

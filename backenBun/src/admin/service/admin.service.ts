@@ -1,8 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { JWTService } from "../../lib/jwt";
-import { logAuthEvent, logger } from "../../lib/logger";
 import { hashPassword, verifyPassword } from "../../lib/password";
+import { logAuthEvent } from "../../lib/pino-helpers";
 import { prisma } from "../../lib/prisma";
+import { logger } from "../../shared/logger";
 
 export interface RefreshTokenResponse {
   success: boolean;
@@ -31,10 +32,17 @@ export class AdminService {
   constructor(private jwtService: JWTService) {}
 
   async register(data: AdminRegistrationData) {
-    logAuthEvent('Admin Registration Attempt', data.email, true, undefined, undefined);
+    logAuthEvent(
+      "Admin Registration Attempt",
+      data.email,
+      true,
+      undefined,
+      undefined
+    );
 
     try {
-      const { email, password, confirmPassword, firstName, lastName, role } = data;
+      const { email, password, confirmPassword, firstName, lastName, role } =
+        data;
 
       // Validate input data
       if (password !== confirmPassword) {
@@ -52,7 +60,7 @@ export class AdminService {
 
       // Check if admin already exists by email
       const existingAdmin = await prisma.admin.findUnique({
-        where: { email }
+        where: { email },
       });
 
       if (existingAdmin) {
@@ -62,10 +70,16 @@ export class AdminService {
 
       // Hash password
       const hashedPassword = await hashPassword(password);
-      logger.debug("Admin password hashed successfully", { email: data.email });
+      logger.debug({ email: data.email }, "Admin password hashed successfully");
 
       // Create new admin
-      logger.info("Creating new admin in database", { email: data.email, role: data.role });
+      logger.info(
+        {
+          email: data.email,
+          role: data.role,
+        },
+        "Creating new admin in database"
+      );
       const newAdmin = await prisma.admin.create({
         data: {
           email,
@@ -84,8 +98,10 @@ export class AdminService {
 
       // Generate tokens
       const token = await this.jwtService.generateAdminToken(newAdmin);
-      const refreshToken = await this.jwtService.generateAdminRefreshToken(newAdmin);
-      
+      const refreshToken = await this.jwtService.generateAdminRefreshToken(
+        newAdmin
+      );
+
       // Store refresh token in database
       await this.storeRefreshToken(newAdmin.id, refreshToken);
       console.log("💾 [ADMIN] Refresh token stored in database");
@@ -110,35 +126,51 @@ export class AdminService {
         },
       };
     } catch (error) {
-      logAuthEvent('Admin Registration Failed', data.email, false, undefined, undefined,
-        error instanceof Error ? error.message : "Unknown error");
+      logAuthEvent(
+        "Admin Registration Failed",
+        data.email,
+        false,
+        undefined,
+        undefined,
+        error instanceof Error ? error.message : "Unknown error"
+      );
       throw error;
     }
   }
 
   async login(data: AdminLoginData) {
-    logAuthEvent('Admin Login Attempt', data.email, true, undefined, undefined);
+    logAuthEvent("Admin Login Attempt", data.email, true, undefined, undefined);
 
     try {
       const { email, password } = data;
 
       // Find admin by email
-      logger.debug("Looking up admin by email", { email: data.email });
+      logger.debug({ email: data.email }, "Looking up admin by email");
       const admin = await prisma.admin.findUnique({
-        where: { email }
+        where: { email },
       });
 
       if (!admin) {
-        logAuthEvent('Admin Login Failed - Not Found', email, false, undefined, undefined, "Admin not found");
+        logAuthEvent(
+          "Admin Login Failed - Not Found",
+          email,
+          false,
+          undefined,
+          undefined,
+          "Admin not found"
+        );
         throw new Error("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
       }
 
-      logger.debug("Admin found for login", {
-        adminId: admin.id,
-        email: admin.email,
-        role: admin.role,
-        isActive: admin.isActive,
-      });
+      logger.debug(
+        {
+          adminId: admin.id,
+          email: admin.email,
+          role: admin.role,
+          isActive: admin.isActive,
+        },
+        "Admin found for login"
+      );
 
       // Check if admin is active
       if (!admin.isActive) {
@@ -159,8 +191,10 @@ export class AdminService {
 
       // Generate tokens
       const token = await this.jwtService.generateAdminToken(admin);
-      const refreshToken = await this.jwtService.generateAdminRefreshToken(admin);
-      
+      const refreshToken = await this.jwtService.generateAdminRefreshToken(
+        admin
+      );
+
       // Store refresh token in database
       await this.storeRefreshToken(admin.id, refreshToken);
       console.log("💾 [ADMIN] Refresh token stored in database");
@@ -185,15 +219,24 @@ export class AdminService {
         },
       };
     } catch (error) {
-      logAuthEvent('Admin Login Failed', data.email, false, undefined, undefined,
-        error instanceof Error ? error.message : "Unknown error");
+      logAuthEvent(
+        "Admin Login Failed",
+        data.email,
+        false,
+        undefined,
+        undefined,
+        error instanceof Error ? error.message : "Unknown error"
+      );
       throw error;
     }
   }
 
   async refreshToken(refreshToken: string): Promise<RefreshTokenResponse> {
     console.log("🔄 [ADMIN] Token refresh attempt");
-    console.log("🔍 [ADMIN] Refresh token provided:", refreshToken ? "Yes" : "No");
+    console.log(
+      "🔍 [ADMIN] Refresh token provided:",
+      refreshToken ? "Yes" : "No"
+    );
 
     try {
       if (!refreshToken) {
@@ -203,15 +246,23 @@ export class AdminService {
 
       // Verify refresh token and get admin ID
       console.log("🔐 [ADMIN] Verifying refresh token...");
-      const payload = await this.jwtService.verifyAdminRefreshToken(refreshToken);
-      console.log("✅ [ADMIN] Token verification result:", payload ? "Success" : "Failed");
-      
+      const payload = await this.jwtService.verifyAdminRefreshToken(
+        refreshToken
+      );
+      console.log(
+        "✅ [ADMIN] Token verification result:",
+        payload ? "Success" : "Failed"
+      );
+
       if (!payload) {
         logger.warn("Invalid admin refresh token");
         throw new Error("Invalid refresh token");
       }
 
-      console.log("📋 [ADMIN] Token payload:", { adminId: payload.adminId, type: payload.type });
+      console.log("📋 [ADMIN] Token payload:", {
+        adminId: payload.adminId,
+        type: payload.type,
+      });
 
       // Check if refresh token exists in database and is not revoked
       console.log("💾 [ADMIN] Checking database for refresh token...");
@@ -220,15 +271,20 @@ export class AdminService {
           token: refreshToken,
           isRevoked: false,
           expiresAt: {
-            gt: new Date()
-          }
-        }
+            gt: new Date(),
+          },
+        },
       });
 
-      console.log("🔍 [ADMIN] Database token check result:", storedToken ? "Found" : "Not found");
-      
+      console.log(
+        "🔍 [ADMIN] Database token check result:",
+        storedToken ? "Found" : "Not found"
+      );
+
       if (!storedToken) {
-        console.log("⚠️ [ADMIN] Refresh token not found or expired in database");
+        console.log(
+          "⚠️ [ADMIN] Refresh token not found or expired in database"
+        );
         throw new Error("Invalid or expired refresh token");
       }
 
@@ -236,13 +292,13 @@ export class AdminService {
         id: storedToken.id,
         adminId: storedToken.adminId,
         expiresAt: storedToken.expiresAt,
-        isRevoked: storedToken.isRevoked
+        isRevoked: storedToken.isRevoked,
       });
 
       // Find admin by ID
       console.log("👤 [ADMIN] Finding admin by ID:", payload.adminId);
       const admin = await prisma.admin.findUnique({
-        where: { id: payload.adminId }
+        where: { id: payload.adminId },
       });
 
       if (!admin) {
@@ -254,7 +310,10 @@ export class AdminService {
 
       // Check if admin is active
       if (!admin.isActive) {
-        console.log("⚠️ [ADMIN] Inactive admin attempted token refresh:", admin.id);
+        console.log(
+          "⚠️ [ADMIN] Inactive admin attempted token refresh:",
+          admin.id
+        );
         throw new Error("Admin account is inactive");
       }
 
@@ -265,8 +324,10 @@ export class AdminService {
       console.log("🎫 [ADMIN] Generating new tokens...");
       // Generate new tokens
       const newToken = await this.jwtService.generateAdminToken(admin);
-      const newRefreshToken = await this.jwtService.generateAdminRefreshToken(admin);
-      
+      const newRefreshToken = await this.jwtService.generateAdminRefreshToken(
+        admin
+      );
+
       console.log("💾 [ADMIN] Storing new refresh token...");
       // Store new refresh token in database
       await this.storeRefreshToken(admin.id, newRefreshToken);
@@ -291,7 +352,10 @@ export class AdminService {
     }
   }
 
-  private async storeRefreshToken(adminId: string, refreshToken: string): Promise<void> {
+  private async storeRefreshToken(
+    adminId: string,
+    refreshToken: string
+  ): Promise<void> {
     // Calculate expiration date (7 days from now)
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
@@ -351,7 +415,9 @@ export class AdminService {
     });
 
     if (deletedTokens.count > 0) {
-      console.log(`🧹 [ADMIN] Cleaned up ${deletedTokens.count} expired/revoked refresh tokens`);
+      console.log(
+        `🧹 [ADMIN] Cleaned up ${deletedTokens.count} expired/revoked refresh tokens`
+      );
     }
   }
 
@@ -367,11 +433,15 @@ export class AdminService {
         ...restBody
       } = data;
 
-      const chargePointData =
-        this.pickChargePointData(restBody) as Prisma.charge_pointsUncheckedCreateInput;
+      const chargePointData = this.pickChargePointData(
+        restBody
+      ) as Prisma.charge_pointsUncheckedCreateInput;
       const connectorPayload = this.buildConnectorPayload(connectors);
-      
-      if (connectorPayload.length > 0 && chargePointData.connectorCount === undefined) {
+
+      if (
+        connectorPayload.length > 0 &&
+        chargePointData.connectorCount === undefined
+      ) {
         chargePointData.connectorCount = connectorPayload.length;
       }
 
@@ -448,29 +518,29 @@ export class AdminService {
           if (stationRecord) break;
         }
 
-      if (!stationRecord) {
-        const [firstCandidate] = Array.from(stationNameCandidates);
-        const chargePointName =
-          typeof chargePointData.chargepointname === "string" &&
-          chargePointData.chargepointname.trim()
-            ? chargePointData.chargepointname.trim()
-            : undefined;
-        const nameForCreation =
-          firstCandidate ??
-          (chargePointName
-            ? `${chargePointName} Station`
-            : `Station-${Date.now().toString(36)}-${Math.random()
-                .toString(36)
-                .slice(2, 8)}`);
+        if (!stationRecord) {
+          const [firstCandidate] = Array.from(stationNameCandidates);
+          const chargePointName =
+            typeof chargePointData.chargepointname === "string" &&
+            chargePointData.chargepointname.trim()
+              ? chargePointData.chargepointname.trim()
+              : undefined;
+          const nameForCreation =
+            firstCandidate ??
+            (chargePointName
+              ? `${chargePointName} Station`
+              : `Station-${Date.now().toString(36)}-${Math.random()
+                  .toString(36)
+                  .slice(2, 8)}`);
 
-        stationRecord = await prisma.station.create({
-          data: {
-            stationname: nameForCreation,
-            location: 'Unknown location',
-          },
-          select: { id: true },
-        });
-      }
+          stationRecord = await prisma.station.create({
+            data: {
+              stationname: nameForCreation,
+              location: "Unknown location",
+            },
+            select: { id: true },
+          });
+        }
 
         resolvedStationId = stationRecord.id;
       }
@@ -497,13 +567,6 @@ export class AdminService {
           connectors: {
             orderBy: { connectorId: "asc" },
           },
-          owner: {
-            select: {
-              id: true,
-              email: true,
-              fullName: true,
-            },
-          },
         },
       });
 
@@ -516,8 +579,9 @@ export class AdminService {
 
   async updateChargePoint(id: string, data: any) {
     try {
-      const chargePointData =
-        this.pickChargePointData(data) as Prisma.charge_pointsUncheckedUpdateInput;
+      const chargePointData = this.pickChargePointData(
+        data
+      ) as Prisma.charge_pointsUncheckedUpdateInput;
 
       if (Object.keys(chargePointData).length === 0) {
         throw new Error("No updatable fields provided");
@@ -568,10 +632,8 @@ export class AdminService {
   private toNullableNumber = (value: unknown): number | null =>
     value === null || value === undefined ? null : Number(value);
 
-  private normalizeChargePoint = <
-    T extends { connectors?: any[] },
-  >(
-    chargePoint: T,
+  private normalizeChargePoint = <T extends { connectors?: any[] }>(
+    chargePoint: T
   ) => {
     const normalized: any = {
       ...chargePoint,
@@ -588,53 +650,55 @@ export class AdminService {
     return normalized;
   };
 
-  private ALLOWED_CHARGE_POINT_FIELDS: ReadonlyArray<keyof Prisma.charge_pointsUncheckedCreateInput> =
-    [
-      "id",
-      "chargepointname",
-      "stationId",
-      "openingHours",
-      "is24Hours",
-      "brand",
-      "serialNumber",
-      "powerRating",
-      "powerSystem",
-      "connectorCount",
-      "protocol",
-      "csmsUrl",
-      "chargePointIdentity",
-      "chargepointstatus",
-      "maxPower",
-      "lastSeen",
-      "heartbeatIntervalSec",
-      "vendor",
-      "model",
-      "firmwareVersion",
-      "ocppProtocolRaw",
-      "ocppSessionId",
-      "isWhitelisted",
-      "ownerId",
-      "ownershipType",
-      "isPublic",
-      "createdAt",
-      "updatedAt",
-      "urlwebSocket",
-    ];
+  private ALLOWED_CHARGE_POINT_FIELDS: ReadonlyArray<
+    keyof Prisma.charge_pointsUncheckedCreateInput
+  > = [
+    "id",
+    "chargepointname",
+    "stationId",
+    "openingHours",
+    "is24Hours",
+    "brand",
+    "serialNumber",
+    "powerRating",
+    "powerSystem",
+    "connectorCount",
+    "protocol",
+    "csmsUrl",
+    "chargePointIdentity",
+    "chargepointstatus",
+    "maxPower",
+    "lastSeen",
+    "heartbeatIntervalSec",
+    "vendor",
+    "model",
+    "firmwareVersion",
+    "ocppProtocolRaw",
+    "ocppSessionId",
+    "isWhitelisted",
+    "ownerId",
+    "ownershipType",
+    "isPublic",
+    "createdAt",
+    "updatedAt",
+    "urlwebSocket",
+  ];
 
-  private NUMERIC_FIELDS: ReadonlyArray<keyof Prisma.charge_pointsUncheckedCreateInput> =
-    [
-      "powerRating",
-      "powerSystem",
-      "connectorCount",
-      "maxPower",
-      "heartbeatIntervalSec",
-    ];
+  private NUMERIC_FIELDS: ReadonlyArray<
+    keyof Prisma.charge_pointsUncheckedCreateInput
+  > = [
+    "powerRating",
+    "powerSystem",
+    "connectorCount",
+    "maxPower",
+    "heartbeatIntervalSec",
+  ];
 
   private numericFieldSet = new Set(this.NUMERIC_FIELDS);
 
   private transformValue = (
     field: keyof Prisma.charge_pointsUncheckedCreateInput,
-    value: unknown,
+    value: unknown
   ): Prisma.charge_pointsUncheckedCreateInput[keyof Prisma.charge_pointsUncheckedCreateInput] => {
     if (this.numericFieldSet.has(field)) {
       return value === null || value === undefined ? null : Number(value);
@@ -647,10 +711,10 @@ export class AdminService {
     for (const field of this.ALLOWED_CHARGE_POINT_FIELDS) {
       const value = source[field as string];
       if (value !== undefined) {
-          // TypeScript can't narrow dynamic keys well, so use assignment with type assertion
+        // TypeScript can't narrow dynamic keys well, so use assignment with type assertion
         (data as Record<string, any>)[field as string] = this.transformValue(
           field,
-          value,
+          value
         );
       }
     }
@@ -658,7 +722,7 @@ export class AdminService {
   };
 
   private buildConnectorPayload = (
-    connectors: unknown,
+    connectors: unknown
   ): Array<Prisma.connectorsCreateWithoutCharge_pointsInput> => {
     if (!Array.isArray(connectors)) return [];
 

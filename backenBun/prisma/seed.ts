@@ -1,5 +1,5 @@
 import { ConnectorType, OCPPVersion, OwnershipType, Prisma, PrismaClient } from '@prisma/client';
-import bcrypt from 'bcrypt';
+import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
@@ -23,8 +23,7 @@ async function seedAdminAndUser() {
       role: 'SUPERADMIN',
       firstName: 'Admin',
       lastName: 'User',
-      isActive: true,
-      updatedAt: new Date()
+      isActive: true
     }
   });
 
@@ -50,8 +49,7 @@ async function seedAdminAndUser() {
       firebaseUid: 'firebase-uid-001',
       fullName: 'John Doe',
       typeUser: 'NORMAL',
-      status: 'ACTIVE',
-      updatedAt: new Date()
+      status: 'ACTIVE'
     }
   });
 
@@ -65,8 +63,7 @@ async function seedAdminAndUser() {
       password: newUserPassword,
       fullName: 'New User',
       typeUser: 'NORMAL',
-      status: 'ACTIVE',
-      updatedAt: new Date()
+      status: 'ACTIVE'
     },
     create: {
       id: randomUUID(),
@@ -76,8 +73,7 @@ async function seedAdminAndUser() {
       firebaseUid: 'firebase-uid-002',
       fullName: 'New User',
       typeUser: 'NORMAL',
-      status: 'ACTIVE',
-      updatedAt: new Date()
+      status: 'ACTIVE'
     }
   });
 
@@ -100,8 +96,7 @@ async function seedStation() {
       onPeakEndTime: '22:00',
       offPeakRate: 6,
       offPeakStartTime: '22:00',
-      offPeakEndTime: '09:00',
-      updatedAt: now
+      offPeakEndTime: '09:00'
     },
     create: {
       stationname: 'Central World EV Station',
@@ -113,9 +108,7 @@ async function seedStation() {
       onPeakEndTime: '22:00',
       offPeakRate: 6,
       offPeakStartTime: '22:00',
-      offPeakEndTime: '09:00',
-      createdAt: now,
-      updatedAt: now
+      offPeakEndTime: '09:00'
     }
   });
 
@@ -143,8 +136,7 @@ async function seedChargePoint(userId: string, stationId: string) {
       chargepointstatus: 'AVAILABLE',
       ownerId: userId,
       ownershipType: OwnershipType.PRIVATE,
-      isPublic: true,
-      updatedAt: now
+      isPublic: true
     },
     create: {
       id: 'cp-central-world-001',
@@ -161,9 +153,7 @@ async function seedChargePoint(userId: string, stationId: string) {
       chargePointIdentity: 'CP-TH-BKK-001',
       ownerId: userId,
       ownershipType: OwnershipType.PRIVATE,
-      isPublic: true,
-      createdAt: now,
-      updatedAt: now
+      isPublic: true
     }
   });
 
@@ -227,8 +217,7 @@ async function seedUserVehicle(userId: string) {
       userId,
       make: 'Tesla',
       model: 'Model 3',
-      type: 'ELECTRIC',
-      updatedAt: new Date()
+      type: 'ELECTRIC'
     },
     create: {
       id: randomUUID(),
@@ -236,9 +225,7 @@ async function seedUserVehicle(userId: string) {
       licensePlate: 'กข 1234 กรุงเทพ',
       make: 'Tesla',
       model: 'Model 3',
-      type: 'ELECTRIC',
-      createdAt: new Date(),
-      updatedAt: new Date()
+      type: 'ELECTRIC'
     }
   });
 

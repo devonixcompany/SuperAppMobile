@@ -7,6 +7,10 @@
   "scripts": {
     "dev": "bun run --watch src/app.ts",
     "start": "bun run src/app.ts",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "typecheck": "tsc --noEmit",
+    "build": "bun build src/app.ts --outdir ./dist --target node",
     "seed": "npx tsx prisma/seed.ts",
     "stations:create": "bun run scripts/create-stations.ts",
     "stations:clean": "bun run scripts/clean-stations.ts",
@@ -26,20 +30,23 @@
     "@sinclair/typebox": "^0.34.41",
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
-    "@types/winston": "^2.4.4",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv-cli": "^11.0.0",
     "elysia": "^1.4.13",
     "express": "^5.1.0",
     "omise": "^1.0.0",
-    "winston": "^3.18.3"
+    "pino": "^10.1.0",
+    "pino-pretty": "^13.1.2"
   },
   "devDependencies": {
     "@types/express": "^5.0.4",
     "@types/node": "^20.19.23",
     "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.46.4",
+    "@typescript-eslint/parser": "^8.46.4",
     "bun-types": "latest",
+    "eslint": "^9.39.1",
     "prisma": "^6.19.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"

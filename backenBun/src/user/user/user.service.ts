@@ -6,7 +6,7 @@ export interface CreateUserData {
   email: string;
   password: string;
   typeUser: 'NORMAL' | 'BUSINESS';
-  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  status: 'ACTIVE' | 'BLOCKED' | 'EXPIRED' | 'PENDING';
 }
 
 export class UserService {
@@ -43,8 +43,7 @@ export class UserService {
         email: data.email,
         password: data.password,
         typeUser: data.typeUser,
-        status: data.status,
-        updatedAt: new Date()
+        status: data.status
       }
     });
   }

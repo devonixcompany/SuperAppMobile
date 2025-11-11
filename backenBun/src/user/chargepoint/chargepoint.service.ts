@@ -874,7 +874,7 @@ export class ChargePointService {
             ? updateData.location.trim()
             : existingChargePoint.Station?.location ?? 'Unknown Location';
 
-      let targetStationId =
+      const targetStationId =
         typeof updateData.stationId === 'string' && updateData.stationId.trim()
           ? updateData.stationId.trim()
           : existingChargePoint.stationId ?? undefined;

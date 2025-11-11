@@ -1,11 +1,10 @@
 import {
   ConnectorStatus,
   ConnectorType,
-  OCPPVersion,
-  Prisma,
+  OCPPVersion
 } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
-import { logger } from "../../lib/logger";
+import { logger } from "../../shared/logger";
 import {
   AdminConnectorsService,
   CreateConnectorData,
@@ -174,9 +173,9 @@ export class AdminChargePointsService {
       );
     }
 
-    logger.info("Admin created charge point", {
+    logger.info({
       chargePointId: chargePoint.id,
-    });
+    }, "Admin created charge point");
 
     if (createdConnectors.length) {
       return {

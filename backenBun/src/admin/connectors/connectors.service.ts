@@ -1,6 +1,6 @@
 import { ConnectorStatus, ConnectorType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
-import { logger } from '../../lib/logger';
+import { logger } from '../../shared/logger';
 
 export interface CreateConnectorData {
   id?: string;
@@ -119,9 +119,10 @@ export class AdminConnectorsService {
       return createdConnector;
     });
 
-    logger.info('Admin created connector', {
+    logger.info({
+      msg: 'Admin created connector',
       connectorId: connector.id,
-      chargePointId: connector.chargePointId,
+      chargePointId: connector.charge_point_id,
     });
 
     return connector;
