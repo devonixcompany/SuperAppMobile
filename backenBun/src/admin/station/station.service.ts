@@ -202,9 +202,11 @@ export class AdminStationService {
       throw new Error('Station ID is required');
     }
 
+    // Get station details
     const station = await prisma.station.findUnique({
       where: { id: normalizedId },
       select: {
+        id: true,
         stationname: true,
         imageUrl: true,
         openclosedays: true,
@@ -216,34 +218,12 @@ export class AdminStationService {
         offPeakStartTime: true,
         offPeakEndTime: true,
         offPeakbaseRate: true,
-        charge_points: {
-          select: {
-            id: true,
-            chargepointname: true,
-            serialNumber: true,
-            brand: true,
-            createdAt: true,
-            User: {
-              select: {
-                phoneNumber: true,
-              },
-            },
-            connectors: {
-              select: {
-                connectorId: true,
-                type: true,
-                maxPower: true,
-                connectorstatus: true,
-              },
-              orderBy: { connectorId: 'asc' },
-            },
-            _count: {
-              select: {
-                transactions: true,
-              },
-            },
-          },
-        },
+        location: true,
+        latitude: true,
+        longitude: true,
+        flatRate: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
 
@@ -251,31 +231,71 @@ export class AdminStationService {
       throw new Error('Station not found');
     }
 
-    const chargePoints = await Promise.all(
-      station.charge_points.map(async (cp) => {
+    // Get associated charge points for this station
+    const chargePoints = await prisma.charge_points.findMany({
+      where: {
+        stationId: station.id
+      },
+      select: {
+        id: true,
+        chargepointname: true,
+        serialNumber: true,
+        brand: true,
+        createdAt: true,
+        connectors: {
+          select: {
+            connector_id: true,
+            connector_type: true,
+            max_power: true,
+            status: true,
+          },
+          orderBy: { connector_id: 'asc' },
+        },
+        _count: {
+          select: {
+            transactions: true,
+          },
+        },
+      },
+    });
+
+    // Transform the data to match expected structure
+    const stationWithChargePoints = {
+      ...station,
+      charge_points: chargePoints.map(cp => ({
+        ...cp,
+        connectorId: cp.id, // Map id to connectorId for compatibility
+        connectorstatus: cp.connectors[0]?.status || 'Available',
+        maxPower: cp.connectors[0]?.max_power,
+        type: cp.connectors[0]?.connector_type,
+      }))
+    };
+
+    const chargePointsWithRevenue = await Promise.all(
+      chargePoints.map(async (cp) => {
+        // Get revenue for this charge point
         const revenueResult = await prisma.transactions.aggregate({
           where: {
-            chargePointId: cp.id,
-            status: 'COMPLETED',
+            charge_point_id: cp.id,
           },
           _sum: {
-            totalCost: true,
+            cost: true,
           },
         });
 
         return {
-          chargepointname: cp.chargepointname,
-          serialNumber: cp.serialNumber,
-          brand: cp.brand,
+          chargepointname: cp.chargepointname || 'Unknown',
+          serialNumber: cp.serialNumber || 'Unknown',
+          brand: cp.brand || 'Unknown',
           totalTransactions: cp._count.transactions,
-          totalRevenue: revenueResult._sum.totalCost ?? 0,
+          totalRevenue: revenueResult._sum.cost ?? 0,
           connectors: cp.connectors.map((connector) => ({
-            connectorId: connector.connectorId,
-            type: connector.type,
-            maxPower: connector.maxPower,
-            connectorstatus: connector.connectorstatus,
+            connectorId: connector.connector_id,
+            type: connector.connector_type || 'Unknown',
+            maxPower: connector.max_power,
+            connectorstatus: connector.status || 'Available',
             startTime: cp.createdAt?.toISOString() ?? null,
-            phoneNumber: cp.User?.phoneNumber ?? null,
+            phoneNumber: null, // No User relation in this schema
           })),
         };
       }),
@@ -295,7 +315,7 @@ export class AdminStationService {
         offPeakStartTime: station.offPeakStartTime,
         offPeakEndTime: station.offPeakEndTime,
         offPeakbaseRate: station.offPeakbaseRate,
-        chargePoint: chargePoints,
+        chargePoint: chargePointsWithRevenue,
       },
     };
   }
@@ -367,6 +387,104 @@ export class AdminStationService {
     });
 
     return updatedStation;
+  }
+
+  async upsertStation(data: CreateStationData & { id?: string }) {
+    if (!data.stationname?.trim()) {
+      throw new Error('Station name is required');
+    }
+
+    if (!data.location?.trim()) {
+      throw new Error('Location is required');
+    }
+
+    const latitude = this.toDecimal(data.latitude);
+    const longitude = this.toDecimal(data.longitude);
+
+    const existingStation = await prisma.station.findUnique({
+      where: { stationname: data.stationname.trim() },
+    });
+
+    let station;
+    let createdChargePoints = [];
+
+    if (existingStation) {
+      station = await prisma.station.update({
+        where: { id: existingStation.id },
+        data: {
+          location: data.location.trim(),
+          imageUrl: data.imageUrl ?? null,
+          latitude,
+          longitude,
+          openclosedays: data.openclosedays ?? null,
+          flatRate: data.flatRate ?? undefined,
+          onPeakRate: data.onPeakRate ?? undefined,
+          onPeakStartTime: data.onPeakStartTime ?? undefined,
+          onPeakEndTime: data.onPeakEndTime ?? undefined,
+          onPeakbaseRate: data.onPeakbaseRate ?? undefined,
+          offPeakRate: data.offPeakRate ?? undefined,
+          offPeakStartTime: data.offPeakStartTime ?? undefined,
+          offPeakEndTime: data.offPeakEndTime ?? undefined,
+          offPeakbaseRate: data.offPeakbaseRate ?? undefined,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      station = await prisma.station.create({
+        data: {
+          ...(data.id ? { id: data.id } : {}),
+          stationname: data.stationname.trim(),
+          location: data.location.trim(),
+          imageUrl: data.imageUrl ?? null,
+          latitude,
+          longitude,
+          openclosedays: data.openclosedays ?? null,
+          flatRate: data.flatRate ?? undefined,
+          onPeakRate: data.onPeakRate ?? undefined,
+          onPeakStartTime: data.onPeakStartTime ?? undefined,
+          onPeakEndTime: data.onPeakEndTime ?? undefined,
+          onPeakbaseRate: data.onPeakbaseRate ?? undefined,
+          offPeakRate: data.offPeakRate ?? undefined,
+          offPeakStartTime: data.offPeakStartTime ?? undefined,
+          offPeakEndTime: data.offPeakEndTime ?? undefined,
+          offPeakbaseRate: data.offPeakbaseRate ?? undefined,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    const chargePointInputs = Array.isArray(data.chargePoints)
+      ? data.chargePoints.filter(
+          (payload): payload is CreateStationChargePointData =>
+            payload !== null && payload !== undefined,
+        )
+      : [];
+
+    if (chargePointInputs.length) {
+      const chargePointService = new AdminChargePointsService();
+
+      for (const chargePointInput of chargePointInputs) {
+        const { stationId: _ignoredStationId, ...rest } = chargePointInput;
+        const payload: CreateChargePointData = {
+          ...rest,
+          stationId: station.id,
+        };
+        const chargePoint =
+          await chargePointService.createChargePoint(payload);
+        createdChargePoints.push(chargePoint);
+      }
+    }
+
+    logger.info('Admin upserted station', { stationId: station.id, isNew: !existingStation });
+
+    if (createdChargePoints.length) {
+      return {
+        ...station,
+        chargePoints: createdChargePoints,
+      };
+    }
+
+    return station;
   }
 
   async deleteStation(id: string) {

@@ -7,7 +7,13 @@
   "scripts": {
     "dev": "bun run --watch src/app.ts",
     "start": "bun run src/app.ts",
-    "seed": "npx tsx prisma/seed.ts"
+    "seed": "npx tsx prisma/seed.ts",
+    "stations:create": "bun run scripts/create-stations.ts",
+    "stations:clean": "bun run scripts/clean-stations.ts",
+    "stations:summary": "bun run scripts/station-summary.ts",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@elysiajs/cookie": "^0.8.0",
