@@ -361,26 +361,47 @@ export class PaymentService {
         throw new Error('User is missing Omise customer ID');
       }
 
+      // Calculate charge amount with minimum threshold
+      // ถ้ายอดเงินต่ำกว่า 20 บาท ให้เก็บ 20 บาท
+      const minimumCharge = 20;
+      const chargeAmount = Math.max(transaction.totalCost, minimumCharge);
+      const amountSatang = Math.round(chargeAmount * 100);
+
       // Create payment record
       const payment = await prisma.payment.create({
         data: {
           transactionId: transaction.id,
           userId: transaction.userId,
-          amount: transaction.totalCost,
+          amount: chargeAmount, // ใช้ยอดเงินหลังปรับขั้นต่ำแล้ว
           status: PaymentStatus.PENDING,
         }
       });
 
       // Create 3DS Source first (card + 3ds)
-      const amountSatang = Math.round(transaction.totalCost * 100);
+
+      console.log('💰 [PAYMENT] Amount calculation:', {
+        originalCost: transaction.totalCost,
+        minimumCharge,
+        finalChargeAmount: chargeAmount,
+        amountSatang
+      });
       const rawBaseUrl = process.env.BASE_URL || process.env.FRONTEND_URL;
       if (!rawBaseUrl) {
         throw new Error('BASE_URL or FRONTEND_URL must be configured for 3DS return');
       }
-      // Sanitize possible stray backticks/spaces and trailing slash
-      const baseUrl = rawBaseUrl.trim().replace(/^`+|`+$/g, '');
+      // Sanitize possible stray backticks/quotes/spaces and trailing slash
+      const baseUrl = rawBaseUrl
+        .trim()
+        .replace(/^[`"']+|[`"']+$/g, ''); // Remove backticks, quotes from start/end
       const baseUrlNoSlash = baseUrl.replace(/\/+$/, '');
       const returnUri = `${baseUrlNoSlash}/api/payment/3ds/return`;
+
+      console.log('🔍 [3DS] URL Sanitization:', {
+        rawBaseUrl,
+        afterTrim: rawBaseUrl.trim(),
+        afterQuoteRemoval: baseUrl,
+        finalReturnUri: returnUri
+      });
 
       console.log('💳 Creating 3DS Source...', {
         amount: amountSatang,

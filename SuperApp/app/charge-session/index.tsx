@@ -324,7 +324,10 @@ export default function ChargeSessionScreen() {
     };
 
     return () => {
-      ws.close();
+      console.log("🧹 [CLEANUP] Closing WebSocket connection");
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
       wsRef.current = null;
     };
   }, [normalizedWsUrl, appendLog]);
