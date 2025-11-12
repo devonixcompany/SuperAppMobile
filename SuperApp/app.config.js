@@ -6,11 +6,24 @@ export default {
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "superapp",
-    userInterfaceStyle: "automatic",
+    userInterfaceStyle: "light",
+    splash: {
+      statusBar: {
+        hidden: false,
+        style: "dark",
+      },
+    },
     newArchEnabled: true,
     ios: {
       bundleIdentifier: "com.anonymous.SuperApp",
       supportsTablet: true,
+      config: {
+        googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
+      },
+      statusBar: {
+        hidden: false,
+        style: "dark",
+      },
     },
     android: {
       package: "com.anonymous.SuperApp",
@@ -19,6 +32,17 @@ export default {
         foregroundImage: "./assets/images/android-icon-foreground.png",
         backgroundImage: "./assets/images/android-icon-background.png",
         monochromeImage: "./assets/images/android-icon-monochrome.png",
+      },
+      config: {
+        googleMaps: {
+          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
+        },
+      },
+      statusBar: {
+        hidden: false,
+        barStyle: "dark-content",
+        translucent: false,
+        backgroundColor: "#ffffff",
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
@@ -32,6 +56,12 @@ export default {
       "expo-barcode-scanner",
       "expo-secure-store",
       "expo-maps",
+      [
+        "expo-location",
+        {
+          locationAlwaysAndWhenInUsePermission: "Allow $(PRODUCT_NAME) to use your location.",
+        },
+      ],
       [
         "expo-splash-screen", 
         {
@@ -66,6 +96,9 @@ export default {
       // API configuration
       apiUrl: process.env.EXPO_PUBLIC_API_URL,
       omisePublicKey: process.env.EXPO_PUBLIC_OMISE_PUBLIC_KEY,
+      
+      // Google Maps configuration
+      googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
 
       // App environment
       appEnv: process.env.EXPO_PUBLIC_APP_ENV || "development",

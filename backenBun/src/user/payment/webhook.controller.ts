@@ -54,6 +54,14 @@ export const webhookController = () =>
             case 'charge.complete':
               await handleChargeComplete(data);
               break;
+            
+            // Newer event keys explicitly for success/failed
+            case 'charge.succeeded':
+              await handleChargeComplete(data);
+              break;
+            case 'charge.failed':
+              await handleChargeUpdate(data);
+              break;
               
             case 'charge.create':
               await handleChargeCreate(data);

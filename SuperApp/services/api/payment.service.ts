@@ -113,6 +113,15 @@ class PaymentService {
   }
 
   /**
+   * Retrieve single payment status (syncs with Omise if needed)
+   */
+  async getPaymentStatus(paymentId: string): Promise<ApiResponse<{ id: string; status: string; failureMessage?: string | null; chargeId?: string | null }>> {
+    return http.get<{ id: string; status: string; failureMessage?: string | null; chargeId?: string | null }>(
+      API_CONFIG.ENDPOINTS.PAYMENT.STATUS(paymentId)
+    );
+  }
+
+  /**
    * Process payment for a specific transaction
    */
   async processTransactionPayment(

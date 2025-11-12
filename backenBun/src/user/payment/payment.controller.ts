@@ -220,6 +220,37 @@ export const paymentController = (paymentService: PaymentService) =>
       }
     )
 
+    // Get single payment status (sync with Omise if needed)
+    .get(
+      '/status/:paymentId',
+      async ({ params, user, request, set }: any) => {
+        const authenticatedUser = user || (request as any).user;
+
+        try {
+          if (!authenticatedUser) {
+            set.status = 401;
+            return { success: false, message: 'Unauthorized' };
+          }
+
+          const { paymentId } = params as { paymentId: string };
+          const status = await PaymentService.getPaymentStatus(paymentId);
+          return { success: true, data: status };
+        } catch (error: any) {
+          console.error('Get payment status error:', error);
+          set.status = 500;
+          return {
+            success: false,
+            message: error.message || 'เกิดข้อผิดพลาดในการดึงสถานะการชำระเงิน'
+          };
+        }
+      },
+      {
+        params: t.Object({
+          paymentId: t.String()
+        })
+      }
+    )
+
     // Handle 3D Secure return
     .get(
       '/3ds/return',

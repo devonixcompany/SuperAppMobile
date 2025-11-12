@@ -406,14 +406,26 @@ export const useChargingStatusPopup = (options?: {
         }
 
         if (initialResult.hadError || !initialResult.data) {
+          console.log('⏸️ [POPUP] No active transaction, stopping polling');
           return;
         }
 
+        console.log('▶️ [POPUP] Active transaction found, starting polling every', pollInterval / 1000, 'seconds');
         intervalId = setInterval(async () => {
           const next = await loadActiveTransaction();
           if (cancelled || next.hadError) {
             return;
           }
+
+          // ถ้าไม่เจอ transaction แล้ว ให้หยุด polling
+          if (!next.data) {
+            console.log('⏹️ [POPUP] Transaction ended, stopping polling');
+            if (intervalId) {
+              clearInterval(intervalId);
+              intervalId = null;
+            }
+          }
+
           applyResult(next);
         }, pollInterval);
       };

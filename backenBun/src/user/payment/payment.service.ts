@@ -1,5 +1,6 @@
 import { PaymentStatus } from '@prisma/client';
 import Omise from 'omise';
+import { Buffer } from 'buffer';
 import { prisma } from '../../lib/prisma';
 
 // Initialize Omise client
@@ -7,6 +8,64 @@ const omise = Omise({
   publicKey: process.env.OMISE_PUBLIC_KEY!,
   secretKey: process.env.OMISE_SECRET_KEY!,
 });
+
+// Omise Source (3DS) response shape (minimal fields used)
+interface OmiseSource {
+  id: string;
+  redirect?: {
+    url?: string;
+    uri?: string;
+  };
+}
+
+// Helper: create 3DS source via Omise REST (ensures compatibility)
+async function createThreeDSSource(cardId: string, amount: number, returnUri: string): Promise<OmiseSource> {
+  const secretKey = process.env.OMISE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error('OMISE_SECRET_KEY is not configured');
+  }
+
+  const auth = Buffer.from(`${secretKey}:`).toString('base64');
+
+  const body = new URLSearchParams({
+    type: 'three_d_secure',
+    amount: String(amount),
+    currency: 'THB',
+    card: cardId,
+    return_uri: returnUri,
+  }).toString();
+
+  try {
+    const resp = await fetch('https://api.omise.co/sources', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
+
+    const json: any = await resp.json();
+    if (!resp.ok) {
+      const code = json?.code || 'omise_error';
+      const message = json?.message || 'Failed to create 3DS source';
+      const err = new Error(`[Omise] ${code}: ${message}`);
+      // Attach raw details
+      (err as any).details = json;
+      throw err;
+    }
+    if (!json || typeof json.id !== 'string') {
+      throw new Error('Invalid source response: missing id');
+    }
+    return {
+      id: json.id,
+      redirect: json.redirect,
+    };
+  } catch (e: any) {
+    console.error('❌ Failed to create 3DS Source:', e?.details || e);
+    throw e;
+  }
+}
 
 export class PaymentService {
   // Add payment card to user
@@ -26,7 +85,7 @@ export class PaymentService {
         throw new Error('User not found');
       }
 
-      let customer;
+      let customer: any | null = null;
       let customerExists = false;
 
       // Try to get existing customer if omiseCustomerId exists
@@ -59,18 +118,25 @@ export class PaymentService {
         });
       } else {
         // Customer exists, add card to existing customer
-        await omise.customers.update(customer.id, {
+        const currentCustomerId = customer?.id ?? user.omiseCustomerId;
+        if (!currentCustomerId) {
+          throw new Error('Omise customer is not initialized');
+        }
+        await omise.customers.update(currentCustomerId, {
           card: token
         });
         // Refresh customer data to get the new card
-        customer = await omise.customers.retrieve(customer.id);
-        console.log('✅ Added card to existing customer:', customer.id);
+        customer = await omise.customers.retrieve(currentCustomerId);
+        console.log('✅ Added card to existing customer:', currentCustomerId);
       }
 
       const shouldSetDefault = Boolean(setDefault) || user.paymentCards.length === 0;
 
       // Get the latest card from customer
-      const cards = customer.cards.data;
+      if (!customer) {
+        throw new Error('Failed to initialize Omise customer');
+      }
+      const cards = customer.cards?.data ?? [];
       if (!cards || cards.length === 0) {
         throw new Error('No cards found after adding');
       }
@@ -103,8 +169,9 @@ export class PaymentService {
 
       if (shouldSetDefault) {
         await omise.customers.update(customer.id, {
-          default_card: latestCard.id
-        });
+          // Omise API expects 'default' for default card update
+          default: latestCard.id
+        } as any);
       }
 
       return paymentCard;
@@ -180,8 +247,8 @@ export class PaymentService {
           });
 
           await omise.customers.update(card.omiseCustomerId, {
-            default_card: nextDefault.omiseCardId
-          });
+            default: nextDefault.omiseCardId
+          } as any);
         }
       }
 
@@ -236,8 +303,8 @@ export class PaymentService {
 
       if (user?.omiseCustomerId) {
         await omise.customers.update(user.omiseCustomerId, {
-          default_card: targetCard.omiseCardId
-        });
+          default: targetCard.omiseCardId
+        } as any);
       }
 
       return updatedCard;
@@ -294,37 +361,138 @@ export class PaymentService {
         throw new Error('User is missing Omise customer ID');
       }
 
+      // Calculate charge amount with minimum threshold
+      // ถ้ายอดเงินต่ำกว่า 20 บาท ให้เก็บ 20 บาท
+      const minimumCharge = 20;
+      const chargeAmount = Math.max(transaction.totalCost, minimumCharge);
+      const amountSatang = Math.round(chargeAmount * 100);
+
       // Create payment record
       const payment = await prisma.payment.create({
         data: {
           transactionId: transaction.id,
           userId: transaction.userId,
-          amount: transaction.totalCost,
+          amount: chargeAmount, // ใช้ยอดเงินหลังปรับขั้นต่ำแล้ว
           status: PaymentStatus.PENDING,
         }
       });
 
-      // Create Omise charge
-      console.log('💳 Creating Omise charge...', {
-        amount: Math.round(transaction.totalCost * 100),
-        currency: 'THB',
-        transactionId: transaction.transactionId,
-        paymentId: payment.id
+      // Create 3DS Source first (card + 3ds)
+
+      console.log('💰 [PAYMENT] Amount calculation:', {
+        originalCost: transaction.totalCost,
+        minimumCharge,
+        finalChargeAmount: chargeAmount,
+        amountSatang
+      });
+      const rawBaseUrl = process.env.BASE_URL || process.env.FRONTEND_URL;
+      if (!rawBaseUrl) {
+        throw new Error('BASE_URL or FRONTEND_URL must be configured for 3DS return');
+      }
+      // Sanitize possible stray backticks/quotes/spaces and trailing slash
+      const baseUrl = rawBaseUrl
+        .trim()
+        .replace(/^[`"']+|[`"']+$/g, ''); // Remove backticks, quotes from start/end
+      const baseUrlNoSlash = baseUrl.replace(/\/+$/, '');
+      const returnUri = `${baseUrlNoSlash}/api/payment/3ds/return`;
+
+      console.log('🔍 [3DS] URL Sanitization:', {
+        rawBaseUrl,
+        afterTrim: rawBaseUrl.trim(),
+        afterQuoteRemoval: baseUrl,
+        finalReturnUri: returnUri
       });
 
-      const charge = await omise.charges.create({
-        amount: Math.round(transaction.totalCost * 100), // Convert to satang
+      console.log('💳 Creating 3DS Source...', {
+        amount: amountSatang,
         currency: 'THB',
-        customer: transaction.User.omiseCustomerId,
-        card: paymentCard.omiseCardId,
-        description: `Payment for transaction ${transaction.transactionId}`,
-        return_uri: `${process.env.BASE_URL}/api/payment/3ds/return`,
-        metadata: {
-          transactionId: transaction.id,
+        transactionId: transaction.transactionId,
+        paymentId: payment.id,
+        cardId: paymentCard.omiseCardId,
+        returnUri
+      });
+
+      let source: OmiseSource | null = null;
+      try {
+        source = await createThreeDSSource(
+          paymentCard.omiseCardId,
+          amountSatang,
+          returnUri
+        );
+      } catch (e: any) {
+        console.warn('⚠️  3DS Source creation failed, falling back to charge with customer+card', {
+          error: e?.message || e,
+          details: e?.details || null
+        });
+        // Log the source creation error
+        await prisma.paymentLog.create({
+          data: {
+            paymentId: payment.id,
+            eventType: 'SOURCE_CREATE_ERROR',
+            rawRequest: { amount: amountSatang, currency: 'THB', cardId: paymentCard.omiseCardId, returnUri } as any,
+            rawResponse: { error: e?.message, details: e?.details } as any,
+          }
+        });
+      }
+
+      // Log the source request/response
+      await prisma.paymentLog.create({
+        data: {
           paymentId: payment.id,
-          userId: transaction.userId
+          eventType: 'SOURCE_CREATE',
+          rawRequest: { amount: amountSatang, currency: 'THB', cardId: paymentCard.omiseCardId } as any,
+          rawResponse: source as any
         }
       });
+
+      // Create Omise charge (prefer Source for 3DS; fallback to customer+card)
+      let charge: any;
+      if (source && (source as OmiseSource).id) {
+        console.log('💳 Creating Omise charge with Source...', {
+          amount: amountSatang,
+          currency: 'THB',
+          sourceId: (source as OmiseSource).id,
+          transactionId: transaction.transactionId,
+          paymentId: payment.id
+        });
+
+        charge = await omise.charges.create({
+          amount: amountSatang,
+          currency: 'THB',
+          source: (source as OmiseSource).id,
+          return_uri: returnUri,
+          description: `Payment for transaction ${transaction.transactionId}`,
+          metadata: {
+            transactionId: transaction.id,
+            paymentId: payment.id,
+            userId: transaction.userId
+          }
+        });
+      } else {
+        console.log('💳 Creating Omise charge with customer+card (fallback)...', {
+          amount: amountSatang,
+          currency: 'THB',
+          customerId: transaction.User.omiseCustomerId,
+          cardId: paymentCard.omiseCardId,
+          transactionId: transaction.transactionId,
+          paymentId: payment.id,
+          returnUri
+        });
+
+        charge = await omise.charges.create({
+          amount: amountSatang,
+          currency: 'THB',
+          customer: transaction.User.omiseCustomerId,
+          card: paymentCard.omiseCardId,
+          return_uri: returnUri,
+          description: `Payment for transaction ${transaction.transactionId}`,
+          metadata: {
+            transactionId: transaction.id,
+            paymentId: payment.id,
+            userId: transaction.userId
+          }
+        });
+      }
 
       console.log('💳 Charge created:', {
         chargeId: charge.id,
@@ -346,26 +514,39 @@ export class PaymentService {
       await prisma.paymentLog.create({
         data: {
           paymentId: payment.id,
-          eventType: 'CHARGE_CREATE',
+          eventType: source ? 'CHARGE_CREATE' : 'CHARGE_CREATE_FALLBACK',
           rawRequest: { charge_request: charge } as any,
           rawResponse: charge as any
         }
       });
 
-      // Handle 3D Secure
-      if (charge.authorize_uri) {
+      // Handle 3D Secure: use ONLY charge.authorize_uri
+      const authorizeUri = (charge as any).authorize_uri;
+      if (authorizeUri) {
         await prisma.payment.update({
           where: { id: payment.id },
-          data: { status: PaymentStatus.PENDING }
+          data: { status: PaymentStatus.PENDING, authorizeUri }
         });
 
         return {
           success: true,
           requiresAction: true,
-          authorizeUri: charge.authorize_uri,
+          authorizeUri,
           paymentId: payment.id,
           chargeId: charge.id
         };
+      }
+
+      // If a 3DS Source was created but authorize_uri is missing, log a diagnostic event
+      if (source && (source as OmiseSource).id && !(charge as any).authorize_uri) {
+        await prisma.paymentLog.create({
+          data: {
+            paymentId: payment.id,
+            eventType: 'MISSING_AUTHORIZE_URI',
+            rawRequest: { sourceId: (source as OmiseSource).id, chargeId: charge.id } as any,
+            rawResponse: { charge } as any,
+          }
+        });
       }
 
       // Handle successful payment
@@ -404,9 +585,14 @@ export class PaymentService {
         chargeId: charge.id
       };
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error processing payment:', error);
-      throw error;
+      const message =
+        (error && typeof error === 'object' && 'message' in error ? String(error.message) : null) ||
+        (error?.details?.message ? String(error.details.message) : null) ||
+        'Failed to process payment';
+      // Re-throw as a standard Error to ensure controllers return a meaningful 4xx message
+      throw new Error(message);
     }
   }
 
@@ -501,6 +687,67 @@ export class PaymentService {
       return { success: true };
     } catch (error) {
       console.error('Error handling pending 3DS payment:', error);
+      throw error;
+    }
+  }
+
+  // Get single payment status, optionally sync from Omise
+  static async getPaymentStatus(paymentId: string) {
+    try {
+      const payment = await prisma.payment.findUnique({
+        where: { id: paymentId }
+      });
+
+      if (!payment) {
+        throw new Error('Payment not found');
+      }
+
+      // If already terminal state, return immediately
+      if (payment.status === PaymentStatus.SUCCESS || payment.status === PaymentStatus.FAILED) {
+        return {
+          id: payment.id,
+          status: payment.status,
+          failureMessage: payment.failureMessage ?? null,
+          chargeId: payment.chargeId ?? null,
+        };
+      }
+
+      // If pending and we have a chargeId, try to retrieve latest charge state from Omise
+      if (payment.status === PaymentStatus.PENDING && payment.chargeId) {
+        try {
+          const charge = await omise.charges.retrieve(payment.chargeId);
+
+          // Successful payment
+          if (charge.paid && charge.status === 'successful') {
+            await this.handleSuccessfulPayment(payment.id, charge);
+          }
+          // Failed payment
+          else if (charge.status === 'failed') {
+            await this.handleFailedPayment(payment.id, charge.failure_message || 'Payment failed');
+          }
+          // Otherwise still pending; keep status as is
+        } catch (err) {
+          console.warn('⚠️ Could not retrieve charge from Omise:', err);
+        }
+
+        // Reload payment after potential update
+        const updated = await prisma.payment.findUnique({ where: { id: paymentId } });
+        return {
+          id: updated!.id,
+          status: updated!.status,
+          failureMessage: updated!.failureMessage ?? null,
+          chargeId: updated!.chargeId ?? null,
+        };
+      }
+
+      return {
+        id: payment.id,
+        status: payment.status,
+        failureMessage: payment.failureMessage ?? null,
+        chargeId: payment.chargeId ?? null,
+      };
+    } catch (error) {
+      console.error('Error getting payment status:', error);
       throw error;
     }
   }
