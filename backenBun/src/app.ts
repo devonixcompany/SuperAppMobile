@@ -2,8 +2,11 @@ import { cors } from '@elysiajs/cors';
 import { jwt } from '@elysiajs/jwt';
 import { fromTypes, openapi } from '@elysiajs/openapi';
 import { Elysia, t } from 'elysia';
+import { constants } from 'node:fs';
+import { access } from 'node:fs/promises';
 import { adminServiceContainer } from './admin';
 import { logger, requestLogger } from './lib/logger';
+import { getMimeFromFilename, resolveStationImagePath } from './lib/station-images';
 import { serviceContainer } from './user';
 
 // Get services from container
@@ -134,7 +137,11 @@ const isPublicRoute = (path: string) => {
 
 export const app = new Elysia()
   .use(requestLogger)
-  .use(cors())
+  .use(
+    cors({
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+    }),
+  )
   .model({
     User: userModel,
     ErrorResponse: errorResponseModel,
@@ -276,7 +283,12 @@ export const app = new Elysia()
       return;
     }
 
-    if (isGatewayRoute(method, path)) {
+      if (path.startsWith('/station-images/')) {
+        console.log('Serving public station image, skipping auth guard:', path);
+        return;
+      }
+
+      if (isGatewayRoute(method, path)) {
       const gatewayKey = extractGatewayKey(request);
       console.log('🚪 [AUTH] Gateway route detected:', { path, hasKey: !!gatewayKey });
       if (gatewayKey && gatewayKey === GATEWAY_API_KEY) {
@@ -372,6 +384,37 @@ export const app = new Elysia()
     console.log('Admin connector controller registered');
     return adminConnectorCtrl;
   })())
+  .get('/station-images/:filename', async ({ params, set }) => {
+    const { filename } = params as { filename?: string };
+    if (
+      !filename ||
+      !/^[a-zA-Z0-9_-]+\.(jpg|jpeg|png|webp)$/i.test(filename)
+    ) {
+      set.status = 400;
+      return {
+        success: false,
+        message: 'Invalid image filename',
+      };
+    }
+
+    const filePath = resolveStationImagePath(filename);
+    try {
+      await access(filePath, constants.R_OK);
+      const file = Bun.file(filePath);
+      return new Response(file, {
+        headers: {
+          'Content-Type': getMimeFromFilename(filename),
+          'Cache-Control': 'public, max-age=3600',
+        },
+      });
+    } catch {
+      set.status = 404;
+      return {
+        success: false,
+        message: 'Image not found',
+      };
+    }
+  })
   .derive(({ request }: any) => {
     // Extract user from request and make it available in context
     const user = (request as any).user;
