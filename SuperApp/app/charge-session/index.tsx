@@ -218,6 +218,7 @@ export default function ChargeSessionScreen() {
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const glowIntensity = useRef(new Animated.Value(0)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
+  const buttonSpinAnim = useRef(new Animated.Value(0)).current;
 
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("connecting");
@@ -233,11 +234,10 @@ export default function ChargeSessionScreen() {
   const [idTag, setIdTag] = useState("");
   const [backendTransactionId, setBackendTransactionId] = useState<string | null>(null);
   const [isCreatingTransaction, setIsCreatingTransaction] = useState(false);
+  const [isStartingCharge, setIsStartingCharge] = useState(false);
+  const [isStoppingCharge, setIsStoppingCharge] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [stationRate, setStationRate] = useState<number | null>(null);
-  const [isLoadingStationRate, setIsLoadingStationRate] = useState(false);
-  const stationRateRetryCountRef = useRef(0);
-  const MAX_STATION_RATE_RETRIES = 3;
   const [hasAttemptedStationFetch, setHasAttemptedStationFetch] = useState(false);
   const [transactionSummary, setTransactionSummary] = useState<TransactionSummaryPayload | null>(null);
   const [isFetchingSummary, setIsFetchingSummary] = useState(false);
@@ -314,6 +314,8 @@ export default function ChargeSessionScreen() {
       setIdTag("");
       setSessionStartTime(null);
       setIsCreatingTransaction(false);
+      setIsStartingCharge(false);
+      setIsStoppingCharge(false);
       setTransactionSummary(null);
       setHasFetchedSummary(false);
       setIsFetchingSummary(false);
@@ -332,18 +334,19 @@ export default function ChargeSessionScreen() {
     const fetchStationRate = async () => {
       const chargePointIdentity = params.chargePointIdentity;
 
-      // ใช้การตรวจสอบแบบครอบคลุมทั้ง null และ undefined
-      if (!chargePointIdentity || isLoadingStationRate || stationRate !== null) {
+      // เรียกครั้งเดียวเท่านั้น
+      if (!chargePointIdentity || hasAttemptedStationFetch) {
         return;
       }
 
+      setHasAttemptedStationFetch(true);
+
       try {
-        setIsLoadingStationRate(true);
         console.log('💰 [STATION] Fetching station rate for:', chargePointIdentity);
 
         const response = await http.get<any>(`/api/chargepoints/${encodeURIComponent(chargePointIdentity)}`);
         console.log('💰 [STATION] Response:', response);
-        
+
         const chargePoint = response?.data;
         const station = chargePoint?.Station ?? chargePoint?.station;
         const rate = station?.onPeakRate ?? station?.offPeakRate ?? null;
@@ -353,24 +356,14 @@ export default function ChargeSessionScreen() {
           setStationRate(rate);
         } else {
           console.log('❌ [STATION] No rate found in station data');
-          // ถ้าไม่มี rate ให้ตั้งค่าเป็น undefined เพื่อหยุดการ retry
-          setStationRate(undefined);
         }
       } catch (error: any) {
-        // ถ้าเป็น 401 Unauthorized, ให้หยุดพยายามต่อไป
-        if (error?.status === 401) {
-          console.log('🔒 [STATION] Authentication failed, stopping retry attempts');
-        }
-        
-        // ตั้งค่าเป็น undefined เพื่อหยุดการ retry ในอนาคตไม่ว่าจะเกิดอะไรขึ้น
-        setStationRate(undefined);
-      } finally {
-        setIsLoadingStationRate(false);
+        console.log('❌ [STATION] Failed to fetch rate:', error?.status || error?.message);
       }
     };
 
     fetchStationRate();
-  }, [params.chargePointIdentity, isLoadingStationRate, stationRate]);
+  }, [params.chargePointIdentity, hasAttemptedStationFetch]);
 
   useEffect(() => {
     // ดึงเวลาเริ่มจาก transaction startTime (จาก backend หรือ WebSocket)
@@ -534,21 +527,21 @@ export default function ChargeSessionScreen() {
               }
             : data,
         );
-        
+
         // ตรวจสอบว่าการชาร์จเสร็จสิ้นแล้วหรือไม่
         if (data?.status) {
           const normalizedConnectorStatus = data.status.toLowerCase()
             .replace("suspendedevse", "suspended_evse")
             .replace("suspendedev", "suspended_ev");
-          
-          if (normalizedConnectorStatus === "suspended_ev" || 
+
+          if (normalizedConnectorStatus === "suspended_ev" ||
               normalizedConnectorStatus === "suspended_evse" ||
               normalizedConnectorStatus === "finishing") {
             console.log("🏁 [CONNECTOR] Charging completed detected from connectorStatus:", normalizedConnectorStatus);
             setHasReceivedStopEvent(true);
           }
         }
-        
+
         appendLog("info", `หัวชาร์จอยู่ในสถานะ ${data?.status ?? "-"}`);
         break;
       }
@@ -584,8 +577,8 @@ export default function ChargeSessionScreen() {
           const normalizedPayloadStatus = payload.status.toLowerCase()
             .replace("suspendedevse", "suspended_evse")
             .replace("suspendedev", "suspended_ev");
-          
-          if (normalizedPayloadStatus === "suspended_ev" || 
+
+          if (normalizedPayloadStatus === "suspended_ev" ||
               normalizedPayloadStatus === "suspended_evse" ||
               normalizedPayloadStatus === "finishing") {
             console.log("🏁 [CHARGING] Charging completed detected from charging_data:", normalizedPayloadStatus);
@@ -636,6 +629,7 @@ export default function ChargeSessionScreen() {
         setHasFetchedSummary(false);
         setIsFetchingSummary(false);
         setIsCreatingTransaction(false);
+        setIsStartingCharge(false); // ยกเลิก loading state
         setHasReceivedStopEvent(false);
         break;
       }
@@ -653,14 +647,12 @@ export default function ChargeSessionScreen() {
             ? {
                 ...prev,
                 currentPower: 0,
-                status: "Finishing",
               }
             : {
                 connectorId:
                   typeof data?.connectorId === "number"
                     ? data.connectorId
                     : connectorId ?? 1,
-                status: "Finishing",
                 currentPower: 0,
               },
         );
@@ -693,6 +685,7 @@ export default function ChargeSessionScreen() {
           setHasNavigatedToSummary(false);
         }
         setIsCreatingTransaction(false);
+        setIsStoppingCharge(false); // ยกเลิก loading state
         setHasReceivedStopEvent(true);
         break;
       }
@@ -725,7 +718,7 @@ export default function ChargeSessionScreen() {
   };
 
   const handleStartCharging = async () => {
-    if (isCreatingTransaction) {
+    if (isCreatingTransaction || isStartingCharge) {
       appendLog("info", "ระบบกำลังเตรียมคำสั่งเริ่มชาร์จอยู่แล้ว");
       return;
     }
@@ -758,6 +751,7 @@ export default function ChargeSessionScreen() {
 
     try {
       setIsCreatingTransaction(true);
+      setIsStartingCharge(true);
       setHasReceivedStopEvent(false);
 
       let transactionIdToUse = backendTransactionId;
@@ -835,12 +829,18 @@ export default function ChargeSessionScreen() {
           : "ไม่สามารถเริ่มชาร์จได้ กรุณาลองใหม่อีกครั้ง";
       Alert.alert("ไม่สามารถเริ่มชาร์จได้", message);
       appendLog("error", message);
+      setIsStartingCharge(false);
     } finally {
       setIsCreatingTransaction(false);
     }
   };
 
   const handleStopCharging = () => {
+    if (isStoppingCharge) {
+      appendLog("info", "ระบบกำลังดำเนินการหยุดชาร์จอยู่แล้ว");
+      return;
+    }
+
     const backendTransactionNumeric =
       backendTransactionId !== null
         ? Number(backendTransactionId)
@@ -865,6 +865,8 @@ export default function ChargeSessionScreen() {
       return;
     }
 
+    setIsStoppingCharge(true);
+
     const payload = {
       type: "RemoteStopTransaction",
       data: {
@@ -879,10 +881,14 @@ export default function ChargeSessionScreen() {
         "info",
         `ส่งคำสั่งหยุดชาร์จ (Transaction ${payload.data.transactionId})`,
       );
+    } else {
+      setIsStoppingCharge(false);
     }
   };
 
-  const rawStatus = (chargingData?.status ?? status?.status ?? "") as string;
+  // ใช้ status?.status (จาก connectorStatus event) เป็นหลัก เพราะมันอัปเดตจาก WebSocket ตลอดเวลา
+  // fallback ไปที่ chargingData?.status ถ้าไม่มี
+  const rawStatus = (status?.status ?? chargingData?.status ?? "") as string;
   const normalizedStatus = rawStatus
     .toString()
     .toLowerCase()
@@ -950,7 +956,7 @@ export default function ChargeSessionScreen() {
     }
 
     // 3. คำนวณจาก energyKWh * rate (ใช้ effectiveRate ที่อาจมาจาก baseRate หรือ appliedRate)
-    if (energyKWh != null && effectiveRate !== undefined) {
+    if (energyKWh != null && effectiveRate !== undefined && effectiveRate !== null) {
       const calculated = energyKWh * effectiveRate;
       const rateSource = baseRate !== undefined ? "baseRate" : "appliedRate";
       console.log(`💰 Calculated cost: ${calculated} = ${energyKWh} * ${effectiveRate} (from ${rateSource})`);
@@ -982,12 +988,14 @@ export default function ChargeSessionScreen() {
       !hasFetchedSummary &&
       !isFetchingSummary;
 
-    // เพิ่มการตรวจสอบสำหรับสถานะที่ควร fetch summary ทันที
+    // เพิ่มการตรวจสอบสำหรับสถานะที่ควร fetch summary ทันที (เฉพาะเมื่อได้รับ stop event)
     const shouldFetchSummaryByStatus =
+      hasReceivedStopEvent &&
       !!summaryCandidateId &&
       (normalizedStatus === "suspended_ev" ||
        normalizedStatus === "suspended_evse" ||
-       normalizedStatus === "finishing") &&
+       normalizedStatus === "finishing" ||
+       normalizedStatus === "available") &&
       !transactionSummary &&
       !hasFetchedSummary &&
       !isFetchingSummary;
@@ -1025,13 +1033,14 @@ export default function ChargeSessionScreen() {
 
   useEffect(() => {
     // เพิ่มเงื่อนไขสำหรับสถานะที่ควรนำทางไปหน้า summary
+    // รวม "available" ด้วยเพราะบางเครื่องชาร์จข้ามจาก "charging" ไปเป็น "available" เลยหลังกดหยุด
     const shouldNavigateStatuses = [
-      "finishing", 
-      "suspended_ev", 
-      "suspended_evse", 
+      "finishing",
+      "suspended_ev",
+      "suspended_evse",
       "available"
     ];
-    
+
     const shouldNavigateByStatus = shouldNavigateStatuses.includes(normalizedStatus);
     
     console.log("🚀 Navigation Debug:", {
@@ -1253,6 +1262,33 @@ export default function ChargeSessionScreen() {
       circleScale.setValue(1);
     };
   }, [chargingGlow, circleScale, isCharging, particleAnim, pulseAnim, rotateAnim, glowIntensity, floatAnim]);
+
+  // Animation สำหรับปุ่ม loading
+  useEffect(() => {
+    let animation: Animated.CompositeAnimation | null = null;
+
+    if (isStartingCharge || isStoppingCharge) {
+      buttonSpinAnim.setValue(0);
+      animation = Animated.loop(
+        Animated.timing(buttonSpinAnim, {
+          toValue: 1,
+          duration: 1000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      animation.start();
+    } else {
+      buttonSpinAnim.setValue(0);
+    }
+
+    return () => {
+      if (animation) {
+        animation.stop();
+      }
+      buttonSpinAnim.setValue(0);
+    };
+  }, [isStartingCharge, isStoppingCharge, buttonSpinAnim]);
 
   const glowTranslate = chargingGlow.interpolate({
     inputRange: [0, 1],
@@ -1495,6 +1531,31 @@ export default function ChargeSessionScreen() {
               />
             </View>
 
+            {/* Battery Percentage Display */}
+            {(isCharging || activeTransactionId) && chargingData?.chargingPercentage != null && (
+              <View className="items-center w-full my-4">
+                <Animated.View
+                  style={{
+                    transform: [{ scale: circleScale }],
+                    width: 120,
+                    height: 120,
+                    borderRadius: 60,
+                    backgroundColor: 'rgba(12, 196, 108, 0.1)',
+                    borderWidth: 4,
+                    borderColor: '#0CC46C',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name="flash" size={32} color="#0CC46C" />
+                  <Text className="text-2xl font-bold text-[#0CC46C] mt-1">
+                    {chargingData.chargingPercentage.toFixed(1)}%
+                  </Text>
+                </Animated.View>
+                <Text className="text-sm text-gray-600 mt-2">ระดับการชาร์จ</Text>
+              </View>
+            )}
+
             {/* Station Details Card */}
             <View className="w-full max-w-sm bg-white rounded-2xl p-6 self-center">
               {/* Card Header: Dark blue section with charger info */}
@@ -1546,8 +1607,9 @@ export default function ChargeSessionScreen() {
                 <TouchableOpacity
                   className="rounded-lg overflow-hidden mb-3"
                   onPress={handleStartCharging}
-                  disabled={isCreatingTransaction}
+                  disabled={isCreatingTransaction || isStartingCharge}
                   activeOpacity={0.8}
+                  style={{ opacity: isStartingCharge ? 0.6 : 1 }}
                 >
                   {/* @ts-ignore */}
                   <LinearGradient
@@ -1555,9 +1617,24 @@ export default function ChargeSessionScreen() {
                     start={{ x: 1, y: 0.5 }}
                     end={{ x: 0, y: 0.5 }}
                   >
-                    <View className="bg-transparent p-4 items-center justify-center">
+                    <View className="bg-transparent p-4 items-center justify-center flex-row">
+                      {isStartingCharge && (
+                        <Animated.View
+                          style={{
+                            marginRight: 8,
+                            transform: [{
+                              rotate: buttonSpinAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: ['0deg', '360deg']
+                              })
+                            }]
+                          }}
+                        >
+                          <Ionicons name="reload" size={20} color="white" />
+                        </Animated.View>
+                      )}
                       <Text className="text-white text-xl font-bold">
-                        {isCreatingTransaction ? "กำลังเตรียม..." : "เริ่มชาร์จ"}
+                        {isStartingCharge ? "กำลังเริ่มชาร์จ..." : "เริ่มชาร์จ"}
                       </Text>
                     </View>
                   </LinearGradient>
@@ -1568,9 +1645,30 @@ export default function ChargeSessionScreen() {
                 <TouchableOpacity
                   className="bg-[#DC3545] py-4 rounded-lg items-center justify-center"
                   onPress={handleStopCharging}
+                  disabled={isStoppingCharge}
                   activeOpacity={0.8}
+                  style={{ opacity: isStoppingCharge ? 0.6 : 1 }}
                 >
-                  <Text className="text-white text-base font-bold">หยุดชาร์จ</Text>
+                  <View className="flex-row items-center justify-center">
+                    {isStoppingCharge && (
+                      <Animated.View
+                        style={{
+                          marginRight: 8,
+                          transform: [{
+                            rotate: buttonSpinAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: ['0deg', '360deg']
+                            })
+                          }]
+                        }}
+                      >
+                        <Ionicons name="reload" size={20} color="white" />
+                      </Animated.View>
+                    )}
+                    <Text className="text-white text-base font-bold">
+                      {isStoppingCharge ? "กำลังหยุดชาร์จ..." : "หยุดชาร์จ"}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               )}
             </View>

@@ -1,14 +1,15 @@
 const WebSocket = require('ws');
 
 // ทดสอบ OCPP endpoint รูปแบบใหม่
-const chargePointId = 'EVBANGNA-CP001';
-const wsUrl = `ws://localhost:8081/ocpp/${chargePointId}`;
+const chargePointId = 'Devonix1'; // This is the working ID from cache
+const wsUrl = `ws://127.0.0.1:3000/ocpp/${chargePointId}`;
 
 console.log(`🔌 Testing OCPP WebSocket connection to: ${wsUrl}`);
 
 const ws = new WebSocket(wsUrl, ['ocpp1.6']);
 
 ws.on('open', function open() {
+  console.log('🔍 [DEBUG] WebSocket opened with protocol:', ws.protocol);
   console.log('✅ Connected to OCPP WebSocket server (new endpoint)');
   
   // ส่ง BootNotification message
@@ -50,6 +51,12 @@ ws.on('message', function message(data) {
 
 ws.on('error', function error(err) {
   console.error('❌ WebSocket error:', err.message);
+  console.error('🔍 [DEBUG] Full error object:', err);
+});
+
+ws.on('unexpected-response', function unexpectedResponse(request, response) {
+  console.error('🔍 [DEBUG] Unexpected response:', response.statusCode, response.statusMessage);
+  console.error('🔍 [DEBUG] Response headers:', response.headers);
 });
 
 ws.on('close', function close(code, reason) {
