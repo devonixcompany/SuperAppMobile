@@ -41,3 +41,7 @@ app-example
 # generated native folders
 /ios
 /android
+
+# station image uploads (keep placeholder)
+backenBun/src/upload/stationimage/*
+!backenBun/src/upload/stationimage/.gitkeep

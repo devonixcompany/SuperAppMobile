@@ -102,6 +102,7 @@ CREATE TABLE "Station" (
     "latitude" DECIMAL(65,30),
     "longitude" DECIMAL(65,30),
     "openclosedays" TEXT,
+    "flatRate" DOUBLE PRECISION NOT NULL DEFAULT 10.0,
     "onPeakRate" DOUBLE PRECISION NOT NULL DEFAULT 10.0,
     "onPeakStartTime" TEXT NOT NULL DEFAULT '10:00',
     "onPeakEndTime" TEXT NOT NULL DEFAULT '12:00',
