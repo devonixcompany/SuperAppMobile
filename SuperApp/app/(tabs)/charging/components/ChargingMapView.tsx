@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
+import React, { useCallback, useRef, useState } from "react";
+import { Dimensions, StyleSheet, TouchableOpacity, View } from "react-native";
 import ClusteredMapView from "react-native-map-clustering";
 import { Marker, Region } from "react-native-maps";
-import React, { useCallback, useRef, useState } from "react";
-import { Animated, Dimensions, StyleSheet, TouchableOpacity, View } from "react-native";
 import { ChargingStation } from "../../../../types/charging.types";
 import ChargingStationService from "../ChargingStationService";
 import StationMarker from "./StationMarker";

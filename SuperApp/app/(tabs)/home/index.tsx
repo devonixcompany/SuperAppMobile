@@ -6,7 +6,7 @@ import React, { useCallback, useRef, useState } from "react";
 // นำเข้า components พื้นฐานจาก React Native
 import {
   Animated,
-  GestureResponderEvent, //*** การกดปุ่มแบบนี้เรียกว่า  Press Interaction หรือ Press Gesture Interaction
+  GestureResponderEvent,
   Image,
   ImageSourcePropType,
   Pressable,
@@ -292,6 +292,7 @@ export default function HomeScreen() {
         pricingTierName: chargingPopupData.pricingTierName ?? '',
         chargePointBrand: chargingPopupData.chargePointBrand ?? '',
         protocol: chargingPopupData.protocol ?? '',
+        startTime: chargingPopupData.startTime ?? undefined,
       };
 
       console.log('✅ [HOME] Navigating to /charge-session with params:', navParams);
@@ -408,37 +409,7 @@ export default function HomeScreen() {
             />
           ) : null}
 
-          {/* การ์ดทดสอบ UI ใหม่ */}
-          <View className="mb-5">
-            <TouchableScale activeOpacity={0.9} onPress={() => router.push("/charge-session-ui-new")}>
-              <LinearGradient
-                colors={["#1D2144", "#2A3F5F", "#3A5F8A"]}
-                locations={[0, 0.5, 1]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                className="px-6 py-5"
-                style={{ borderRadius: 20 }}
-              >
-                <View className="flex-row items-center justify-between">
-                  <View className="flex-row items-center">
-                    <View className="items-center justify-center w-12 h-12 rounded-full bg-white/20 mr-4">
-                      <Ionicons name="flask-outline" size={24} color="#00E5FF" />
-                    </View>
-                    <View>
-                      <Text className="text-lg font-bold text-white mb-1">
-                        ทดสอบ UI ใหม่
-                      </Text>
-                      <Text className="text-sm text-white/70">
-                        ดูการออกแบบหน้าชาร์จแบบใหม่
-                      </Text>
-                    </View>
-                  </View>
-                  <Ionicons name="arrow-forward-outline" size={20} color="#00E5FF" />
-                </View>
-              </LinearGradient>
-            </TouchableScale>
-          </View>
-
+       
           {/* === NEWS UPDATES SECTION === */}
           <View className="mb-2">
             <View className="flex-row items-center justify-between mb-2">

@@ -3,6 +3,50 @@ import { Elysia, t } from 'elysia';
 import { prisma } from '../../lib/prisma';
 import { PaymentService } from './payment.service';
 
+type ChargeMetadata = {
+  transactionId?: string;
+  paymentId?: string;
+  userId?: string;
+};
+
+async function findPaymentByChargeInfo(
+  chargeId?: string,
+  metadata?: ChargeMetadata,
+  includeTransaction = false,
+) {
+  const include = includeTransaction ? { transaction: true } : undefined;
+
+  if (chargeId) {
+    const paymentByChargeId = await prisma.payment.findFirst({ where: { chargeId }, include });
+    if (paymentByChargeId) {
+      return paymentByChargeId;
+    }
+  }
+
+  if (metadata?.paymentId) {
+    const paymentByPaymentId = await prisma.payment.findUnique({
+      where: { id: metadata.paymentId },
+      include,
+    });
+    if (paymentByPaymentId) {
+      return paymentByPaymentId;
+    }
+  }
+
+  if (metadata?.transactionId) {
+    const paymentByTransactionId = await prisma.payment.findFirst({
+      where: { transactionId: metadata.transactionId },
+      orderBy: { createdAt: 'desc' },
+      include,
+    });
+    if (paymentByTransactionId) {
+      return paymentByTransactionId;
+    }
+  }
+
+  return null;
+}
+
 export const webhookController = () =>
   new Elysia({ prefix: '/api/payment/omise' })
     
@@ -109,14 +153,11 @@ async function handleChargeComplete(chargeData: any) {
     
     console.log('Processing charge.complete:', { chargeId, status, paid });
 
-    // Find the payment record
-    const payment = await prisma.payment.findFirst({
-      where: { chargeId },
-      include: { transaction: true }
-    });
+    // Find the payment record using helper that considers metadata fallbacks
+    const payment = await findPaymentByChargeInfo(chargeId, metadata, true);
 
     if (!payment) {
-      console.error('Payment not found for charge:', chargeId);
+      console.error('Payment not found for charge:', chargeId, { metadata });
       return;
     }
 
@@ -176,17 +217,15 @@ async function handleChargeComplete(chargeData: any) {
 // Handle charge create event
 async function handleChargeCreate(chargeData: any) {
   try {
-    const { id: chargeId, status, authorize_uri } = chargeData;
+    const { id: chargeId, status, authorize_uri, metadata } = chargeData;
     
     console.log('Processing charge.create:', { chargeId, status, has3DS: !!authorize_uri });
 
-    // Find the payment record
-    const payment = await prisma.payment.findFirst({
-      where: { chargeId }
-    });
+    // Find the payment record using helper
+    const payment = await findPaymentByChargeInfo(chargeId, metadata);
 
     if (!payment) {
-      console.error('Payment not found for charge:', chargeId);
+      console.error('Payment not found for charge:', chargeId, { metadata });
       return;
     }
 
@@ -204,17 +243,15 @@ async function handleChargeCreate(chargeData: any) {
 // Handle charge update event
 async function handleChargeUpdate(chargeData: any) {
   try {
-    const { id: chargeId, status, paid } = chargeData;
+    const { id: chargeId, status, paid, metadata } = chargeData;
     
     console.log('Processing charge.update:', { chargeId, status, paid });
 
-    // Find the payment record
-    const payment = await prisma.payment.findFirst({
-      where: { chargeId }
-    });
+    // Find the payment record using helper
+    const payment = await findPaymentByChargeInfo(chargeId, metadata);
 
     if (!payment) {
-      console.error('Payment not found for charge:', chargeId);
+      console.error('Payment not found for charge:', chargeId, { metadata });
       return;
     }
 
@@ -264,11 +301,8 @@ async function handleRefundCreate(refundData: any) {
     
     console.log('Processing refund.create:', { refundId, chargeId, amount });
 
-    // Find the original payment
-    const payment = await prisma.payment.findFirst({
-      where: { chargeId },
-      include: { transaction: true }
-    });
+    // Find the original payment using helper
+    const payment = await findPaymentByChargeInfo(chargeId, undefined, true);
 
     if (!payment) {
       console.error('Payment not found for refund:', chargeId);

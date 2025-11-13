@@ -8,11 +8,12 @@ export const transactionController = (transactionService: TransactionService) =>
   new Elysia({ prefix: '/api/transactions' })
     .post(
       '/',
-      async ({ body, set, user }: any) => {
+      async ({ body, set, user, request }: any) => {
         try {
           const bypassEnabled = isDevBypassEnabled();
-          console.log("post transaction",user)
-          if (!user?.id && !bypassEnabled) {
+          const authenticatedUser = user || (request as any).user;
+          console.log("post transaction", authenticatedUser)
+          if (!authenticatedUser?.id && !bypassEnabled) {
             set.status = 401;
             return {
               success: false,
@@ -39,7 +40,8 @@ export const transactionController = (transactionService: TransactionService) =>
           }
 
           const transaction = await transactionService.createTransaction({
-            userId: payload.userId ?? user?.id ?? 'dev-user',
+            userId:
+              payload.userId ?? authenticatedUser?.id ?? user?.id ?? 'dev-user',
             chargePointIdentity: payload.chargePointIdentity,
             connectorId: payload.connectorId,
             vehicleId: payload.vehicleId,
@@ -138,11 +140,13 @@ export const transactionController = (transactionService: TransactionService) =>
     )
     .get(
       '/user/:userId',
-      async ({ params, user, set }: any) => {
+      async ({ params, user, request, set }: any) => {
         try {
           const bypassEnabled = isDevBypassEnabled();
 
-          if (!user?.id && !bypassEnabled) {
+          const authenticatedUser = user || (request as any).user;
+
+          if (!authenticatedUser?.id && !bypassEnabled) {
             set.status = 401;
             return {
               success: false,
@@ -153,7 +157,7 @@ export const transactionController = (transactionService: TransactionService) =>
           const { userId } = params;
 
           // Users can only access their own transactions unless they have admin privileges
-          if (!bypassEnabled && userId !== user.id) {
+          if (!bypassEnabled && userId !== authenticatedUser?.id) {
             set.status = 403;
             return {
               success: false,
@@ -191,11 +195,13 @@ export const transactionController = (transactionService: TransactionService) =>
 
     .get(
       '/:transactionId/summary',
-      async ({ params, user, set }: any) => {
+      async ({ params, user, request, set }: any) => {
         try {
           const bypassEnabled = isDevBypassEnabled();
 
-          if (!user?.id && !bypassEnabled) {
+          const authenticatedUser = user || (request as any).user;
+
+          if (!authenticatedUser?.id && !bypassEnabled) {
             set.status = 401;
             return {
               success: false,
@@ -204,10 +210,9 @@ export const transactionController = (transactionService: TransactionService) =>
           }
 
           const { transactionId } = params as { transactionId: string };
-
           const summary = await transactionService.getTransactionSummary(
             transactionId,
-            bypassEnabled ? null : user?.id
+            bypassEnabled ? null : authenticatedUser.id
           );
 
           if (!summary) {
@@ -345,11 +350,12 @@ export const transactionController = (transactionService: TransactionService) =>
     )
     .post(
       '/:transactionId/payment',
-      async ({ params, body, user, set }: any) => {
+      async ({ params, body, user, request, set }: any) => {
         try {
           const bypassEnabled = isDevBypassEnabled();
+          const authenticatedUser = user || (request as any).user;
           
-          if (!user?.id && !bypassEnabled) {
+          if (!authenticatedUser?.id && !bypassEnabled) {
             set.status = 401;
             return {
               success: false,
@@ -362,7 +368,7 @@ export const transactionController = (transactionService: TransactionService) =>
 
           // Verify user owns the transaction (unless bypass enabled)
           if (!bypassEnabled) {
-            const transaction = await transactionService.getTransactionSummary(transactionId, user.id);
+            const transaction = await transactionService.getTransactionSummary(transactionId, authenticatedUser.id);
             if (!transaction) {
               set.status = 404;
               return {
