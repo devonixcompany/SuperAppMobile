@@ -3,15 +3,123 @@ import { Ionicons } from "@expo/vector-icons";
 // นำเข้า LinearGradient สำหรับสร้างพื้นหลังแบบไล่สี
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 // นำเข้า components พื้นฐานจาก React Native
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, GestureResponderEvent, Image, Pressable, PressableProps, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
 import { paymentService, type PaymentCard, type PaymentHistoryEntry } from "@/services/api/payment.service";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { ClipPath, Defs, G, Path, Rect } from "react-native-svg";
+import { usePointCardResponsive } from "@/hooks/usePointCardResponsive";
+
+type TouchableScaleProps = PressableProps & {
+  className?: string;
+  androidRippleColor?: string;
+  children: React.ReactNode;
+  activeOpacity?: number;
+};
+
+const TouchableScale = ({
+  className,
+  children,
+  androidRippleColor,
+  onPressIn,
+  onPressOut,
+  android_ripple,
+  activeOpacity,
+  style,
+  ...restProps
+}: TouchableScaleProps) => {
+  const pressAnim = useRef(new Animated.Value(0)).current;
+
+  const handlePressIn = (event: GestureResponderEvent) => {
+    Animated.spring(pressAnim, {
+      toValue: 1,
+      speed: 20,
+      bounciness: 6,
+      useNativeDriver: true,
+    }).start();
+    onPressIn?.(event);
+  };
+
+  const handlePressOut = (event: GestureResponderEvent) => {
+    Animated.spring(pressAnim, {
+      toValue: 0,
+      speed: 18,
+      bounciness: 6,
+      useNativeDriver: true,
+    }).start();
+    onPressOut?.(event);
+  };
+
+  const scale = pressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.9],
+  });
+
+  const translateY = pressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 3],
+  });
+
+  const targetOpacity = activeOpacity ?? 0.85;
+  const contentOpacity = pressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, targetOpacity],
+  });
+
+  return (
+    <Pressable
+      {...restProps}
+      className={className}
+      style={style}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      android_ripple={
+        androidRippleColor
+          ? { color: androidRippleColor, borderless: false }
+          : android_ripple
+      }
+    >
+      <Animated.View
+        style={{
+          transform: [{ scale }, { translateY }],
+          opacity: contentOpacity,
+        }}
+      >
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+};
+
+const CoinIcon = ({ size = 40 }: { size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 33 33" fill="none">
+    <G clipPath="url(#clip0_750_7653)">
+      <Path
+        d="M16.3255 32.6533C24.8414 32.6533 31.7448 25.7498 31.7448 17.234C31.7448 8.71815 24.8414 1.8147 16.3255 1.8147C7.80971 1.8147 0.90625 8.71815 0.90625 17.234C0.90625 25.7498 7.80971 32.6533 16.3255 32.6533Z"
+        fill="#F4900C"
+      />
+      <Path
+        d="M16.3255 30.8386C24.8414 30.8386 31.7448 23.9351 31.7448 15.4193C31.7448 6.90346 24.8414 0 16.3255 0C7.80971 0 0.90625 6.90346 0.90625 15.4193C0.90625 23.9351 7.80971 30.8386 16.3255 30.8386Z"
+        fill="#FFCC4D"
+      />
+      <Path
+        d="M16.3252 29.0244C23.3382 29.0244 29.0234 23.3392 29.0234 16.3262C29.0234 9.31313 23.3382 3.62793 16.3252 3.62793C9.31215 3.62793 3.62695 16.3262 3.62695 29.0244C3.62695 23.3392 9.31215 29.0244 16.3252 29.0244Z"
+        fill="#FFE8B6"
+      />
+    </G>
+    <Defs>
+      <ClipPath id="clip0_750_7653">
+        <Rect width="32.65" height="32.65" fill="white" transform="translate(0.00390625)" />
+      </ClipPath>
+    </Defs>
+  </Svg>
+);
 
 // ฟังก์ชันหลักของหน้า Card (บัตรและกระเป๋าเงิน)
 export default function CardScreen() {
+  const pointResponsive = usePointCardResponsive();
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [recentPayments, setRecentPayments] = useState<PaymentHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -191,6 +299,121 @@ export default function CardScreen() {
         </View>
       </View>
 
+      {/* === POINTS CARD SECTION === */}
+      <View className="mb-5" style={{ paddingHorizontal: pointResponsive.horizontalGutter }}>
+        <TouchableScale activeOpacity={0.9} onPress={() => router.push("/card")}>
+          <LinearGradient
+            colors={["#1B2344", "#213B6B", "#2F6E8F", "#4FBFA2"]}
+            locations={[0, 0.35, 0.7, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              borderRadius: 24,
+              paddingHorizontal: pointResponsive.heroPaddingX,
+              paddingTop: pointResponsive.heroPaddingTop,
+              paddingBottom: pointResponsive.heroPaddingBottom,
+            }}
+          >
+            <View className="flex-row items-start justify-between" style={{ gap: 12 }}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Image
+                  source={require("../../../assets/img/ponix-logo-06.png")}
+                  resizeMode="contain"
+                  style={{
+                    width: pointResponsive.heroLogoWidth,
+                    height: pointResponsive.heroLogoHeight,
+                    marginRight: 8,
+                  }}
+                />
+                <Text
+                  style={{
+                    fontSize: pointResponsive.heroTitleFont,
+                    fontWeight: "600",
+                    color: "#F3F6FF",
+                  }}
+                >
+                  Point
+                </Text>
+              </View>
+              <LinearGradient
+                colors={["#F3F5FA", "#C9D1E0"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  borderRadius: 999,
+                  paddingHorizontal: pointResponsive.heroBadgePaddingX,
+                  paddingVertical: pointResponsive.isSmallPhone ? 6 : 8,
+                  shadowColor: "#0F172A",
+                  shadowOpacity: 0.25,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 8,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: pointResponsive.isTablet ? 14 : 12,
+                    fontWeight: "600",
+                    color: "#1B2344",
+                  }}
+                >
+                  รหัสสมาชิก P202501
+                </Text>
+              </LinearGradient>
+            </View>
+            <Text
+              style={{
+                marginTop: pointResponsive.isSmallPhone ? 12 : 16,
+                fontSize: pointResponsive.heroSubtitleFont,
+                color: "rgba(255,255,255,0.9)",
+              }}
+            >
+              คะแนนของฉัน
+            </Text>
+            <View
+              className="flex-row items-center"
+              style={{ marginTop: pointResponsive.isSmallPhone ? 12 : 18 }}
+            >
+              <View
+                className="items-center justify-center rounded-full bg-white/15"
+                style={{
+                  width: pointResponsive.heroCoinSize + 16,
+                  height: pointResponsive.heroCoinSize + 16,
+                }}
+              >
+                <CoinIcon size={pointResponsive.heroCoinSize} />
+              </View>
+              <Text
+                style={{
+                  marginLeft: pointResponsive.isSmallPhone ? 12 : 16,
+                  fontSize: pointResponsive.heroPointFontSize,
+                  fontWeight: "800",
+                  color: "#FFFFFF",
+                }}
+              >
+                262 P
+              </Text>
+            </View>
+            <View
+              style={{
+                height: 1,
+                backgroundColor: "rgba(255,255,255,0.35)",
+                marginTop: pointResponsive.isSmallPhone ? 16 : 22,
+                marginBottom: pointResponsive.isSmallPhone ? 12 : 18,
+              }}
+            />
+            <Text
+              style={{
+                fontSize: pointResponsive.heroExpiryFont,
+                color: "rgba(255,255,255,0.9)",
+              }}
+            >
+              ได้รับคะแนนเพิ่ม 10%
+            </Text>
+          </LinearGradient>
+        </TouchableScale>
+      </View>
+
       {/* ScrollView: ทำให้เนื้อหาเลื่อนได้ */}
       <ScrollView 
         className="flex-1" 
@@ -204,43 +427,10 @@ export default function CardScreen() {
           />
         }
       >
-        <View className="px-6">
+        <View style={{ paddingHorizontal: pointResponsive.horizontalGutter }}>
           {/* === BALANCE CARD SECTION === */}
           {/* การ์ดแสดงยอดเงินคงเหลือ */}
-          <View className="mb-6">
-            {/* พื้นหลังไล่สีจากน้ำเงินเข้มไปเขียว */}
-            <LinearGradient
-              colors={["#1F274B", "#5EC1A0"]}
-              start={{ x: 0, y: 0 }} // เริ่มต้นซ้าย
-              end={{ x: 1, y: 0 }} // สิ้นสุดขวา
-              className="rounded-xl p-6"
-            >
-              {/* แสดงยอดเงิน */}
-              <View className="mb-4">
-                <Text className="text-white/80 text-sm">ยอดเงินคงเหลือ</Text>
-                <Text className="text-white text-3xl font-bold mt-1">
-                  ฿{balance.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                </Text>
-              </View>
-
-              {/* ปุ่มเติมเงินและโอนเงิน */}
-              <View className="flex-row justify-between">
-                {/* ปุ่มเติมเงิน: ขยายเต็มพื้นที่ 1 ส่วน */}
-                <TouchableOpacity className="bg-white/20 rounded-lg px-6 py-3 flex-1 mr-2">
-                  <Text className="text-white font-semibold text-center">
-                    เติมเงิน
-                  </Text>
-                </TouchableOpacity>
-                {/* ปุ่มโอนเงิน: ขยายเต็มพื้นที่ 1 ส่วน */}
-                <TouchableOpacity className="bg-white/20 rounded-lg px-6 py-3 flex-1 ml-2">
-                  <Text className="text-white font-semibold text-center">
-                    โอนเงิน
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </LinearGradient>
-          </View>
-
+       
           {/* === QUICK ACTIONS SECTION === */}
           {/* ปุ่มด่วนสำหรับการดำเนินการต่างๆ */}
           <View className="mb-6">
