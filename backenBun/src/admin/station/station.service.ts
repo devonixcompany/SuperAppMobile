@@ -79,8 +79,6 @@ export class AdminStationService {
       return undefined;
     }
 
-    let station: any;
-
     try {
       return new Prisma.Decimal(value);
     } catch (error) {
@@ -114,6 +112,8 @@ export class AdminStationService {
     const pendingImage = imageFile
       ? await saveStationImage(stationId, imageFile)
       : null;
+
+    let station: any;
 
     try {
       station = await prisma.station.create({

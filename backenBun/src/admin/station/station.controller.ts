@@ -579,7 +579,7 @@ import {
       )
       .post(
         '/',
-        async ({ rawBody, set, adminStationService, request }) => {
+        async ({ body, set, adminStationService, request }) => {
           try {
             const contentType =
               request.headers.get('content-type')?.toLowerCase() ?? '';
@@ -613,9 +613,20 @@ import {
               if (maybeFile instanceof File) {
                 imageFile = maybeFile;
               }
-            } else if (rawBody) {
+            } else if (body && typeof body === 'object') {
+              payload = body as CreateStationData;
+            } else {
+              const textBody = (await request.text()).trim();
+              if (!textBody) {
+                set.status = 400;
+                return {
+                  success: false,
+                  message: 'Request body is required',
+                };
+              }
+
               try {
-                payload = JSON.parse(rawBody.toString()) as CreateStationData;
+                payload = JSON.parse(textBody) as CreateStationData;
               } catch {
                 set.status = 400;
                 return {
@@ -623,12 +634,6 @@ import {
                   message: 'Invalid JSON payload',
                 };
               }
-            } else {
-              set.status = 400;
-              return {
-                success: false,
-                message: 'Request body is required',
-              };
             }
 
             const station = await adminStationService.createStation(
