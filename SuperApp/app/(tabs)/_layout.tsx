@@ -10,6 +10,14 @@ export default function TabLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const isQRScannerRoute = pathname?.includes("qr-scanner");
+  // ปรับค่า flex ของแต่ละ tab ได้จาก object นี้
+  const tabSegmentFlex = {
+    home: 1.5,
+    charging: 1.2,
+    qr: 1.5,
+    card: 1.2,
+    settings: 1.3,
+  };
 
   return (
     // Tabs component จาก expo-router ใช้สำหรับจัดการหน้าต่างๆ แบบ tab
@@ -26,6 +34,7 @@ export default function TabLayout() {
           // ส่งชื่อ tab ที่กำลังใช้งานอยู่ โดยดึงจาก state.index (ลำดับปัจจุบัน)
           activeTab={props.state.routeNames[props.state.index]}
           hidden={Boolean(isQRScannerRoute)}
+          segmentFlexOverrides={tabSegmentFlex}
           // ฟังก์ชันที่ทำงานเมื่อกดที่ tab ใดๆ
           onTabPress={(tab) => {
             // หาลำดับของ tab ที่ถูกกดจากชื่อ tab

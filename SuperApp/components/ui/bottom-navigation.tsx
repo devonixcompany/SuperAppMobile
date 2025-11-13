@@ -1,17 +1,23 @@
-// นำเข้า Ionicons สำหรับไอคอนต่างๆ
-import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 // นำเข้า components พื้นฐานจาก React Native
 import {
   Animated,
   LayoutChangeEvent,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
   ViewProps,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Path, SvgProps } from "react-native-svg";
+import HomeIcon from "@/assets/icons/Home.svg";
+import MapIcon from "@/assets/icons/Map.svg";
+import WalletIcon from "@/assets/icons/Wallet.svg";
+import SettingsIcon from "@/assets/icons/Setting.svg";
+import QrIcon from "@/assets/icons/QR.svg";
+
+const SEGMENT_DIVIDER_COLOR = "transparent"; // เส้นแบ่งพื้นที่ (ตั้งค่าโปร่งใส)
 
 // Interface กำหนด props ที่ component นี้รับ
 interface BottomNavigationProps {
@@ -19,6 +25,7 @@ interface BottomNavigationProps {
   onTabPress: (tab: string) => void; // ฟังก์ชันเมื่อกด tab ปกติ
   onQRPress?: () => void; // ฟังก์ชันเมื่อกดปุ่ม QR (optional)
   hidden?: boolean; // ซ่อน bar เมื่ออยู่ในหน้า scanner
+  segmentFlexOverrides?: Partial<Record<string, number>>; // ปรับความกว้างแต่ละช่อง
 }
 
 // Component หลักของ Bottom Navigation Bar
@@ -28,6 +35,7 @@ export default function BottomNavigation({
   onTabPress,
   onQRPress,
   hidden = false,
+  segmentFlexOverrides,
 }: BottomNavigationProps) { // เทคนิค: Custom Clipping / Custom Painter / Custom Shape
   const insets = useSafeAreaInsets();
 
@@ -35,16 +43,23 @@ export default function BottomNavigation({
   // เพราะเป็นการออกแบบแถบนำทางที่สร้างร่องเว้า/โค้งเฉพาะเพื่อดันปุ่มลอย (floating QR button) ให้นูนออกมาจากพื้นหลัง.
   const CARD_BACKGROUND = "#EFF0F2";//สีของพื้นหลัง
   const CARD_BORDER_COLOR = "#FFFFFF";//สีของเส้นขอบ
-  const CARD_BORDER_WIDTH = 3;//ความหนาของเส้นขอบ
+  const CARD_BORDER_WIDTH = 2;//ความหนาของเส้นขอบ
   const ACTIVE_COLOR = "#51BC8E";//สีตอนใช้งานหน้านั้นๆ
   const INACTIVE_COLOR = "#111C3F";//สีไอคอล
   const BAR_HEIGHT = 90; //เพิ่มกรอบให้สูงขึ้น
   const FLOATING_BUTTON_SIZE = 90; //ขนาดวงกลม
+  const TAB_ICON_SIZE = 28;
+  const TAB_ICON_STROKE_WIDTH = {
+    active: 2.1,
+    inactive: 1.6,
+  };
+  const QR_ICON_SIZE = 36;
   const QR_BUTTON_GAP = 1.2; // ปรับ ขึ้น-ลง ของปุ่ม qr และระยะช่องว่างระหว่างปุ่มกับโค้งบน
   const WEDGE_WIDTH = 140; // ความกว้างของส่วนเว้าตรงกลาง
   const WEDGE_DEPTH = 50; // ความลึกของส่วนเว้าตรงกลาง
   const WEDGE_CURVE_TENSION = 0.7; // 0-0.5 ยิ่งสูงเส้นยิ่งโค้ง
   const WEDGE_BOTTOM_EASE = 0.0; // คุมความมนของจุดต่ำสุด ยิ่งต่ำยิ่งโค้งคล้ายรูปวงกลม
+  const SEGMENT_DIVIDER_WIDTH = 1;
   const CORNER_RADIUS = 20;//โค้งมมของกรอบ
   const horizontalPadding = 0;//ซ้ายและขวาของกรอบ ชิดหน้าจอ
   const bottomOffset = insets.bottom;
@@ -52,6 +67,8 @@ export default function BottomNavigation({
   const buttonRadius = FLOATING_BUTTON_SIZE / 2;
   const floatingButtonLift = buttonRadius + QR_BUTTON_GAP;
   const barPaddingTop = Math.max(buttonRadius - (WEDGE_DEPTH - QR_BUTTON_GAP), 0);
+  const rowPaddingTop = 2;
+  const rowPaddingBottom = Math.max(bottomOffset, 16);
 
   const translateY = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -81,42 +98,41 @@ export default function BottomNavigation({
 
   type TabItem = {
     id: string;
-    icon: keyof typeof Ionicons.glyphMap;
-    activeIcon: keyof typeof Ionicons.glyphMap;
     label: string;
+    Icon?: React.ComponentType<SvgProps>;
+    segmentFlex?: number;
   };
 
   // ข้อมูล tabs ทั้งหมด
   const tabs: TabItem[] = [
     {
       id: "home",
-      icon: "home-outline",
-      activeIcon: "home",
       label: "หน้าหลัก",
+      Icon: HomeIcon,
+      segmentFlex: 1,
     },
     {
       id: "charging",
-      icon: "flash-outline",
-      activeIcon: "flash",
       label: "สถานี",
+      Icon: MapIcon,
+      segmentFlex: 1,
     },
     {
       id: "qr",
-      icon: "qr-code-outline",
-      activeIcon: "qr-code",
       label: "",
+      segmentFlex: 1,
     },
     {
       id: "card",
-      icon: "card-outline",
-      activeIcon: "card",
       label: "เป๋าตัง",
+      Icon: WalletIcon,
+      segmentFlex: 1,
     },
     {
       id: "settings",
-      icon: "settings-outline",
-      activeIcon: "settings",
       label: "ตั้งค่า",
+      Icon: SettingsIcon,
+      segmentFlex: 1,
     },
   ];
 
@@ -188,35 +204,55 @@ export default function BottomNavigation({
   ]);
 
   // ฟังก์ชันสร้างปุ่มแต่ละ tab
-  const renderTabButton = (tab: TabItem) => {
+  const renderTabButton = (tab: TabItem, index: number) => {
     const isActive = activeTab === tab.id; // เช็คว่าเป็น tab ที่กำลังใช้งานหรือไม่
     const isQRButton = tab.id === "qr"; // เช็คว่าเป็นปุ่ม QR หรือไม่
+    const IconComponent = tab.Icon;
+    const segmentFlex =
+      segmentFlexOverrides?.[tab.id] ?? tab.segmentFlex ?? 1;
+    const segmentStyle = [
+      styles.segment,
+      {
+        flex: segmentFlex,
+        borderRightWidth: index === tabs.length - 1 ? 0 : SEGMENT_DIVIDER_WIDTH,
+      },
+    ];
 
     // ปล่อยพื้นที่ว่างตรงกลางสำหรับปุ่ม QR ที่เป็น floating button
     if (isQRButton) {
-      return <View key={tab.id} style={{ flex: 1 }} pointerEvents="none" />;
+      return (
+        <View key={tab.id} style={segmentStyle} pointerEvents="none" />
+      );
     }
 
     // ปุ่ม tab ปกติ (ไม่ใช่ QR)
     return (
-      <TouchableOpacity
-        key={tab.id}
-        onPress={() => onTabPress(tab.id)}
-        className="items-center justify-center flex-1 py-2"
-      >
-        <Ionicons
-          name={isActive ? tab.activeIcon : tab.icon}
-          size={24}
-          color={isActive ? ACTIVE_COLOR : INACTIVE_COLOR}
-        />
-        <Text
-          className={`text-xs mt-1 ${
-            isActive ? "text-[#4EBB82] font-semibold" : "text-[#111C3F]"
-          }`}
+      <View key={tab.id} style={segmentStyle}>
+        <TouchableOpacity
+          onPress={() => onTabPress(tab.id)}
+          style={styles.tabButton}
         >
-          {tab.label}
-        </Text>
-      </TouchableOpacity>
+          {IconComponent ? (
+            <IconComponent
+              width={TAB_ICON_SIZE}
+              height={TAB_ICON_SIZE}
+              color={isActive ? ACTIVE_COLOR : INACTIVE_COLOR}
+              strokeWidth={
+                isActive
+                  ? TAB_ICON_STROKE_WIDTH.active
+                  : TAB_ICON_STROKE_WIDTH.inactive
+              }
+            />
+          ) : null}
+          <Text
+            className={`text-xs mt-1 ${
+              isActive ? "text-[#4EBB82] font-semibold" : "text-[#111C3F]"
+            }`}
+          >
+            {tab.label}
+          </Text>
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -267,14 +303,14 @@ export default function BottomNavigation({
           )}
 
         <View
-          className="flex-row items-end justify-between px-6"
+          className="flex-row items-stretch"
           style={{
             height: barTotalHeight,
-            paddingTop: 20,
-            paddingBottom: bottomOffset + 8,
+            paddingTop: rowPaddingTop,
+            paddingBottom: rowPaddingBottom,
           }}
         >
-            {tabs.map(renderTabButton)}
+            {tabs.map((tab, index) => renderTabButton(tab, index))}
           </View>
         </View>
         
@@ -304,9 +340,27 @@ export default function BottomNavigation({
             backgroundColor: "#EFF0F2",//สีพื้นหลัง
           }}//สีของไอคอล Ionions
         > 
-          <Ionicons name="qr-code-outline" size={36} color="#1D2144"  /> 
+          <QrIcon
+            width={QR_ICON_SIZE}
+            height={QR_ICON_SIZE}
+            color={INACTIVE_COLOR}
+            strokeWidth={TAB_ICON_STROKE_WIDTH.active}
+          />
         </TouchableOpacity> 
       </View>
     </Animated.View>
   );
 }
+
+const styles = StyleSheet.create({
+  segment: {
+    alignSelf: "stretch",
+    borderColor: SEGMENT_DIVIDER_COLOR,
+  },
+  tabButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+  },
+});
