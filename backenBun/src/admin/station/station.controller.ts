@@ -579,7 +579,7 @@ import {
       )
       .post(
         '/',
-        async ({ body, set, adminStationService, request }) => {
+        async ({ set, adminStationService, request }) => {
           try {
             const contentType =
               request.headers.get('content-type')?.toLowerCase() ?? '';
@@ -589,8 +589,14 @@ import {
             if (contentType.includes('multipart/form-data')) {
               const formData = await request.formData();
               const rawPayload =
-                formData.get('data') ?? formData.get('payload');
-              if (typeof rawPayload !== 'string') {
+                (formData.get('data') ?? formData.get('payload'))?.toString();
+
+              if (!rawPayload) {
+                logger.warn('Invalid multipart payload', {
+                  path: request.url,
+                  hasData: formData.has('data'),
+                  hasPayload: formData.has('payload'),
+                });
                 set.status = 400;
                 return {
                   success: false,
@@ -602,6 +608,7 @@ import {
               try {
                 payload = JSON.parse(rawPayload) as CreateStationData;
               } catch {
+                logger.warn('Unable to parse station payload JSON (multipart)', { raw: rawPayload });
                 set.status = 400;
                 return {
                   success: false,
@@ -613,11 +620,11 @@ import {
               if (maybeFile instanceof File) {
                 imageFile = maybeFile;
               }
-            } else if (body && typeof body === 'object') {
-              payload = body as CreateStationData;
             } else {
               const textBody = (await request.text()).trim();
+
               if (!textBody) {
+                logger.warn('Empty JSON payload body');
                 set.status = 400;
                 return {
                   success: false,
@@ -628,6 +635,7 @@ import {
               try {
                 payload = JSON.parse(textBody) as CreateStationData;
               } catch {
+                logger.warn('Invalid JSON payload body', { textBody });
                 set.status = 400;
                 return {
                   success: false,
@@ -656,6 +664,7 @@ import {
           }
         },
         {
+          parse: false,
           detail: {
             tags: ['Admin Station'],
             summary: 'Create charging station',
