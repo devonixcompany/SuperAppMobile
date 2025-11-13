@@ -10,6 +10,7 @@ export { adminConnectorsController } from './connectors/connectors.controller';
 export { AdminConnectorsService } from './connectors/connectors.service';
 export { adminStationController } from './station/station.controller';
 export { AdminStationService } from './station/station.service';
+export { stationAssetsController } from './station/station.assets.controller';
 
 // Import services and controllers
 import { JWTService } from '../lib/jwt';
@@ -21,6 +22,7 @@ import { adminConnectorsController } from './connectors/connectors.controller';
 import { AdminConnectorsService } from './connectors/connectors.service';
 import { adminStationController } from './station/station.controller';
 import { AdminStationService } from './station/station.service';
+import { stationAssetsController } from './station/station.assets.controller';
 
 // Service container for admin microservices
 export class AdminServiceContainer {
@@ -62,6 +64,10 @@ export class AdminServiceContainer {
 
   public getStationController() {
     return adminStationController(this.jwtService);
+  }
+
+  public getStationAssetsController() {
+    return stationAssetsController();
   }
 
   public getConnectorsController() {

@@ -2,11 +2,8 @@ import { cors } from '@elysiajs/cors';
 import { jwt } from '@elysiajs/jwt';
 import { fromTypes, openapi } from '@elysiajs/openapi';
 import { Elysia, t } from 'elysia';
-import { constants } from 'node:fs';
-import { access } from 'node:fs/promises';
 import { adminServiceContainer } from './admin';
 import { logger, requestLogger } from './lib/logger';
-import { getMimeFromFilename, resolveStationImagePath } from './lib/station-images';
 import { serviceContainer } from './user';
 
 // Get services from container
@@ -389,41 +386,16 @@ export const app = new Elysia()
     console.log('Admin connector controller registered');
     return adminConnectorCtrl;
   })())
-  .get('/station-images/:filename', async ({ params, set }) => {
-    const { filename } = params as { filename?: string };
-    if (
-      !filename ||
-      !/^[a-zA-Z0-9_-]+\.(jpg|jpeg|png|webp)$/i.test(filename)
-    ) {
-      set.status = 400;
-      return {
-        success: false,
-        message: 'Invalid image filename',
-      };
-    }
-
-    const filePath = resolveStationImagePath(filename);
-    try {
-      await access(filePath, constants.R_OK);
-      const file = Bun.file(filePath);
-      return new Response(file, {
-        headers: {
-          'Content-Type': getMimeFromFilename(filename),
-          'Cache-Control': 'public, max-age=3600',
-        },
-      });
-    } catch {
-      set.status = 404;
-      return {
-        success: false,
-        message: 'Image not found',
-      };
-    }
-  })
+  .use((() => {
+    console.log('Registering station assets controller');
+    const assetsController = adminServiceContainer.getStationAssetsController();
+    console.log('Station assets controller registered');
+    return assetsController;
+  })())
   .derive(({ request }: any) => {
     // Extract user from request and make it available in context
     const user = (request as any).user;
-    console.log('🔧 [DERIVE] Extracting user from request:', {
+    console.log('ðŸ”§ [DERIVE] Extracting user from request:', {
       hasUser: !!user,
       userId: user?.id,
       path: request.url
@@ -510,7 +482,7 @@ export const app = new Elysia()
     {
       detail: {
         tags: ["Health"],
-        summary: "🏥 Health Check",
+        summary: "ðŸ¥ Health Check",
         description:
           "Returns the current status and health information of the API server",
         responses: {
@@ -569,10 +541,10 @@ export const app = new Elysia()
   });
 
 app.listen(port, () => {
-  console.log(`🦊 Server is running on port ${port}`);
-  console.log(`📚 OpenAPI Documentation: ${serverUrl}/openapi`);
-  console.log(`📄 OpenAPI Schema: ${serverUrl}/openapi/json`);
-  console.log(`📝 API Endpoints:`);
+  console.log(`ðŸ¦Š Server is running on port ${port}`);
+  console.log(`ðŸ“š OpenAPI Documentation: ${serverUrl}/openapi`);
+  console.log(`ðŸ“„ OpenAPI Schema: ${serverUrl}/openapi/json`);
+  console.log(`ðŸ“ API Endpoints:`);
   console.log(`   POST /api/auth/register - User registration`);
   console.log(`   POST /api/auth/login - User login`);
   console.log(`   POST /api/auth/refresh - Refresh token`);
