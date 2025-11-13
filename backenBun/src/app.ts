@@ -9,14 +9,6 @@ import { serviceContainer } from './user';
 // Get services from container
 const { jwtService } = serviceContainer;
 
-type RequestUser = {
-  id: string;
-  phoneNumber: string | null;
-  status: string | null;
-  typeUser: string | null;
-  createdAt: Date;
-};
-
 const port = Number(process.env.PORT ?? 8080);
 const serverUrl = process.env.BASE_URL ?? `localhost:${port}`;
 
@@ -134,11 +126,7 @@ const isPublicRoute = (path: string) => {
 
 export const app = new Elysia()
   .use(requestLogger)
-  .use(
-    cors({
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
-    }),
-  )
+  .use(cors())
   .model({
     User: userModel,
     ErrorResponse: errorResponseModel,
@@ -205,7 +193,7 @@ export const app = new Elysia()
   }))
   // ✅ CRITICAL: Authentication middleware that runs BEFORE derive middleware
   .use((app: any) => {
-    let currentUser: RequestUser | null = null; // Store user at wrapper level
+    let currentUser = null; // Store user at wrapper level
     
     return app.onBeforeHandle(async ({ request, set, cookie }: any) => {
     if (request.method === "OPTIONS") {
@@ -284,12 +272,7 @@ export const app = new Elysia()
       return;
     }
 
-      if (path.startsWith('/station-images/')) {
-        console.log('Serving public station image, skipping auth guard:', path);
-        return;
-      }
-
-      if (isGatewayRoute(method, path)) {
+    if (isGatewayRoute(method, path)) {
       const gatewayKey = extractGatewayKey(request);
       console.log('🚪 [AUTH] Gateway route detected:', { path, hasKey: !!gatewayKey });
       if (gatewayKey && gatewayKey === GATEWAY_API_KEY) {
@@ -386,24 +369,6 @@ export const app = new Elysia()
     console.log('Admin connector controller registered');
     return adminConnectorCtrl;
   })())
-  .use((() => {
-    console.log('Registering station assets controller');
-    const assetsController = adminServiceContainer.getStationAssetsController();
-    console.log('Station assets controller registered');
-    return assetsController;
-  })())
-  .derive(({ request }: any) => {
-    // Extract user from request and make it available in context
-    const user = (request as any).user;
-    console.log('ðŸ”§ [DERIVE] Extracting user from request:', {
-      hasUser: !!user,
-      userId: user?.id,
-      path: request.url
-    });
-    return {
-      user: user
-    };
-  })
   .use(serviceContainer.getTransactionController())
   // Payment controller also needs user context, no need for wrapper since derive middleware is now available
   .use(serviceContainer.getPaymentController())
@@ -482,7 +447,7 @@ export const app = new Elysia()
     {
       detail: {
         tags: ["Health"],
-        summary: "ðŸ¥ Health Check",
+        summary: "🏥 Health Check",
         description:
           "Returns the current status and health information of the API server",
         responses: {
@@ -541,10 +506,10 @@ export const app = new Elysia()
   });
 
 app.listen(port, () => {
-  console.log(`ðŸ¦Š Server is running on port ${port}`);
-  console.log(`ðŸ“š OpenAPI Documentation: ${serverUrl}/openapi`);
-  console.log(`ðŸ“„ OpenAPI Schema: ${serverUrl}/openapi/json`);
-  console.log(`ðŸ“ API Endpoints:`);
+  console.log(`🦊 Server is running on port ${port}`);
+  console.log(`📚 OpenAPI Documentation: ${serverUrl}/openapi`);
+  console.log(`📄 OpenAPI Schema: ${serverUrl}/openapi/json`);
+  console.log(`📝 API Endpoints:`);
   console.log(`   POST /api/auth/register - User registration`);
   console.log(`   POST /api/auth/login - User login`);
   console.log(`   POST /api/auth/refresh - Refresh token`);
