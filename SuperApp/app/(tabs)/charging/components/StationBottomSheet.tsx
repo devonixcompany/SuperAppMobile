@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Dimensions, PanResponder, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, Animated } from "react-native";
-import { ChargingStation } from "../../../../types/charging.types";
+import { ChargingStation, ConnectorTypeNames } from "../../../../types/charging.types";
 import ChargingStationService from "../ChargingStationService";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -137,40 +137,85 @@ function StationDetails({
 
   return (
     <View style={styles.stationDetails}>
+      {/* เวลาเปิด-ปิด */}
       <View style={styles.detailRow}>
+        <Ionicons name="time-outline" size={16} color="#10b981" style={{ marginRight: 8 }} />
         <Text style={styles.detailLabel}>
           เปิด {station.openTime} - {station.closeTime} น.
         </Text>
       </View>
 
+      {/* ประเภทหัวชาร์จ */}
       <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>ประเภทหัวจ่าย :</Text>
+        <Ionicons name="flash-outline" size={16} color="#10b981" style={{ marginRight: 8 }} />
+        <Text style={styles.detailLabel}>ประเภทหัวจ่าย:</Text>
         <View style={styles.connectorTypes}>
-          {station.acCount && (
+          {station.acCount ? (
             <View style={styles.connectorBadge}>
               <Ionicons name="flash-outline" size={14} color="#10b981" />
-              <Text style={styles.connectorText}>AC</Text>
+              <Text style={styles.connectorText}>AC x{station.acCount}</Text>
             </View>
-          )}
-          {station.dcCount && (
+          ) : null}
+          {station.dcCount ? (
             <View style={styles.connectorBadge}>
-              <Ionicons name="flash" size={14} color="#10b981" />
-              <Text style={styles.connectorText}>DC</Text>
+              <Ionicons name="flash" size={14} color="#f59e0b" />
+              <Text style={[styles.connectorText, { color: '#f59e0b' }]}>DC x{station.dcCount}</Text>
             </View>
-          )}
+          ) : null}
         </View>
       </View>
 
+      {/* รายละเอียดประเภทหัวชาร์จ */}
+      {station.connectorTypes && station.connectorTypes.length > 0 && (
+        <View style={styles.detailRow}>
+          <Text style={styles.detailSubLabel}>ชนิด: </Text>
+          <View style={styles.connectorDetailTypes}>
+            {station.connectorTypes.map((type, index) => (
+              <Text key={index} style={styles.connectorTypeText}>
+                {ConnectorTypeNames[type] || type}
+                {index < station.connectorTypes!.length - 1 ? ', ' : ''}
+              </Text>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* กำลังไฟ */}
       <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>กำลังไฟ: {station.power}</Text>
+        <Ionicons name="speedometer-outline" size={16} color="#10b981" style={{ marginRight: 8 }} />
+        <Text style={styles.detailLabel}>กำลังไฟสูงสุด: {station.power}</Text>
       </View>
 
+      {/* ราคา */}
       <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>
-          ราคาต่อหน่วย: {station.pricePerUnit}
-        </Text>
+        <Ionicons name="cash-outline" size={16} color="#10b981" style={{ marginRight: 8 }} />
+        <Text style={styles.detailLabel}>ราคา: </Text>
+        {station.offPeakRate && station.onPeakRate ? (
+          <View style={styles.pricingContainer}>
+            <Text style={styles.priceText}>
+              Peak: {station.onPeakRate?.toFixed(2)} บาท/kWh
+            </Text>
+            <Text style={styles.priceText}>
+              Off-Peak: {station.offPeakRate?.toFixed(2)} บาท/kWh
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.priceText}>
+            {station.pricePerUnit?.toFixed(2)} บาท/kWh
+          </Text>
+        )}
       </View>
 
+      {/* ช่วงเวลา Peak */}
+      {station.onPeakStartTime && station.onPeakEndTime && (
+        <View style={styles.detailRow}>
+          <Text style={styles.detailSubLabel}>
+            Peak: {station.onPeakStartTime} - {station.onPeakEndTime} น.
+          </Text>
+        </View>
+      )}
+
+      {/* ระยะทาง */}
       <View style={styles.statsContainer}>
         <View style={styles.statItem}>
           <Ionicons name="navigate" size={20} color="#10b981" />
@@ -304,10 +349,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#4b5563",
   },
+  detailSubLabel: {
+    fontSize: 13,
+    color: "#6b7280",
+    marginLeft: 24,
+  },
   connectorTypes: {
     flexDirection: "row",
     marginLeft: 8,
     gap: 8,
+  },
+  connectorDetailTypes: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    flex: 1,
+  },
+  connectorTypeText: {
+    fontSize: 13,
+    color: "#059669",
+    fontWeight: "500",
+  },
+  pricingContainer: {
+    flexDirection: "column",
+    gap: 2,
+  },
+  priceText: {
+    fontSize: 13,
+    color: "#059669",
+    fontWeight: "600",
   },
   connectorBadge: {
     flexDirection: "row",

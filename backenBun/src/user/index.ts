@@ -10,6 +10,8 @@ import { PaymentService } from "./payment/payment.service";
 import { webhookController } from "./payment/webhook.controller";
 import { ssTaxInvoiceProfileController } from "./sstaxinvoiceprofile/sstaxinvoiceprofile.controller";
 import { SsTaxInvoiceProfileService } from "./sstaxinvoiceprofile/sstaxinvoiceprofile.service";
+import { stationController } from "./station/station.controller";
+import { StationService } from "./station/station.service";
 import { transactionController } from "./transaction/transaction.controller";
 import { TransactionService } from "./transaction/transaction.service";
 import { userController } from "./user/user.controller";
@@ -26,6 +28,7 @@ export class ServiceContainer {
   public readonly authService: AuthService;
   public readonly chargePointService: ChargePointService;
   public readonly ssTaxInvoiceProfileService: SsTaxInvoiceProfileService;
+  public readonly stationService: StationService;
   public readonly adminService: AdminService;
   public readonly transactionService: TransactionService;
   public readonly paymentService: PaymentService;
@@ -40,6 +43,7 @@ export class ServiceContainer {
     this.validationService = new ValidationService();
     this.chargePointService = new ChargePointService();
     this.ssTaxInvoiceProfileService = new SsTaxInvoiceProfileService();
+    this.stationService = new StationService();
     this.adminService = new AdminService(this.jwtService);
     this.transactionService = new TransactionService(prisma);
     this.paymentService = new PaymentService();
@@ -88,6 +92,10 @@ export class ServiceContainer {
   public getWebhookController() {
     return webhookController();
   }
+
+  public getStationController() {
+    return stationController(this.stationService);
+  }
 }
 
 // Export singleton instance
@@ -101,6 +109,7 @@ export const {
   authService,
   chargePointService,
   ssTaxInvoiceProfileService,
+  stationService,
   adminService,
   transactionService,
   paymentService,

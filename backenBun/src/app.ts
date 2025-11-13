@@ -160,6 +160,10 @@ export const app = new Elysia()
             description: "Charging station provisioning and commands",
           },
           {
+            name: "Stations",
+            description: "Charging station information and location services",
+          },
+          {
             name: "Tax Invoice Profile",
             description: "Tax invoice profile management for users",
           },
@@ -339,6 +343,7 @@ export const app = new Elysia()
   .use(serviceContainer.getAuthController())
   .use(serviceContainer.getUserController())
   .use(serviceContainer.getChargePointController())
+  .use(serviceContainer.getStationController())
   .use((() => {
     console.log('🔧 Registering admin auth controller');
     const adminAuthCtrl = adminServiceContainer.getAuthController();

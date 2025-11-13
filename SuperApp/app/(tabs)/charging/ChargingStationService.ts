@@ -1,5 +1,8 @@
 import { ChargingStation } from '../../../types/charging.types';
 import { mockChargingStationsThai } from '../../../data/mockChargingStations';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080';
 
 /**
  * Service for managing charging station data and API calls
@@ -18,19 +21,221 @@ export class ChargingStationService {
   }
 
   /**
-   * Load all charging stations (currently using mock data)
+   * Get JWT token from AsyncStorage
+   */
+  private async getAuthToken(): Promise<string | null> {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      return token;
+    } catch (error) {
+      console.error('Error getting auth token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Load all charging stations from API
    */
   public async loadChargingStations(): Promise<ChargingStation[]> {
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const token = await this.getAuthToken();
 
-      // Use mock data for now
-      this.stations = mockChargingStationsThai;
+      if (!token) {
+        console.warn('No auth token found, using mock data');
+        this.stations = mockChargingStationsThai;
+        return this.stations;
+      }
+
+      // Call the API to get all stations
+      const response = await fetch(`${API_URL}/api/stations?page=1&limit=100`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        console.error('API error:', response.status);
+        // Fallback to mock data if API fails
+        this.stations = mockChargingStationsThai;
+        return this.stations;
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        // Transform API response to ChargingStation format
+        this.stations = this.transformStationsFromAPI(data.data);
+        console.log(`Loaded ${this.stations.length} stations from API`);
+      } else {
+        console.warn('Invalid API response, using mock data');
+        this.stations = mockChargingStationsThai;
+      }
+
       return this.stations;
     } catch (error) {
       console.error('Error loading charging stations:', error);
-      throw error;
+      // Fallback to mock data on error
+      this.stations = mockChargingStationsThai;
+      return this.stations;
+    }
+  }
+
+  /**
+   * Transform API station data to ChargingStation format
+   */
+  private transformStationsFromAPI(apiStations: any[]): ChargingStation[] {
+    return apiStations.map((station) => {
+      console.log('Transforming station:', station.stationname);
+
+      // Count total charge points by status
+      const availableCount = station.charge_points?.filter(
+        (cp: any) => cp.chargepointstatus === 'AVAILABLE'
+      ).length || 0;
+
+      const inUseCount = station.charge_points?.filter(
+        (cp: any) => cp.chargepointstatus === 'OCCUPIED' || cp.chargepointstatus === 'CHARGING'
+      ).length || 0;
+
+      const offlineCount = station.charge_points?.filter(
+        (cp: any) => cp.chargepointstatus === 'UNAVAILABLE' || cp.chargepointstatus === 'FAULTED'
+      ).length || 0;
+
+      // Determine overall station status
+      let status: 'available' | 'in-use' | 'offline' = 'offline';
+      if (availableCount > 0) {
+        status = 'available';
+      } else if (inUseCount > 0) {
+        status = 'in-use';
+      }
+
+      // Count connectors by type (AC/DC) and collect unique types
+      let acCount = 0;
+      let dcCount = 0;
+      const connectorTypesSet = new Set<string>();
+
+      station.charge_points?.forEach((cp: any) => {
+        cp.connectors?.forEach((connector: any) => {
+          const connectorType = connector.type || '';
+
+          if (connectorType) {
+            connectorTypesSet.add(connectorType);
+          }
+
+          // DC types: CHADEMO, CCS_COMBO_1, CCS_COMBO_2, GB_T
+          if (['CHADEMO', 'CCS_COMBO_1', 'CCS_COMBO_2', 'GB_T'].includes(connectorType)) {
+            dcCount++;
+          }
+          // AC types: TYPE_1, TYPE_2, TESLA
+          else if (['TYPE_1', 'TYPE_2', 'TESLA'].includes(connectorType)) {
+            acCount++;
+          }
+        });
+      });
+
+      // Get maximum power rating from all charge points
+      const maxPower = station.charge_points?.reduce((max: number, cp: any) => {
+        return Math.max(max, cp.powerRating || 0);
+      }, 0) || 0;
+
+      // Get pricing - prioritize off-peak rate, fallback to on-peak
+      const pricePerUnit = station.offPeakRate || station.onPeakRate || 0;
+
+      // Parse opening hours (format: "06:00-22:00" or "24 ชั่วโมง")
+      let openTime = '00:00';
+      let closeTime = '23:59';
+
+      if (station.openclosedays) {
+        if (station.openclosedays.includes('-')) {
+          const [open, close] = station.openclosedays.split('-');
+          openTime = open.trim();
+          closeTime = close.trim();
+        } else if (station.openclosedays.includes('24')) {
+          openTime = '00:00';
+          closeTime = '23:59';
+        }
+      }
+
+      const transformed = {
+        id: station.id,
+        name: station.stationname,
+        address: station.location || 'ไม่ระบุที่อยู่',
+        latitude: station.latitude ? parseFloat(station.latitude) : 0,
+        longitude: station.longitude ? parseFloat(station.longitude) : 0,
+        status: status,
+        acCount: acCount,
+        dcCount: dcCount,
+        power: `${maxPower.toFixed(2)} kW`,
+        pricePerUnit: pricePerUnit,
+        openTime: openTime,
+        closeTime: closeTime,
+        // ข้อมูลเพิ่มเติม
+        onPeakRate: station.onPeakRate || 0,
+        offPeakRate: station.offPeakRate || 0,
+        onPeakStartTime: station.onPeakStartTime || '',
+        onPeakEndTime: station.onPeakEndTime || '',
+        connectorTypes: Array.from(connectorTypesSet),
+      };
+
+      console.log('Transformed result:', {
+        name: transformed.name,
+        acCount: transformed.acCount,
+        dcCount: transformed.dcCount,
+        power: transformed.power,
+        pricePerUnit: transformed.pricePerUnit,
+        openTime: transformed.openTime,
+        closeTime: transformed.closeTime,
+      });
+
+      return transformed;
+    }).filter((station) => station.latitude !== 0 && station.longitude !== 0); // Filter out stations without coordinates
+  }
+
+  /**
+   * Load nearby stations from API
+   */
+  public async loadNearbyStations(
+    latitude: number,
+    longitude: number,
+    radiusKm: number = 10
+  ): Promise<ChargingStation[]> {
+    try {
+      const token = await this.getAuthToken();
+
+      if (!token) {
+        console.warn('No auth token found, using local filtering');
+        return this.getNearbyStations(latitude, longitude, radiusKm);
+      }
+
+      // Call the nearby stations API
+      const response = await fetch(
+        `${API_URL}/api/stations/nearby/search?latitude=${latitude}&longitude=${longitude}&radius=${radiusKm}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        console.error('API error:', response.status);
+        // Fallback to local filtering
+        return this.getNearbyStations(latitude, longitude, radiusKm);
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        return this.transformStationsFromAPI(data.data);
+      } else {
+        return this.getNearbyStations(latitude, longitude, radiusKm);
+      }
+    } catch (error) {
+      console.error('Error loading nearby stations:', error);
+      return this.getNearbyStations(latitude, longitude, radiusKm);
     }
   }
 

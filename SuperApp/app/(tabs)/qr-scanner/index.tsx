@@ -375,7 +375,7 @@ export default function QRScannerScreen() {
 
       setIsProcessing(false);
       router.push({
-        pathname: "/charge-session",
+        pathname: "/charge-session/loading",
         params,
       });
     } catch (error) {

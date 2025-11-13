@@ -179,15 +179,6 @@ export default function ChargeSessionScreen() {
     return Number.isFinite(parsed) ? parsed : undefined;
   }, [params.connectorId]);
 
-  const baseRate = useMemo(() => {
-    // ใช้ stationRate ที่ดึงมาจาก API เป็นลำดับแรก
-    if (stationRate != null) return stationRate;
-    // fallback ไปที่ params.baseRate
-    if (!params.baseRate) return undefined;
-    const parsed = Number(params.baseRate);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }, [stationRate, params.baseRate]);
-
   // คำนวณข้อความกำลังไฟด้วย useMemo เพื่อป้องกันการคำนวณซ้ำในทุกการ render
   const powerLabel = useMemo(() => {
     if (!params.powerRating) {
@@ -239,6 +230,13 @@ export default function ChargeSessionScreen() {
   const [userId, setUserId] = useState<string | null>(null);
   const [stationRate, setStationRate] = useState<number | null>(null);
   const [hasAttemptedStationFetch, setHasAttemptedStationFetch] = useState(false);
+
+  const baseRate = useMemo(() => {
+    if (stationRate != null) return stationRate;
+    if (!params.baseRate) return undefined;
+    const parsed = Number(params.baseRate);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }, [stationRate, params.baseRate]);
   const [transactionSummary, setTransactionSummary] = useState<TransactionSummaryPayload | null>(null);
   const [isFetchingSummary, setIsFetchingSummary] = useState(false);
   const [hasFetchedSummary, setHasFetchedSummary] = useState(false);
@@ -1537,25 +1535,9 @@ export default function ChargeSessionScreen() {
             {/* Battery Percentage Display */}
             {(isCharging || activeTransactionId) && chargingData?.chargingPercentage != null && (
               <View className="items-center w-full my-4">
-                <Animated.View
-                  style={{
-                    transform: [{ scale: circleScale }],
-                    width: 120,
-                    height: 120,
-                    borderRadius: 60,
-                    backgroundColor: 'rgba(12, 196, 108, 0.1)',
-                    borderWidth: 4,
-                    borderColor: '#0CC46C',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Ionicons name="flash" size={32} color="#0CC46C" />
-                  <Text className="text-2xl font-bold text-[#0CC46C] mt-1">
-                    {chargingData.chargingPercentage.toFixed(1)}%
-                  </Text>
-                </Animated.View>
-                <Text className="text-sm text-gray-600 mt-2">ระดับการชาร์จ</Text>
+               
+       
+                <Text className="text-sm text-gray-600 mt-2">ระดับการชาร์จ     {chargingData.chargingPercentage.toFixed(1)}%</Text>
               </View>
             )}
 
@@ -1600,6 +1582,11 @@ export default function ChargeSessionScreen() {
                 <View className="flex-row justify-between">
                   <Text className="text-[#1F274B] text-[14px] font-[400]">ค่าบริการ</Text>
                   <Text className="text-[#1F274B] text-[14px] font-[300]">{costDisplay ?? "0.00 บาท"}</Text>
+                </View>
+                 {/* Cost */}
+                <View className="flex-row justify-between">
+                  <Text className="text-[#1F274B] text-[14px] font-[400]">ระดับการชาร์จ</Text>
+                  <Text className="text-[#1F274B] text-[14px] font-[300]">{formatNumber(chargingData?.chargingPercentage, 1)}%</Text>
                 </View>
               </View>
             </View>
