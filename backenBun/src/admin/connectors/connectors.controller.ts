@@ -27,9 +27,10 @@ const connectorRequestBody = t.Object({
     minimum: 1,
   }),
   type: t.Optional(
-    t.Enum(ConnectorType, {
-      description: 'Connector type classification.',
-      default: 'TYPE_2',
+    t.String({
+      description:
+        'Connector type classification (uses ConnectorType enum internally; empty or unknown values default to TYPE_2).',
+      example: 'CCS_COMBO_2',
     }),
   ),
   connectorstatus: t.Optional(

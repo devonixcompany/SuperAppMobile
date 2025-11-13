@@ -164,6 +164,7 @@ export default function ChargeSessionScreen() {
     pricingTierName?: string;
     chargePointBrand?: string;
     protocol?: string;
+    startTime?: string;
   }>();
 
   const normalizedWsUrl = useMemo(() => {
@@ -219,6 +220,13 @@ export default function ChargeSessionScreen() {
   );
   const [lastHeartbeat, setLastHeartbeat] = useState<string | null>(null);
   const [sessionStartTime, setSessionStartTime] = useState<string | null>(null);
+  const initialStartTime = params.startTime ? String(params.startTime) : null;
+
+  useEffect(() => {
+    if (initialStartTime) {
+      setSessionStartTime((prev) => prev ?? initialStartTime);
+    }
+  }, [initialStartTime]);
   const [activeTransactionId, setActiveTransactionId] = useState<number | null>(
     null,
   );
@@ -1482,7 +1490,7 @@ export default function ChargeSessionScreen() {
           headerTintColor: "#1F274B",
         }}
       />
-      <View className="flex-1 bg-[#EEF0F6] pt-12">
+      <View className="flex-1 bg-[#EEF0F6] ">
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
@@ -1531,15 +1539,6 @@ export default function ChargeSessionScreen() {
                 resizeMode="contain"
               />
             </View>
-
-            {/* Battery Percentage Display */}
-            {(isCharging || activeTransactionId) && chargingData?.chargingPercentage != null && (
-              <View className="items-center w-full my-4">
-               
-       
-                <Text className="text-sm text-gray-600 mt-2">ระดับการชาร์จ     {chargingData.chargingPercentage.toFixed(1)}%</Text>
-              </View>
-            )}
 
             {/* Station Details Card */}
             <View className="w-full max-w-sm bg-white rounded-2xl p-6 self-center">
@@ -1715,11 +1714,7 @@ export default function ChargeSessionScreen() {
               </View>
             )}
 
-            {lastHeartbeat && (
-              <Text className="mt-3 text-xs text-gray-500 text-center">
-                Heartbeat ล่าสุด: {formatDateTime(lastHeartbeat)}
-              </Text>
-            )}
+        
           </View>
         </ScrollView>
       </View>

@@ -139,7 +139,10 @@ export class AdminChargePointsService {
       },
     });
 
-    let createdConnectors = [];
+    type CreatedConnector = Awaited<
+      ReturnType<AdminConnectorsService['createConnector']>
+    >;
+    let createdConnectors: CreatedConnector[] = [];
     if (connectorsPayload.length) {
       const connectorService = new AdminConnectorsService();
       createdConnectors = await Promise.all(

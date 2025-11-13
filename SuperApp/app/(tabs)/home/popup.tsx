@@ -131,6 +131,33 @@ const derivePowerKw = (transaction: RawTransaction): number | null => {
   return null;
 };
 
+const deriveEnergyDelivered = (transaction: RawTransaction): number | null => {
+  const candidates = [
+    "energyDelivered",
+    "energyDeliveredKwh",
+    "energyDeliveredKWh",
+    "energy_delivered",
+    "totalEnergy",
+    "totalEnergyKwh",
+    "totalEnergyKWh",
+    "energy",
+    "energyKwh",
+    "energyKWh",
+    "energy_kwh",
+    "meterValue",
+    "meter_value",
+  ];
+
+  for (const key of candidates) {
+    const parsed = toNumberOrNull(transaction[key]);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
 const deriveRemainingTime = (transaction: RawTransaction) => {
   const secondKeys = [
     "estimatedRemainingSeconds",
@@ -278,6 +305,8 @@ export type ChargingStatusPopupData = {
   pricingTierName?: string | null;
   chargePointBrand?: string | null;
   protocol?: string | null;
+  energyDelivered?: number | null;
+  startTime?: string | null;
 };
 
 type ChargingStatusPopupProps = {
@@ -340,11 +369,13 @@ const loadActiveTransaction = async (): Promise<ChargingStatusResult> => {
       estimatedRemainingMinutes: minutes,
       chargePointName: deriveChargePointName(activeTransaction),
       connectorName: deriveConnectorName(activeTransaction),
+      energyDelivered: deriveEnergyDelivered(activeTransaction),
       transactionId:
         activeTransaction.transactionId ??
         activeTransaction.id ??
         activeTransaction.transactionID ??
         null,
+      startTime: activeTransaction.startTime ?? null,
       websocketUrl: activeTransaction.websocketUrl ?? chargePoint?.urlwebSocket ?? chargePoint?.websocketUrl ?? null,
       chargePointIdentity: chargePoint?.chargePointIdentity ?? activeTransaction.chargePointIdentity ?? null,
       connectorId: connector?.connectorId ?? activeTransaction.connectorId ?? null,
@@ -467,6 +498,13 @@ const formatPower = (value?: number | null) => {
   return value.toFixed(2);
 };
 
+const formatEnergy = (value?: number | null) => {
+  if (value === undefined || value === null || Number.isNaN(value)) {
+    return null;
+  }
+  return value.toFixed(2);
+};
+
 const formatDuration = (
   seconds?: number | null,
   minutes?: number | null,
@@ -562,10 +600,11 @@ const ChargingStatusCardContent: React.FC<ChargingStatusCardContentProps> = ({
 
   // Use real-time data if available, otherwise fall back to data from API
   const currentPower = realtimeData?.currentPower ?? data?.currentPowerKw ?? 0;
-  const energyDelivered = realtimeData?.energyDelivered ?? 0;
+  const energyValue = realtimeData?.energyDelivered ?? data?.energyDelivered ?? null;
   const sessionDuration = realtimeData?.sessionDuration ?? data?.estimatedRemainingSeconds ?? 0;
 
   const powerText = formatPower(currentPower);
+  const energyText = formatEnergy(energyValue);
   const durationText = formatDuration(
     sessionDuration,
     data?.estimatedRemainingMinutes,
@@ -602,6 +641,7 @@ const ChargingStatusCardContent: React.FC<ChargingStatusCardContentProps> = ({
         pricingTierName: data.pricingTierName ?? '',
         chargePointBrand: data.chargePointBrand ?? '',
         protocol: data.protocol ?? '',
+        startTime: data.startTime ?? undefined,
       };
 
       console.log('✅ [POPUP NAV] All required fields present, navigating...');
@@ -671,14 +711,14 @@ const ChargingStatusCardContent: React.FC<ChargingStatusCardContentProps> = ({
               </View>
 
               {/* Energy Delivered */}
-              {energyDelivered > 0 && (
+              {energyText && (
                 <View className="flex-row items-center justify-between px-3 py-2 bg-[#F3F4F6] rounded-lg">
                   <View className="flex-row items-center">
                     <Ionicons name="battery-charging" size={16} color="#48B59E" />
                     <Text className="ml-2 text-sm text-[#6B7280]">พลังงานที่ได้รับ</Text>
                   </View>
                   <Text className="text-base font-semibold text-[#1D2144]">
-                    {energyDelivered.toFixed(2)} kWh
+                    {energyText} kWh
                   </Text>
                 </View>
               )}
@@ -718,8 +758,16 @@ const ChargingStatusCardContent: React.FC<ChargingStatusCardContentProps> = ({
             </View>
           ) : (
             <>
-              {/* Show power rating if no real-time data */}
-              {data?.powerRating && (
+              {energyText ? (
+                <View className="mt-3 px-3 py-2 bg-[#F3F4F6] rounded-lg">
+                  <Text className="text-xs text-[#6B7280]">
+                    พลังงานที่ได้รับ
+                  </Text>
+                  <Text className="text-base font-semibold text-[#1D2144] mt-0.5">
+                    {energyText} kWh
+                  </Text>
+                </View>
+              ) : data?.powerRating ? (
                 <View className="mt-3 px-3 py-2 bg-[#F3F4F6] rounded-lg">
                   <Text className="text-xs text-[#6B7280]">
                     กำลังไฟสูงสุด
@@ -728,7 +776,7 @@ const ChargingStatusCardContent: React.FC<ChargingStatusCardContentProps> = ({
                     {data.powerRating} kW
                   </Text>
                 </View>
-              )}
+              ) : null}
               <View className="mt-4 px-3 py-2 bg-blue-50 rounded-lg border border-blue-100">
                 <View className="flex-row items-center">
                   <Ionicons name="sync" size={14} color="#2D6BAA" />

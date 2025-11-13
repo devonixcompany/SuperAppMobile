@@ -430,6 +430,13 @@ export class AdminService {
         stationNameCandidates.add(stationNameLower.trim());
       }
 
+      if (
+        typeof chargePointData.chargepointname === "string" &&
+        chargePointData.chargepointname.trim()
+      ) {
+        stationNameCandidates.add(chargePointData.chargepointname.trim());
+      }
+
       if (!resolvedStationId) {
         let stationRecord: { id: string } | null = null;
 
@@ -441,20 +448,29 @@ export class AdminService {
           if (stationRecord) break;
         }
 
-        if (!stationRecord) {
-          const [firstCandidate] = Array.from(stationNameCandidates);
-          const nameForCreation =
-            firstCandidate ??
-            (typeof chargePointData.name === "string" &&
-            chargePointData.name.trim()
-              ? `${(chargePointData.name as string).trim()} Station`
-              : `Station-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+      if (!stationRecord) {
+        const [firstCandidate] = Array.from(stationNameCandidates);
+        const chargePointName =
+          typeof chargePointData.chargepointname === "string" &&
+          chargePointData.chargepointname.trim()
+            ? chargePointData.chargepointname.trim()
+            : undefined;
+        const nameForCreation =
+          firstCandidate ??
+          (chargePointName
+            ? `${chargePointName} Station`
+            : `Station-${Date.now().toString(36)}-${Math.random()
+                .toString(36)
+                .slice(2, 8)}`);
 
-          stationRecord = await prisma.station.create({
-            data: { stationname: nameForCreation },
-            select: { id: true },
-          });
-        }
+        stationRecord = await prisma.station.create({
+          data: {
+            stationname: nameForCreation,
+            location: 'Unknown location',
+          },
+          select: { id: true },
+        });
+      }
 
         resolvedStationId = stationRecord.id;
       }
@@ -470,7 +486,7 @@ export class AdminService {
             : undefined,
         },
         include: {
-          station: {
+          Station: {
             select: {
               id: true,
               stationname: true,
@@ -511,7 +527,7 @@ export class AdminService {
         where: { id },
         data: chargePointData,
         include: {
-          station: {
+          Station: {
             select: {
               id: true,
               stationname: true,
@@ -553,14 +569,12 @@ export class AdminService {
     value === null || value === undefined ? null : Number(value);
 
   private normalizeChargePoint = <
-    T extends { latitude?: unknown; longitude?: unknown; connectors?: any[] },
+    T extends { connectors?: any[] },
   >(
     chargePoint: T,
   ) => {
     const normalized: any = {
       ...chargePoint,
-      latitude: this.toNullableNumber(chargePoint.latitude),
-      longitude: this.toNullableNumber(chargePoint.longitude),
     };
 
     if (Array.isArray(chargePoint.connectors)) {
@@ -574,80 +588,73 @@ export class AdminService {
     return normalized;
   };
 
-  private ALLOWED_CHARGE_POINT_FIELDS = [
-    "name",
-    "stationName",
-    "location",
-    "latitude",
-    "longitude",
-    "openingHours",
-    "is24Hours",
-    "brand",
-    "serialNumber",
-    "powerRating",
-    "powerSystem",
-    "connectorCount",
-    "protocol",
-    "csmsUrl",
-    "chargePointIdentity",
-    "status",
-    "maxPower",
-    "lastSeen",
-    "heartbeatIntervalSec",
-    "vendor",
-    "model",
-    "firmwareVersion",
-    "ocppProtocolRaw",
-    "isWhitelisted",
-    "ownerId",
-    "ownershipType",
-    "isPublic",
-    "onPeakRate",
-    "onPeakStartTime",
-    "onPeakEndTime",
-    "offPeakRate",
-    "offPeakStartTime",
-    "offPeakEndTime",
-    "urlwebSocket",
-    "stationId",
-  ] as const satisfies readonly (keyof Prisma.charge_pointsUncheckedCreateInput)[];
+  private ALLOWED_CHARGE_POINT_FIELDS: ReadonlyArray<keyof Prisma.charge_pointsUncheckedCreateInput> =
+    [
+      "id",
+      "chargepointname",
+      "stationId",
+      "openingHours",
+      "is24Hours",
+      "brand",
+      "serialNumber",
+      "powerRating",
+      "powerSystem",
+      "connectorCount",
+      "protocol",
+      "csmsUrl",
+      "chargePointIdentity",
+      "chargepointstatus",
+      "maxPower",
+      "lastSeen",
+      "heartbeatIntervalSec",
+      "vendor",
+      "model",
+      "firmwareVersion",
+      "ocppProtocolRaw",
+      "ocppSessionId",
+      "isWhitelisted",
+      "ownerId",
+      "ownershipType",
+      "isPublic",
+      "createdAt",
+      "updatedAt",
+      "urlwebSocket",
+    ];
 
-  private NUMERIC_FIELDS = [
-    "latitude",
-    "longitude",
-    "powerRating",
-    "powerSystem",
-    "connectorCount",
-    "maxPower",
-    "onPeakRate",
-    "offPeakRate",
-    "heartbeatIntervalSec",
-  ] as const;
+  private NUMERIC_FIELDS: ReadonlyArray<keyof Prisma.charge_pointsUncheckedCreateInput> =
+    [
+      "powerRating",
+      "powerSystem",
+      "connectorCount",
+      "maxPower",
+      "heartbeatIntervalSec",
+    ];
 
   private numericFieldSet = new Set(this.NUMERIC_FIELDS);
 
-  private transformValue = <K extends keyof Prisma.charge_pointsUncheckedCreateInput>(
-    field: K,
+  private transformValue = (
+    field: keyof Prisma.charge_pointsUncheckedCreateInput,
     value: unknown,
-  ): Prisma.charge_pointsUncheckedCreateInput[K] => {
-    if (this.numericFieldSet.has(field as any)) {
-      return (
-        value === null || value === undefined ? null : Number(value)
-      ) as Prisma.charge_pointsUncheckedCreateInput[K];
+  ): Prisma.charge_pointsUncheckedCreateInput[keyof Prisma.charge_pointsUncheckedCreateInput] => {
+    if (this.numericFieldSet.has(field)) {
+      return value === null || value === undefined ? null : Number(value);
     }
-    return value as Prisma.charge_pointsUncheckedCreateInput[K];
+    return value as Prisma.charge_pointsUncheckedCreateInput[typeof field];
   };
 
   private pickChargePointData = (source: Record<string, unknown>) => {
-    const data: Partial<Record<keyof Prisma.charge_pointsUncheckedCreateInput, any>> =
-      {};
+    const data: Partial<Prisma.charge_pointsUncheckedCreateInput> = {};
     for (const field of this.ALLOWED_CHARGE_POINT_FIELDS) {
       const value = source[field as string];
       if (value !== undefined) {
-        data[field] = this.transformValue(field, value);
+          // TypeScript can't narrow dynamic keys well, so use assignment with type assertion
+        (data as Record<string, any>)[field as string] = this.transformValue(
+          field,
+          value,
+        );
       }
     }
-    return data as Partial<Prisma.charge_pointsUncheckedCreateInput>;
+    return data;
   };
 
   private buildConnectorPayload = (
