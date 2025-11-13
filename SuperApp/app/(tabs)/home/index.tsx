@@ -2,7 +2,7 @@
 import { Ionicons } from "@expo/vector-icons";
 // นำเข้า LinearGradient สำหรับสร้างพื้นหลังแบบไล่สี
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 // นำเข้า components พื้นฐานจาก React Native
 import {
   Animated,
@@ -14,10 +14,11 @@ import {
   ScrollView,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
 import { useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { ClipPath, Defs, G, Path, Rect } from "react-native-svg";
 import MiniProfileModal, { DEFAULT_PROFILE_AVATAR } from "./miniprofile";
 import NotificationModal from "./notification";
@@ -271,6 +272,70 @@ export default function HomeScreen() {
     pollInterval: CHARGING_STATUS_POLL_INTERVAL_MS,
   });
 
+  const { width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  const responsive = useMemo(() => {
+    const isSmallPhone = screenWidth < 360;
+    const isLargePhone = screenWidth >= 414 && screenWidth < 768;
+    const isTablet = screenWidth >= 768;
+
+    const horizontalGutter = isTablet
+      ? 48
+      : isLargePhone
+        ? 28
+        : isSmallPhone
+          ? 16
+          : 22;
+
+    const heroPaddingX = isTablet ? 10 : isLargePhone ? 10 : isSmallPhone ? 20 : 15;
+    const heroPaddingTop = isTablet ? 20 : isSmallPhone ? 10 : 10;
+    const heroPaddingBottom = isTablet ? 20 : isSmallPhone ? 5 : 10;
+    const heroCoinSize = isTablet ? 30 : isSmallPhone ? 5 : 25;
+    const heroPointFontSize = isTablet ? 20 : isSmallPhone ? 5 : 25;
+    const heroBadgePaddingX = isTablet ? 26 : isSmallPhone ? 5 : 15;
+    const heroTitleFont = isTablet ? 28 : isSmallPhone ? 5: 18;
+    const heroLogoWidth = isTablet ? 140 : isLargePhone ? 100 : isSmallPhone ? 104 : 118;
+    const heroLogoHeight = isTablet ? 48 : isLargePhone ? 44 : isSmallPhone ? 34 : 38;
+    const heroSubtitleFont = isTablet ? 22 : isSmallPhone ? 16 : 18;
+    const heroExpiryFont = isTablet ? 18 : isSmallPhone ? 13 : 15;
+
+    const availableWidth = Math.max(screenWidth - horizontalGutter * 2, 200);
+    const desiredPhoneWidth = Math.min(screenWidth * 0.85, 360);
+    const horizontalCardWidth = isTablet
+      ? Math.min(screenWidth * 0.4, 420)
+      : Math.min(availableWidth, Math.max(desiredPhoneWidth, 220));
+
+    const newsImageHeight = isTablet
+      ? Math.min(200, horizontalCardWidth * 0.55)
+      : Math.max(110, horizontalCardWidth * 0.55);
+
+    const recommendationAvatar = isTablet ? 76 : isSmallPhone ? 56 : 64;
+
+    return {
+      isSmallPhone,
+      isTablet,
+      horizontalGutter,
+      heroPaddingX,
+      heroPaddingTop,
+      heroPaddingBottom,
+      heroCoinSize,
+      heroPointFontSize,
+      heroBadgePaddingX,
+      heroTitleFont,
+      heroLogoWidth,
+      heroLogoHeight,
+      heroSubtitleFont,
+      heroExpiryFont,
+      horizontalCardWidth,
+      newsImageHeight,
+      recommendationAvatar,
+      cardSpacing: isTablet ? 24 : 16,
+    };
+  }, [screenWidth]);
+
+  const contentBottomPadding = 90 + insets.bottom + (responsive.isTablet ? 48 : 32);
+
   const handleNavigateToCharging = useCallback(() => {
     console.log('🚀 [HOME] handleNavigateToCharging called');
     console.log('🚀 [HOME] chargingPopupData:', chargingPopupData);
@@ -318,11 +383,14 @@ export default function HomeScreen() {
       {/* ScrollView: ทำให้เนื้อหาสามารถเลื่อนได้, ซ่อน scrollbar */}
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 0 }}
+        contentContainerStyle={{ paddingBottom: contentBottomPadding }}
         showsVerticalScrollIndicator={false}
       >
-        {/* ส่วนหลัก: padding ด้านข้าง 6, บนล่าง 4 และ 6 */}
-        <View className="px-6 pt-4 pb-0">
+        {/* ส่วนหลัก: padding ด้านข้างปรับตามหน้าจอ */}
+        <View
+          className="pt-4 pb-0"
+          style={{ paddingHorizontal: responsive.horizontalGutter }}
+        >
           {/* === HEADER SECTION === */}
           <View className="flex-row items-center justify-between mb-5">
             <TouchableScale
@@ -332,7 +400,18 @@ export default function HomeScreen() {
             >
               <Image source={profileAvatar} className="w-full h-full" />
             </TouchableScale>
-            <Text className="text-lg font-semibold text-[#1F2937]">หน้าหลัก</Text>
+            <Text
+              className="font-semibold text-[#1F2937]"
+              style={{
+                fontSize: responsive.isTablet
+                  ? 22
+                  : responsive.isSmallPhone
+                    ? 16
+                    : 18,
+              }}
+            >
+              หน้าหลัก
+            </Text>
             <TouchableScale
               className="items-center justify-center w-10 h-10"
               onPress={() => setNotificationVisible(true)}
@@ -345,60 +424,117 @@ export default function HomeScreen() {
 
           {/* === POINTS CARD SECTION === */}
           <View className="mb-5">
-            <TouchableScale activeOpacity={0.9} onPress={() =>router.push("/card") }>
-            <LinearGradient
-              colors={["#1F274B", "#395F85", "#589FAF", "#67C1A5", "#5EC1A0"]}
-              locations={[0, 0.25, 0.55, 0.75, 1]}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              className="px-10 pt-10 pb-0"
-              style={{ borderRadius: 20 }}
-            >
-              <View className="flex-row items-center justify-between mb-5">
-                <View>
-                  <View className="flex-row items-center mt-5 mb-1">
-                    <Image 
+            <TouchableScale activeOpacity={0.9} onPress={() => router.push("/card")}>
+              <LinearGradient
+                colors={["#1B2344", "#213B6B", "#2F6E8F", "#4FBFA2"]}
+                locations={[0, 0.35, 0.7, 1]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  borderRadius: 24,
+                  paddingHorizontal: responsive.heroPaddingX,
+                  paddingTop: responsive.heroPaddingTop,
+                  paddingBottom: responsive.heroPaddingBottom,
+                }}
+              >
+                <View className="flex-row items-start justify-between" style={{ gap: 12 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <Image
                       source={require("../../../assets/img/ponix-logo-06.png")}
-                      className="w-24 h-10 ml-1 "
                       resizeMode="contain"
+                      style={{
+                        width: responsive.heroLogoWidth,
+                        height: responsive.heroLogoHeight,
+                        marginRight: 8,
+                      }}
                     />
-                    <Text className="ml-0.5 text-2xl font-semibold text-white">
+                    <Text
+                      style={{
+                        fontSize: responsive.heroTitleFont,
+                        fontWeight: "600",
+                        color: "#F3F6FF",
+                      }}
+                    >
                       Point
                     </Text>
                   </View>
-                  <Text className="mt-1 ml-5 text-2xl text-white/80"> 
-                    คะแนนของฉัน
-                  </Text>
+                  <LinearGradient
+                    colors={["#F3F5FA", "#C9D1E0"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{
+                      borderRadius: 999,
+                      paddingHorizontal: responsive.heroBadgePaddingX,
+                      paddingVertical: responsive.isSmallPhone ? 6 : 8,
+                      shadowColor: "#0F172A",
+                      shadowOpacity: 0.25,
+                      shadowRadius: 8,
+                      shadowOffset: { width: 0, height: 4 },
+                      elevation: 8,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: responsive.isTablet ? 14 : 12,
+                        fontWeight: "600",
+                        color: "#1B2344",
+                      }}
+                    >
+                      รหัสสมาชิก P202501
+                    </Text>
+                  </LinearGradient>
                 </View>
-                <View
-                  className="p-4 py-2 rounded-full px-7 mr-9 bg-white/80"
+                <Text
                   style={{
-                    shadowColor: "#1B2344",
-                    shadowOpacity: 0.2,
-                    shadowRadius: 6,
-                    shadowOffset: { width: 0, height: 4 },
-                    elevation: 6,
+                    marginTop: responsive.isSmallPhone ? 12 : 16,
+                    fontSize: responsive.heroSubtitleFont,
+                    color: "rgba(255,255,255,0.9)",
                   }}
                 >
-                  <Text className="text-xs font-semibold text-[#1B2344]">
-                    รหัสสมาชิก P202501
-                  </Text>
-                </View>
-              </View>
-              <View className="flex-row items-center mb-2 ml-5">
-                <View className="items-center justify-center w-12 h-12 rounded-full bg-white/15">
-                  <CoinIcon size={36} />
-                </View>
-                <View className="ml-5">
-                  <Text className="text-3xl font-extrabold text-white">
+                  คะแนนของฉัน
+                </Text>
+                <View
+                  className="flex-row items-center"
+                  style={{ marginTop: responsive.isSmallPhone ? 12 : 18 }}
+                >
+                  <View
+                    className="items-center justify-center rounded-full bg-white/15"
+                    style={{
+                      width: responsive.heroCoinSize + 16,
+                      height: responsive.heroCoinSize + 16,
+                    }}
+                  >
+                    <CoinIcon size={responsive.heroCoinSize} />
+                  </View>
+                  <Text
+                    style={{
+                      marginLeft: responsive.isSmallPhone ? 12 : 16,
+                      fontSize: responsive.heroPointFontSize,
+                      fontWeight: "800",
+                      color: "#FFFFFF",
+                    }}
+                  >
                     262 P
                   </Text>
                 </View>
-              </View>
-              <View className="h-[2px] bg-white/90 mb-5 " />
-              <Text className="mb-5 ml-5 text-sm text-white/90"> ได้รับคะแนนคืน  10%  </Text>
-            </LinearGradient>
-           </TouchableScale>
+                <View
+                  style={{
+                    height: 1,
+                    backgroundColor: "rgba(255,255,255,0.35)",
+                    marginTop: responsive.isSmallPhone ? 16 : 22,
+                    marginBottom: responsive.isSmallPhone ? 12 : 18,
+                  }}
+                />
+                <Text
+                  style={{
+                    fontSize: responsive.heroExpiryFont,
+                    color: "rgba(255,255,255,0.9)",
+                  }}
+                >
+                  ได้รับคะแนนเพิ่ม 10%
+                </Text>
+              </LinearGradient>
+            </TouchableScale>
           </View>
 
           {chargingPopupData && isChargingPopupVisible ? (
@@ -424,19 +560,27 @@ export default function HomeScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingRight: 24 }}
+              contentContainerStyle={{ paddingRight: responsive.horizontalGutter }}
             >
               {newsUpdates.map((item, index) => (
                 <TouchableScale
                   key={item.id}
-                  className="mt-2 mb-2 bg-white shadow-sm w-72 rounded-2xl" //ตั้งค่าระยะขอบกรอบ ให้รูปโดนไม่ทับ
-                  style={{ marginRight: index === newsUpdates.length - 1 ? 0 : 16 }}
+                  className="mt-2 mb-2 bg-white shadow-sm rounded-2xl" //ตั้งค่าระยะขอบกรอบ ให้รูปโดนไม่ทับ
+                  style={{
+                    width: responsive.horizontalCardWidth,
+                    marginRight:
+                      index === newsUpdates.length - 1 ? 0 : responsive.cardSpacing,
+                  }}
                   activeOpacity={0.9}
                 >
                   <Image
                     source={{ uri: item.image }}
-                    className="w-full h-32 rounded-t-2xl"
-                    style={{ borderTopLeftRadius: 16, borderTopRightRadius: 16 }}
+                    className="w-full rounded-t-2xl"
+                    style={{
+                      height: responsive.newsImageHeight,
+                      borderTopLeftRadius: 16,
+                      borderTopRightRadius: 16,
+                    }}
                   />
                   <View className="p-4">
                     <View className="self-start px-2 py-1 mb-3 bg-[#E0F2FE] rounded-full">
@@ -477,25 +621,35 @@ export default function HomeScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingRight: 24 }}
+              contentContainerStyle={{ paddingRight: responsive.horizontalGutter }}
             >
               {recommendationTopics.map((topic, index) => (
                 <TouchableScale
                   key={topic.id}
-                  className="p-4 mb-2 bg-white shadow-sm w-72 rounded-2xl" //ตั้งค่าระยะขอบกรอบ ให้รูปโดนไม่ทับ
+                  className="p-4 mb-2 bg-white shadow-sm rounded-2xl" //ตั้งค่าระยะขอบกรอบ ให้รูปโดนไม่ทับ
                   style={{
+                    width: responsive.horizontalCardWidth,
                     marginRight:
-                      index === recommendationTopics.length - 1 ? 0 : 16,
+                      index === recommendationTopics.length - 1
+                        ? 0
+                        : responsive.cardSpacing,
                   }}
                   activeOpacity={0.9}
                 >
                   <View className="flex-row items-center">
                     <Image
                       source={{ uri: topic.image }}
-                      className="w-16 h-16 rounded-xl"
-                      style={{ borderRadius: 16 }}
+                      className="rounded-xl"
+                      style={{
+                        width: responsive.recommendationAvatar,
+                        height: responsive.recommendationAvatar,
+                        borderRadius: 16,
+                      }}
                     />
-                    <View className="flex-1 ml-4">
+                    <View
+                      className="flex-1"
+                      style={{ marginLeft: responsive.isSmallPhone ? 12 : 16 }}
+                    >
                       <Text className="text-sm font-semibold text-[#1F2937]">
                         {topic.title}
                       </Text>
