@@ -292,7 +292,7 @@ export default function CardScreen() {
           {/* ปุ่มเพิ่ม (เพิ่มบัตรใหม่) */}
           <TouchableOpacity 
             onPress={() => router.push('/(tabs)/card/add-payment-method')}
-            className="w-10 h-10 rounded-full bg-white items-center justify-center shadow-sm"
+            className="items-center justify-center w-10 h-10 bg-white rounded-full shadow-sm"
           >
             <Ionicons name="add-outline" size={24} color="#1F2937" />
           </TouchableOpacity>
@@ -300,18 +300,31 @@ export default function CardScreen() {
       </View>
 
       {/* === POINTS CARD SECTION === */}
-      <View className="mb-5" style={{ paddingHorizontal: pointResponsive.horizontalGutter }}>
-        <TouchableScale activeOpacity={0.9} onPress={() => router.push("/card")}>
+      <View className="mb-5">
+        <TouchableScale
+          activeOpacity={0.9}
+          onPress={() => router.push("/card")}
+          style={{ alignSelf: "stretch", marginHorizontal: pointResponsive.cardHorizontalMargin }}
+        >
           <LinearGradient
-            colors={["#1B2344", "#213B6B", "#2F6E8F", "#4FBFA2"]}
-            locations={[0, 0.35, 0.7, 1]}
+            colors={["#1F274B", "#395F85", "#589FAF", "#67C1A5", "#5EC1A0"]}
+            locations={[0, 0.15, 0.45, 0.75, 1]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{
-              borderRadius: 24,
+              minHeight: pointResponsive.cardHeight,
+              borderRadius: 28,
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.15)",
               paddingHorizontal: pointResponsive.heroPaddingX,
               paddingTop: pointResponsive.heroPaddingTop,
               paddingBottom: pointResponsive.heroPaddingBottom,
+              shadowColor: "#0B1E2B",
+              shadowOpacity: 0.25,
+              shadowRadius: 18,
+              shadowOffset: { width: 0, height: 12 },
+              elevation: 12,
+              position: "relative",
             }}
           >
             <View className="flex-row items-start justify-between" style={{ gap: 12 }}>
@@ -335,35 +348,38 @@ export default function CardScreen() {
                   Point
                 </Text>
               </View>
-              <LinearGradient
-                colors={["#F3F5FA", "#C9D1E0"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+            </View>
+            <LinearGradient
+              colors={["#F3F5FA", "#C9D1E0"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{
+                position: "absolute",
+                top: pointResponsive.heroBadgeOffsetTop,
+                right: pointResponsive.heroBadgeOffsetRight,
+                borderRadius: 999,
+                paddingHorizontal: pointResponsive.heroBadgePaddingX,
+                paddingVertical: pointResponsive.heroBadgePaddingY,
+                shadowColor: "#0F172A",
+                shadowOpacity: 0.25,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 4 },
+                elevation: 8,
+              }}
+            >
+              <Text
                 style={{
-                  borderRadius: 999,
-                  paddingHorizontal: pointResponsive.heroBadgePaddingX,
-                  paddingVertical: pointResponsive.isSmallPhone ? 6 : 8,
-                  shadowColor: "#0F172A",
-                  shadowOpacity: 0.25,
-                  shadowRadius: 8,
-                  shadowOffset: { width: 0, height: 4 },
-                  elevation: 8,
+                  fontSize: pointResponsive.heroBadgeFontSize,
+                  fontWeight: "600",
+                  color: "#1B2344",
                 }}
               >
-                <Text
-                  style={{
-                    fontSize: pointResponsive.isTablet ? 14 : 12,
-                    fontWeight: "600",
-                    color: "#1B2344",
-                  }}
-                >
-                  รหัสสมาชิก P202501
-                </Text>
-              </LinearGradient>
-            </View>
+                รหัสสมาชิก 000000
+              </Text>
+            </LinearGradient>
             <Text
               style={{
-                marginTop: pointResponsive.isSmallPhone ? 12 : 16,
+                marginTop: pointResponsive.heroSubtitleMarginTop,
                 fontSize: pointResponsive.heroSubtitleFont,
                 color: "rgba(255,255,255,0.9)",
               }}
@@ -372,20 +388,21 @@ export default function CardScreen() {
             </Text>
             <View
               className="flex-row items-center"
-              style={{ marginTop: pointResponsive.isSmallPhone ? 12 : 18 }}
+              style={{ marginTop: pointResponsive.heroValueSpacing }}
             >
               <View
                 className="items-center justify-center rounded-full bg-white/15"
                 style={{
-                  width: pointResponsive.heroCoinSize + 16,
-                  height: pointResponsive.heroCoinSize + 16,
+                  width: pointResponsive.heroCoinSize + 15,
+                  height: pointResponsive.heroCoinSize + 15,
+                  backgroundColor: "rgba(255,255,255,0.2)",
                 }}
               >
-                <CoinIcon size={pointResponsive.heroCoinSize} />
+                <CoinIcon size={pointResponsive.heroCoinSize - 4} />
               </View>
               <Text
                 style={{
-                  marginLeft: pointResponsive.isSmallPhone ? 12 : 16,
+                  marginLeft: pointResponsive.heroCoinGap,
                   fontSize: pointResponsive.heroPointFontSize,
                   fontWeight: "800",
                   color: "#FFFFFF",
@@ -398,8 +415,8 @@ export default function CardScreen() {
               style={{
                 height: 1,
                 backgroundColor: "rgba(255,255,255,0.35)",
-                marginTop: pointResponsive.isSmallPhone ? 16 : 22,
-                marginBottom: pointResponsive.isSmallPhone ? 12 : 18,
+                marginTop: pointResponsive.heroDividerSpacingTop,
+                marginBottom: pointResponsive.heroDividerSpacingBottom,
               }}
             />
             <Text
@@ -408,7 +425,7 @@ export default function CardScreen() {
                 color: "rgba(255,255,255,0.9)",
               }}
             >
-              ได้รับคะแนนเพิ่ม 10%
+              หมดอายุ : 30 ก.ย. 2568
             </Text>
           </LinearGradient>
         </TouchableScale>
@@ -427,7 +444,7 @@ export default function CardScreen() {
           />
         }
       >
-        <View style={{ paddingHorizontal: pointResponsive.horizontalGutter }}>
+        <View style={{ paddingHorizontal: pointResponsive.cardHorizontalMargin }}>
           {/* === BALANCE CARD SECTION === */}
           {/* การ์ดแสดงยอดเงินคงเหลือ */}
        
@@ -453,12 +470,12 @@ export default function CardScreen() {
                 // กว้าง 22% (4 อันต่อแถว)
                 <TouchableOpacity
                   key={index}
-                  className="bg-white rounded-xl p-4 items-center shadow-sm"
+                  className="items-center p-4 bg-white shadow-sm rounded-xl"
                   style={{ width: "22%" }}
                 >
                   {/* วงกลมไอคอน */}
                   <View
-                    className="w-12 h-12 rounded-full items-center justify-center mb-2"
+                    className="items-center justify-center w-12 h-12 mb-2 rounded-full"
                     style={{ backgroundColor: `${action.color}20` }}
                   >
                     <Ionicons
@@ -506,7 +523,7 @@ export default function CardScreen() {
                          </View>
                        </View>
                        {/* ไอคอนบัตร */}
-                       <View className="w-12 h-12 bg-blue-100 rounded-lg items-center justify-center mr-3">
+                       <View className="items-center justify-center w-12 h-12 mr-3 bg-blue-100 rounded-lg">
                          <Ionicons 
                            name="card" 
                            size={24} 
@@ -532,14 +549,14 @@ export default function CardScreen() {
                  </TouchableOpacity>
                ))
              ) : (
-              <View className="bg-white rounded-xl p-6 items-center shadow-sm">
+              <View className="items-center p-6 bg-white shadow-sm rounded-xl">
                 <Ionicons name="card-outline" size={48} color="#9CA3AF" />
                 <Text className="text-[#6B7280] mt-2 mb-4">ยังไม่มีบัตรที่ผูกไว้</Text>
                 <TouchableOpacity
                   onPress={() => router.push('/(tabs)/card/add-payment-method')}
                   className="px-4 py-2 bg-[#51BC8E] rounded-lg"
                 >
-                  <Text className="text-white font-medium">เพิ่มบัตร</Text>
+                  <Text className="font-medium text-white">เพิ่มบัตร</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -558,9 +575,9 @@ export default function CardScreen() {
             ) : (
               <>
                 <Ionicons name="cash" size={24} color="white" />
-                <Text className="text-white font-semibold mt-1">หักเงิน 200 บาท</Text>
+                <Text className="mt-1 font-semibold text-white">หักเงิน 200 บาท</Text>
                 {selectedCard && (
-                  <Text className="text-white text-sm mt-1">
+                  <Text className="mt-1 text-sm text-white">
                     จากบัตร {selectedCard.brand?.toUpperCase()} ****{selectedCard.lastDigits}
                   </Text>
                 )}
@@ -584,7 +601,7 @@ export default function CardScreen() {
             </View>
 
             {/* กล่องรายการธุรกรรม */}
-            <View className="bg-white rounded-xl shadow-sm">
+            <View className="bg-white shadow-sm rounded-xl">
               {recentPayments.length > 0 ? (
                 recentPayments.map((payment, index) => {
                   const status = payment.status?.toLowerCase() ?? 'pending';

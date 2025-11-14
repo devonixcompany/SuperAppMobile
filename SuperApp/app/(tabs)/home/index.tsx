@@ -427,115 +427,147 @@ export default function HomeScreen() {
 
           {/* === POINTS CARD SECTION === */}
           <View className="mb-5">
-            <TouchableScale activeOpacity={0.9} onPress={() => router.push("/card")}>
+            <TouchableScale
+              activeOpacity={0.9}
+              onPress={() => router.push("/card")}
+              style={{ alignSelf: "stretch", marginHorizontal: pointResponsive.cardHorizontalMargin }}
+            >
               <LinearGradient
-                colors={["#1B2344", "#213B6B", "#2F6E8F", "#4FBFA2"]}
-                locations={[0, 0.35, 0.7, 1]}
+                colors={["#1F274B", "#395F85", "#589FAF", "#67C1A5", "#5EC1A0"]}
+                locations={[0, 0.15, 0.45, 0.75, 1]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{
-                  borderRadius: 24,
+                  minHeight: pointResponsive.cardHeight,
+                  borderRadius: 28,
+                  borderWidth: 1,
+                  borderColor: "rgba(255,255,255,0.15)",
                   paddingHorizontal: pointResponsive.heroPaddingX,
                   paddingTop: pointResponsive.heroPaddingTop,
                   paddingBottom: pointResponsive.heroPaddingBottom,
+                  shadowColor: "#0B1E2B",
+                  shadowOpacity: 0.25,
+                  shadowRadius: 18,
+                  shadowOffset: { width: 0, height: 12 },
+                  elevation: 12,
+                  position: "relative",
                 }}
               >
-                <View className="flex-row items-start justify-between" style={{ gap: 12 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <Image
-                      source={require("../../../assets/img/ponix-logo-06.png")}
-                      resizeMode="contain"
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    flexWrap: "wrap",
+                    gap: pointResponsive.heroHeaderGap,
+                  }}
+                >
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View
                       style={{
-                        width: pointResponsive.heroLogoWidth,
-                        height: pointResponsive.heroLogoHeight,
-                        marginRight: 8,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: pointResponsive.heroHeaderGap,
+                      }}
+                    >
+                      <Image
+                        source={require("../../../assets/img/ponix-logo-06.png")}
+                        resizeMode="contain"
+                        style={{
+                          width: pointResponsive.heroLogoWidth,
+                          height: pointResponsive.heroLogoHeight,
+                        }}
+                      />
+                      <Text
+                        style={{
+                          fontSize: pointResponsive.heroTitleFont,
+                          fontWeight: "600",
+                          color: "#F3F6FF",
+                        }}
+                      >
+                        Point
+                      </Text>
+                    </View>
+                    <Text
+                      style={{
+                        marginTop: pointResponsive.heroSubtitleMarginTop,
+                        fontSize: pointResponsive.heroSubtitleFont,
+                        color: "rgba(255,255,255,0.9)",
+                      }}
+                    >
+                      คะแนนของฉัน
+                    </Text>
+                    <View
+                      className="flex-row items-center"
+                      style={{ marginTop: pointResponsive.heroValueSpacing }}
+                    >
+                      <View
+                        className="items-center justify-center rounded-full bg-white/15"
+                        style={{
+                          width: pointResponsive.heroCoinSize + 2,
+                          height: pointResponsive.heroCoinSize + 2,
+                          backgroundColor: "rgba(255,255,255,0.2)",
+                        }}
+                      >
+                        <CoinIcon size={pointResponsive.heroCoinSize } />
+                      </View>
+                      <Text
+                        style={{
+                          marginLeft: pointResponsive.heroCoinGap,
+                          fontSize: pointResponsive.heroPointFontSize,
+                          fontWeight: "800",
+                          color: "#FFFFFF",
+                        }}
+                      >
+                        262 P
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        height: 1,
+                        backgroundColor: "rgba(255,255,255,0.35)",
+                        marginTop: pointResponsive.heroDividerSpacingTop,
+                        marginBottom: pointResponsive.heroDividerSpacingBottom,
                       }}
                     />
                     <Text
-                    style={{
-                      fontSize: pointResponsive.heroTitleFont,
-                      fontWeight: "600",
-                      color: "#F3F6FF",
-                    }}
-                    >
-                      Point
-                    </Text>
-                  </View>
-                  <LinearGradient
-                    colors={["#F3F5FA", "#C9D1E0"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{
-                      borderRadius: 999,
-                      paddingHorizontal: pointResponsive.heroBadgePaddingX,
-                      paddingVertical: pointResponsive.isSmallPhone ? 6 : 8,
-                      shadowColor: "#0F172A",
-                      shadowOpacity: 0.25,
-                      shadowRadius: 8,
-                      shadowOffset: { width: 0, height: 4 },
-                      elevation: 8,
-                    }}
-                  >
-                    <Text
                       style={{
-                        fontSize: responsive.isTablet ? 14 : 12,
-                        fontWeight: "600",
-                        color: "#1B2344",
+                        fontSize: pointResponsive.heroExpiryFont,
+                        color: "rgba(255,255,255,0.9)",
                       }}
                     >
-                      รหัสสมาชิก P202501
+                      สิทธิพิเศษของคุณ
                     </Text>
-                  </LinearGradient>
-                </View>
-                <Text
-                style={{
-                  marginTop: pointResponsive.isSmallPhone ? 12 : 16,
-                  fontSize: pointResponsive.heroSubtitleFont,
-                  color: "rgba(255,255,255,0.9)",
-                }}
-                >
-                  คะแนนของฉัน
-                </Text>
-                <View
-                  className="flex-row items-center"
-                  style={{ marginTop: pointResponsive.isSmallPhone ? 12 : 18 }}
-                >
-                  <View
-                    className="items-center justify-center rounded-full bg-white/15"
-                    style={{
-                      width: pointResponsive.heroCoinSize + 16,
-                      height: pointResponsive.heroCoinSize + 16,
-                    }}
-                  >
-                    <CoinIcon size={pointResponsive.heroCoinSize} />
                   </View>
+                </View>
+                <LinearGradient
+                  colors={["#F3F5FA", "#C9D1E0"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    position: "absolute",
+                    top: pointResponsive.heroBadgeOffsetTop,
+                    right: pointResponsive.heroBadgeOffsetRight,
+                    borderRadius: 999,
+                    paddingHorizontal: pointResponsive.heroBadgePaddingX,
+                    paddingVertical: pointResponsive.heroBadgePaddingY,
+                    shadowColor: "#0F172A",
+                    shadowOpacity: 0.25,
+                    shadowRadius: 8,
+                    shadowOffset: { width: 0, height: 4 },
+                    elevation: 8,
+                  }}
+                >
                   <Text
                     style={{
-                      marginLeft: pointResponsive.isSmallPhone ? 12 : 16,
-                      fontSize: pointResponsive.heroPointFontSize,
-                      fontWeight: "800",
-                      color: "#FFFFFF",
+                      fontSize: pointResponsive.heroBadgeFontSize,
+                      fontWeight: "400",
+                      color: "#1B2344",
                     }}
                   >
-                    262 P
+                    รหัสสมาชิก 000000
                   </Text>
-                </View>
-                <View
-                  style={{
-                    height: 1,
-                    backgroundColor: "rgba(255,255,255,0.35)",
-                    marginTop: responsive.isSmallPhone ? 16 : 22,
-                    marginBottom: responsive.isSmallPhone ? 12 : 18,
-                  }}
-                />
-              <Text
-                style={{
-                  fontSize: pointResponsive.heroExpiryFont,
-                  color: "rgba(255,255,255,0.9)",
-                }}
-              >
-                  ได้รับคะแนนเพิ่ม 10%
-                </Text>
+                </LinearGradient>
               </LinearGradient>
             </TouchableScale>
           </View>
