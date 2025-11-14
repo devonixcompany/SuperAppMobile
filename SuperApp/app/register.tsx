@@ -139,6 +139,16 @@ export default function RegisterScreen() {
               >
                 กรอกข้อมูลเพื่อสร้างบัญชีใหม่
               </Text>
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: "#9CA3AF",
+                  textAlign: "center",
+                  marginTop: 8,
+                }}
+              >
+                โหมดพัฒนา: สมัครด้วย 0814266508 และกรอก OTP 123456 เพื่อทดสอบ
+              </Text>
             </View>
 
             {/* Form */}

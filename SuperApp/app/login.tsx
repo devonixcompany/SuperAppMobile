@@ -192,6 +192,7 @@ export default function LoginScreen() {
                 ผู้ใช้สามารถเข้าสู่ระบบ{"\n"}ด้วยหมายเลขโทรศัพท์
                 และรหัสผ่านที่ลงทะเบียนไว้แล้ว
               </Text>
+     
             </View>
 
             {/* === FORM SECTION === */}

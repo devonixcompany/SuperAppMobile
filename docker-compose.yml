@@ -11,7 +11,7 @@ services:
       POSTGRES_USER: csms_user
       POSTGRES_PASSWORD: csms_password
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
@@ -22,6 +22,43 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  backend:
+    build:
+      context: ./backenBun
+      dockerfile: Dockerfile
+    container_name: csms-backend
+    restart: unless-stopped
+    env_file:
+      - backenBun/.env
+    environment:
+      DATABASE_URL: postgresql://csms_user:csms_password@postgres:5432/csms?schema=public
+      WEBSOCKET_URL: ws://ws-gateway:3000
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8081}
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+    networks:
+      - csms-network
+
+  ws-gateway:
+    build:
+      context: ./ws-gateway
+      dockerfile: Dockerfile
+    container_name: csms-ws-gateway
+    restart: unless-stopped
+    env_file:
+      - ws-gateway/.env
+    environment:
+      BACKEND_URL: http://backend:8080
+      WS_GATEWAY_URL: ws://0.0.0.0:3000
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    networks:
+      - csms-network
 volumes:
   postgres_data:
     driver: local
