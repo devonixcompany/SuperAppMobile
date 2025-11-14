@@ -24,7 +24,7 @@ export default function StationMarker({ station, onPress, service }: StationMark
       <View
         style={[
           styles.markerContainer,
-          { backgroundColor: service.getMarkerColor(station.status) },
+          { backgroundColor: service.getStationColor(station) },
         ]}
       >
         <Ionicons name="flash" size={20} color="white" />

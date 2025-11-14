@@ -64,14 +64,15 @@ export class ChargingStationService {
     return apiStations.map((station) => {
       console.log('Transforming station:', station.stationname);
 
-      // Count total charge points by status
-      const availableCount = station.charge_points?.filter(
-        (cp: any) => cp.chargepointstatus === 'AVAILABLE'
-      ).length || 0;
-
-      const inUseCount = station.charge_points?.filter(
-        (cp: any) => cp.chargepointstatus === 'OCCUPIED' || cp.chargepointstatus === 'CHARGING'
-      ).length || 0;
+      const connectorList = (station.charge_points || []).flatMap((cp: any) => cp.connectors || []);
+      const connectorsAvailable = connectorList.filter((c: any) => c.connectorstatus === 'AVAILABLE').length;
+      const connectorsTotal = connectorList.length;
+      const availableCount = connectorsTotal > 0
+        ? connectorsAvailable
+        : (station.charge_points?.filter((cp: any) => cp.chargepointstatus === 'AVAILABLE').length || 0);
+      const inUseCount = connectorsTotal > 0
+        ? (connectorsTotal - connectorsAvailable)
+        : (station.charge_points?.filter((cp: any) => cp.chargepointstatus === 'OCCUPIED' || cp.chargepointstatus === 'CHARGING').length || 0);
 
       // Determine overall station status
       let status: 'available' | 'in-use' | 'offline' = 'offline';
@@ -129,6 +130,10 @@ export class ChargingStationService {
         closeTime = station.onPeakEndTime;
       }
 
+      const totalCount = connectorsTotal > 0
+        ? connectorsTotal
+        : (station.charge_points?.reduce((sum: number, cp: any) => sum + (cp.connectorCount || 0), 0) || 0);
+
       const transformed = {
         id: station.id,
         name: station.stationname,
@@ -138,6 +143,9 @@ export class ChargingStationService {
         status: status,
         acCount: acCount,
         dcCount: dcCount,
+        availableCount: availableCount,
+        inUseCount: inUseCount,
+        totalCount: totalCount,
         power: `${maxPower.toFixed(2)} kW`,
         pricePerUnit: pricePerUnit,
         openTime: openTime,
@@ -148,6 +156,12 @@ export class ChargingStationService {
         onPeakStartTime: station.onPeakStartTime || '',
         onPeakEndTime: station.onPeakEndTime || '',
         connectorTypes: Array.from(connectorTypesSet),
+        connectors: connectorList.map((c: any) => ({
+          connectorId: c.connectorId,
+          connectorstatus: c.connectorstatus,
+          type: c.type,
+          maxPower: c.maxPower,
+        })),
       };
 
       console.log('✅ Transformed station:', {
@@ -346,6 +360,17 @@ export class ChargingStationService {
       default:
         return '#6b7280'; // Gray
     }
+  }
+
+  public getStationColor(station: ChargingStation): string {
+    const total = station.totalCount ?? 0;
+    const available = station.availableCount ?? 0;
+    if (total > 0) {
+      if (available === 0) return '#ef4444';
+      if (available === total) return '#10b981';
+      return '#f59e0b';
+    }
+    return this.getMarkerColor(station.status);
   }
 
   /**

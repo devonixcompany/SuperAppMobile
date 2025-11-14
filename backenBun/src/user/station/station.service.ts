@@ -48,7 +48,15 @@ export class StationService {
               chargePointIdentity: true,
               chargepointstatus: true,
               connectorCount: true,
-              powerRating: true
+              powerRating: true,
+              connectors: {
+                select: {
+                  connectorId: true,
+                  connectorstatus: true,
+                  type: true,
+                  maxPower: true,
+                }
+              }
             }
           }
         },
@@ -119,7 +127,15 @@ export class StationService {
               chargePointIdentity: true,
               chargepointstatus: true,
               connectorCount: true,
-              powerRating: true
+              powerRating: true,
+              connectors: {
+                select: {
+                  connectorId: true,
+                  connectorstatus: true,
+                  type: true,
+                  maxPower: true,
+                }
+              }
             }
           }
         }

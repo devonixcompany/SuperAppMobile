@@ -17,6 +17,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
+import { usePointCardResponsive } from "@/hooks/usePointCardResponsive";
 import { useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { ClipPath, Defs, G, Path, Rect } from "react-native-svg";
@@ -26,7 +27,6 @@ import {
   ChargingStatusInlineCard,
   useChargingStatusPopup,
 } from "./popup";
-import { usePointCardResponsive } from "@/hooks/usePointCardResponsive";
 
 type NewsItem = {
   id: string;
