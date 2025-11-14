@@ -112,6 +112,17 @@ export default function ChargeSummaryScreen() {
   const rateParam = resolveParam(params.rate);
   const selectedCardIdParam = resolveParam(params.selectedCardId);
 
+  const homeNavigationRef = useRef(false);
+  const goHome = useCallback(() => {
+    if (homeNavigationRef.current) {
+      return;
+    }
+    homeNavigationRef.current = true;
+    setTimeout(() => {
+      router.replace("/(tabs)/home");
+    }, 50);
+  }, [router]);
+
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [isPaymentModalVisible, setPaymentModalVisible] = useState(false);
@@ -173,7 +184,7 @@ export default function ChargeSummaryScreen() {
               Alert.alert(
                 'ชำระเงินสำเร็จ',
                 'บันทึกการชำระเงินเรียบร้อยแล้ว',
-                [{ text: 'ตกลง', onPress: () => router.replace('/(tabs)/home') }]
+                [{ text: 'ตกลง', onPress: goHome }]
               );
             } else {
               Alert.alert('ชำระเงินไม่สำเร็จ', failureMessage ?? 'ไม่สามารถชำระเงินได้');
@@ -189,7 +200,7 @@ export default function ChargeSummaryScreen() {
         Alert.alert('หมดเวลา', 'การตรวจสอบการยืนยัน 3DS หมดเวลา กรุณาลองใหม่');
       }
     }, intervalMs);
-  }, [loadPaymentCards, stopPolling]);
+  }, [loadPaymentCards, stopPolling, goHome]);
 
 
   const energyKWh = useMemo(() => {
@@ -311,7 +322,7 @@ export default function ChargeSummaryScreen() {
       Alert.alert(
         'ชำระเงินสำเร็จ',
         'บันทึกการชำระเงินเรียบร้อยแล้ว',
-        [{ text: 'ตกลง', onPress: () => router.replace('/(tabs)/home') }]
+        [{ text: 'ตกลง', onPress: goHome }]
       );
     } catch (error: any) {
       console.error('Process payment error:', error);
@@ -323,7 +334,7 @@ export default function ChargeSummaryScreen() {
     } finally {
       setProcessingPayment(false);
     }
-  }, [loadPaymentCards, selectedCardId, transactionId]);
+  }, [loadPaymentCards, selectedCardId, transactionId, goHome]);
 
   // Stop polling if modal is closed or on unmount
   useEffect(() => {
@@ -349,7 +360,7 @@ export default function ChargeSummaryScreen() {
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => router.replace("/(tabs)/home")}
+              onPress={goHome}
             >
               <Ionicons name="chevron-back" size={24} color={COLORS.textPrimary} />
             </TouchableOpacity>
@@ -480,7 +491,7 @@ export default function ChargeSummaryScreen() {
             <TouchableOpacity
               style={styles.secondaryButton}
               activeOpacity={0.85}
-              onPress={() => router.replace("/(tabs)/home")}
+              onPress={goHome}
             >
               <Text style={styles.secondaryButtonText}>กลับหน้าหลัก</Text>
             </TouchableOpacity>

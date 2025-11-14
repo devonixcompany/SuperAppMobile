@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Linking from "expo-linking";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -24,6 +24,7 @@ import ClusteredMapView from "react-native-map-clustering";
 import { Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
 import { mockChargingStationsThai } from "../../../data/mockChargingStations";
 import { ChargingStation } from "../../../types/charging.types";
+import { ChargingStationService } from "./ChargingStationService";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const BOTTOM_SHEET_MAX_HEIGHT = SCREEN_HEIGHT * 0.4;
@@ -57,18 +58,32 @@ export default function ChargingMapScreen() {
   const isAnimating = useRef(false);
   const isUserInteracting = useRef(false);
 
-  // Initialize data and permissions
+  // Initialize location permission on mount
   useEffect(() => {
-    initializeData();
+    requestLocationPermission();
   }, []);
 
-  const initializeData = async () => {
+  // Load charging stations every time screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      loadChargingStations();
+    }, [])
+  );
+
+  const loadChargingStations = async () => {
     try {
-      await requestLocationPermission();
-      setChargingStations(mockChargingStationsThai);
+      setLoading(true);
+
+      // โหลดข้อมูลสถานีชาร์จจาก API
+      const service = ChargingStationService.getInstance();
+      const stations = await service.loadChargingStations();
+
+      setChargingStations(stations);
       setLoading(false);
     } catch (error) {
-      console.error("Error initializing data:", error);
+      console.error("Error loading charging stations:", error);
+      // Fallback ไปใช้ mock data ถ้า API มีปัญหา
+      setChargingStations(mockChargingStationsThai);
       setLoading(false);
     }
   };

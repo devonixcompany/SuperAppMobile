@@ -26,6 +26,7 @@ import {
   ChargingStatusInlineCard,
   useChargingStatusPopup,
 } from "./popup";
+import { usePointCardResponsive } from "@/hooks/usePointCardResponsive";
 
 type NewsItem = {
   id: string;
@@ -334,6 +335,8 @@ export default function HomeScreen() {
     };
   }, [screenWidth]);
 
+  const pointResponsive = usePointCardResponsive();
+
   const contentBottomPadding = 90 + insets.bottom + (responsive.isTablet ? 48 : 32);
 
   const handleNavigateToCharging = useCallback(() => {
@@ -432,9 +435,9 @@ export default function HomeScreen() {
                 end={{ x: 1, y: 1 }}
                 style={{
                   borderRadius: 24,
-                  paddingHorizontal: responsive.heroPaddingX,
-                  paddingTop: responsive.heroPaddingTop,
-                  paddingBottom: responsive.heroPaddingBottom,
+                  paddingHorizontal: pointResponsive.heroPaddingX,
+                  paddingTop: pointResponsive.heroPaddingTop,
+                  paddingBottom: pointResponsive.heroPaddingBottom,
                 }}
               >
                 <View className="flex-row items-start justify-between" style={{ gap: 12 }}>
@@ -443,17 +446,17 @@ export default function HomeScreen() {
                       source={require("../../../assets/img/ponix-logo-06.png")}
                       resizeMode="contain"
                       style={{
-                        width: responsive.heroLogoWidth,
-                        height: responsive.heroLogoHeight,
+                        width: pointResponsive.heroLogoWidth,
+                        height: pointResponsive.heroLogoHeight,
                         marginRight: 8,
                       }}
                     />
                     <Text
-                      style={{
-                        fontSize: responsive.heroTitleFont,
-                        fontWeight: "600",
-                        color: "#F3F6FF",
-                      }}
+                    style={{
+                      fontSize: pointResponsive.heroTitleFont,
+                      fontWeight: "600",
+                      color: "#F3F6FF",
+                    }}
                     >
                       Point
                     </Text>
@@ -464,8 +467,8 @@ export default function HomeScreen() {
                     end={{ x: 1, y: 1 }}
                     style={{
                       borderRadius: 999,
-                      paddingHorizontal: responsive.heroBadgePaddingX,
-                      paddingVertical: responsive.isSmallPhone ? 6 : 8,
+                      paddingHorizontal: pointResponsive.heroBadgePaddingX,
+                      paddingVertical: pointResponsive.isSmallPhone ? 6 : 8,
                       shadowColor: "#0F172A",
                       shadowOpacity: 0.25,
                       shadowRadius: 8,
@@ -485,31 +488,31 @@ export default function HomeScreen() {
                   </LinearGradient>
                 </View>
                 <Text
-                  style={{
-                    marginTop: responsive.isSmallPhone ? 12 : 16,
-                    fontSize: responsive.heroSubtitleFont,
-                    color: "rgba(255,255,255,0.9)",
-                  }}
+                style={{
+                  marginTop: pointResponsive.isSmallPhone ? 12 : 16,
+                  fontSize: pointResponsive.heroSubtitleFont,
+                  color: "rgba(255,255,255,0.9)",
+                }}
                 >
                   คะแนนของฉัน
                 </Text>
                 <View
                   className="flex-row items-center"
-                  style={{ marginTop: responsive.isSmallPhone ? 12 : 18 }}
+                  style={{ marginTop: pointResponsive.isSmallPhone ? 12 : 18 }}
                 >
                   <View
                     className="items-center justify-center rounded-full bg-white/15"
                     style={{
-                      width: responsive.heroCoinSize + 16,
-                      height: responsive.heroCoinSize + 16,
+                      width: pointResponsive.heroCoinSize + 16,
+                      height: pointResponsive.heroCoinSize + 16,
                     }}
                   >
-                    <CoinIcon size={responsive.heroCoinSize} />
+                    <CoinIcon size={pointResponsive.heroCoinSize} />
                   </View>
                   <Text
                     style={{
-                      marginLeft: responsive.isSmallPhone ? 12 : 16,
-                      fontSize: responsive.heroPointFontSize,
+                      marginLeft: pointResponsive.isSmallPhone ? 12 : 16,
+                      fontSize: pointResponsive.heroPointFontSize,
                       fontWeight: "800",
                       color: "#FFFFFF",
                     }}
@@ -525,12 +528,12 @@ export default function HomeScreen() {
                     marginBottom: responsive.isSmallPhone ? 12 : 18,
                   }}
                 />
-                <Text
-                  style={{
-                    fontSize: responsive.heroExpiryFont,
-                    color: "rgba(255,255,255,0.9)",
-                  }}
-                >
+              <Text
+                style={{
+                  fontSize: pointResponsive.heroExpiryFont,
+                  color: "rgba(255,255,255,0.9)",
+                }}
+              >
                   ได้รับคะแนนเพิ่ม 10%
                 </Text>
               </LinearGradient>
