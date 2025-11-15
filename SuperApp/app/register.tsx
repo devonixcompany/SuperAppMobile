@@ -23,8 +23,8 @@ const { auth } = require("@/config/firebaseConfig") as { auth: Auth };
 
 export default function RegisterScreen() {
   const [phoneNumber, setPhoneNumber] = useState("");
-
   const [loading, setLoading] = useState(false);
+  const [showRecaptcha, setShowRecaptcha] = useState(false);
   const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal>(null);
 
   const formatPhoneNumber = (phone: string) => {
@@ -69,7 +69,9 @@ export default function RegisterScreen() {
       const formattedPhone = formatPhoneNumber(phoneNumber);
       console.log("Sending OTP to:", formattedPhone);
 
-      // Use PhoneAuthProvider with reCAPTCHA verifier
+      setShowRecaptcha(true);
+      await new Promise((r) => setTimeout(r, 200));
+
       const phoneProvider = new PhoneAuthProvider(auth);
       const verificationId = await phoneProvider.verifyPhoneNumber(
         formattedPhone,
@@ -242,11 +244,13 @@ export default function RegisterScreen() {
         </ScrollView>
 
         {/* reCAPTCHA */}
-        <FirebaseRecaptchaVerifierModal
-          ref={recaptchaVerifier}
-          firebaseConfig={firebaseConfig}
-          attemptInvisibleVerification={true}
-        />
+        {showRecaptcha && (
+          <FirebaseRecaptchaVerifierModal
+            ref={recaptchaVerifier}
+            firebaseConfig={firebaseConfig}
+            attemptInvisibleVerification={false}
+          />
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

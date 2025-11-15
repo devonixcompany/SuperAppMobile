@@ -144,6 +144,7 @@ export default function LoginScreen() {
   const goToRegister = () => {
     router.push("/register");
   };
+  
 
   // ถ้ากำลังเช็ค session อยู่ ให้แสดง loading screen
   if (checkingSession) {
@@ -276,13 +277,10 @@ export default function LoginScreen() {
               </LinearGradient>
             </TouchableOpacity>
 
-            {/* === REGISTER LINK === */}
             <View className="flex-row justify-start items-center">
               <Text className="text-sm text-[#6B7280]">ยังไม่มีบัญชี? </Text>
               <TouchableOpacity onPress={goToRegister}>
-                <Text className="text-sm text-[#51BC8E] font-semibold">
-                  สมัครสมาชิก
-                </Text>
+                <Text className="text-sm text-[#51BC8E] font-semibold">สมัครสมาชิก</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Dimensions, StyleSheet, TouchableOpacity, View, Text } from "react-native";
 import ClusteredMapView from "react-native-map-clustering";
-import { Marker, Region } from "react-native-maps";
+import { Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
 import { ChargingStation } from "../../../../types/charging.types";
 import ChargingStationService from "../ChargingStationService";
 import StationMarker from "./StationMarker";
@@ -132,7 +132,7 @@ export default function ChargingMapView({
       <ClusteredMapView
         ref={mapRef}
         style={styles.map}
-        provider="google"
+        provider={PROVIDER_GOOGLE}
         initialRegion={initialRegion}
         showsUserLocation={showUserLocation}
         showsMyLocationButton={false}

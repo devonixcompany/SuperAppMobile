@@ -1,10 +1,26 @@
+const envMode = process.env.EXPO_PUBLIC_APP_ENV || "development";
+const fs = require("fs");
+const prodPath = "./.env.production";
+const devPath = "./.env.development";
+let loadPath = undefined;
+if (envMode === "production" && fs.existsSync(prodPath)) {
+  loadPath = prodPath;
+} else if (fs.existsSync(devPath)) {
+  loadPath = devPath;
+} else if (fs.existsSync(prodPath)) {
+  loadPath = prodPath;
+}
+if (loadPath) {
+  require("dotenv").config({ path: loadPath });
+}
+
 export default {
   expo: {
     name: "SuperApp",
     slug: "SuperApp",
-    version: "1.0.0",
+    version: "1.0.6",
     orientation: "portrait",
-    icon: "./assets/images/icon.png",
+    icon: "./assets/img/logo.png",
     scheme: "superapp",
     userInterfaceStyle: "light",
     splash: {
@@ -16,6 +32,7 @@ export default {
     newArchEnabled: true,
     ios: {
       bundleIdentifier: "com.anonymous.SuperApp",
+      buildNumber: "5",
       supportsTablet: true,
       config: {
         googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
@@ -27,11 +44,10 @@ export default {
     },
     android: {
       package: "com.anonymous.SuperApp",
+      versionCode: 2,
       adaptiveIcon: {
         backgroundColor: "#E6F4FE",
-        foregroundImage: "./assets/images/android-icon-foreground.png",
-        backgroundImage: "./assets/images/android-icon-background.png",
-        monochromeImage: "./assets/images/android-icon-monochrome.png",
+        foregroundImage: "./assets/images/icon.png",
       },
       config: {
         googleMaps: {
@@ -53,7 +69,6 @@ export default {
     },
     plugins: [
       "expo-router",
-      "expo-barcode-scanner",
       "expo-secure-store",
       "expo-maps",
       [
@@ -65,7 +80,7 @@ export default {
       [
         "expo-splash-screen", 
         {
-          image: "./assets/images/splash-icon.png",
+          image: "./assets/img/logo.png",
           imageWidth: 200,
           resizeMode: "contain",
           backgroundColor: "#ffffff",
@@ -79,6 +94,7 @@ export default {
       typedRoutes: true,
       reactCompiler: true,
     },
+    assetBundlePatterns: ["**/*"],
     extra: {
       // Firebase configuration from environment variables
       firebaseApiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -102,6 +118,9 @@ export default {
 
       // App environment
       appEnv: process.env.EXPO_PUBLIC_APP_ENV || "development",
+      eas: {
+        projectId: "2b251967-59c3-4c60-9a16-3e8ff64df039",
+      },
     },
   },
 };
