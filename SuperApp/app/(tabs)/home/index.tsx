@@ -307,9 +307,19 @@ export default function HomeScreen() {
       ? Math.min(screenWidth * 0.4, 420)
       : Math.min(availableWidth, Math.max(desiredPhoneWidth, 220));
 
+    const newsCardWidth = Math.max(
+      isTablet ? horizontalCardWidth * 0.5 : horizontalCardWidth * 0.7, //กำหนดวามกว้างของกรอบข่าว
+      50,// ขนาดของกรอบรูปของข่าว
+    );
+
     const newsImageHeight = isTablet
-      ? Math.min(200, horizontalCardWidth * 0.55)
-      : Math.max(110, horizontalCardWidth * 0.55);
+      ? Math.min(150, newsCardWidth * 0.5)
+      : Math.max(120, newsCardWidth * 0.5); //กำหนดความสูงของรูปและข้อความ
+
+    const recommendationCardWidth = Math.max(
+      isTablet ? horizontalCardWidth * 0.5 : horizontalCardWidth * 0.7, //กำหนดวามกว้างของกรอบหัวข้อแนะนำ
+      150, //กำหนดความสูงของรูปและข้อความ
+    );
 
     const recommendationAvatar = isTablet ? 76 : isSmallPhone ? 56 : 64;
 
@@ -329,7 +339,9 @@ export default function HomeScreen() {
       heroSubtitleFont,
       heroExpiryFont,
       horizontalCardWidth,
+      newsCardWidth,
       newsImageHeight,
+      recommendationCardWidth,
       recommendationAvatar,
       cardSpacing: isTablet ? 24 : 16,
     };
@@ -602,7 +614,7 @@ export default function HomeScreen() {
                   key={item.id}
                   className="mt-2 mb-2 bg-white shadow-sm rounded-2xl" //ตั้งค่าระยะขอบกรอบ ให้รูปโดนไม่ทับ
                   style={{
-                    width: responsive.horizontalCardWidth,
+                    width: responsive.newsCardWidth,
                     marginRight:
                       index === newsUpdates.length - 1 ? 0 : responsive.cardSpacing,
                   }}
@@ -663,7 +675,7 @@ export default function HomeScreen() {
                   key={topic.id}
                   className="p-4 mb-2 bg-white shadow-sm rounded-2xl" //ตั้งค่าระยะขอบกรอบ ให้รูปโดนไม่ทับ
                   style={{
-                    width: responsive.horizontalCardWidth,
+                    width: responsive.recommendationCardWidth,
                     marginRight:
                       index === recommendationTopics.length - 1
                         ? 0

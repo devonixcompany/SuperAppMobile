@@ -551,7 +551,7 @@ export default function CardScreen() {
               ))}
             </View>
           </View>
-
+        </View>
           {/* === PAYMENT METHODS SECTION === */}
           {/* แสดงวิธีการชำระเงินที่เชื่อมโยง */}
           <View className="mb-6">
