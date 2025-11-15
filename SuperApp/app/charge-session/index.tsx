@@ -1499,7 +1499,7 @@ export default function ChargeSessionScreen() {
           {/* Container with top alignment and padding */}
           <View className="flex flex-col items-center">
             {/* Status Card */}
-            <View className="rounded-2xl flex-col w-full max-w-sm self-center">
+            <View className="flex-col self-center w-full max-w-sm rounded-2xl">
               {/* Top section: Status and Power */}
               <View className="flex-row items-center justify-center w-full pb-4">
                 <Ionicons name="flash" size={32} color="black" />
@@ -1521,11 +1521,11 @@ export default function ChargeSessionScreen() {
               {/* Middle section: Current Charge and Time */}
               <View className="flex-row justify-around w-full py-2">
                 <View className="items-center">
-                  <Text className="text-xs text-gray-500 mb-1">การชาร์จปัจจุบัน</Text>
+                  <Text className="mb-1 text-xs text-gray-500">การชาร์จปัจจุบัน</Text>
                   <Text className="text-lg font-semibold text-[#1F274B]">{energyDeliveredDisplay} kWh</Text>
                 </View>
                 <View className="items-center">
-                  <Text className="text-xs text-gray-500 mb-1">เวลาที่คาดว่าจะเต็ม</Text>
+                  <Text className="mb-1 text-xs text-gray-500">เวลาที่คาดว่าจะเต็ม</Text>
                   <Text className="text-lg font-semibold text-[#1F274B]">{estimatedTimeText}</Text>
                 </View>
               </View>
@@ -1544,14 +1544,14 @@ export default function ChargeSessionScreen() {
             </View>
 
             {/* Station Details Card */}
-            <View className="w-full max-w-sm bg-white rounded-2xl p-6 self-center">
+            <View className="self-center w-full max-w-sm p-6 bg-white rounded-2xl">
               {/* Card Header: Dark blue section with charger info */}
               <View className="bg-[#1D2144] rounded-t-2xl p-4 flex-row items-center justify-between -mt-6 -mx-6 mb-6">
-                <View className="bg-white p-2 rounded-lg mr-4">
+                <View className="p-2 mr-4 bg-white rounded-lg">
                   <Ionicons name="flash" size={24} color="green" />
                 </View>
                 <View className="flex flex-col items-end">
-                  <Text className="text-white font-bold text-lg">{powerLabel}</Text>
+                  <Text className="text-lg font-bold text-white">{powerLabel}</Text>
                   <Text className="text-white text-[13px] mt-0.5">{headerSubtitle}</Text>
                 </View>
               </View>
@@ -1594,10 +1594,10 @@ export default function ChargeSessionScreen() {
             </View>
 
             {/* Action Buttons */}
-            <View className="w-full max-w-sm self-center mt-10">
+            <View className="self-center w-full max-w-sm mt-10">
               {canStartCharging && (
                 <TouchableOpacity
-                  className="rounded-lg overflow-hidden mb-3"
+                  className="mb-3 overflow-hidden rounded-lg"
                   onPress={handleStartCharging}
                   disabled={isCreatingTransaction || isStartingCharge}
                   activeOpacity={0.8}
@@ -1609,7 +1609,7 @@ export default function ChargeSessionScreen() {
                     start={{ x: 1, y: 0.5 }}
                     end={{ x: 0, y: 0.5 }}
                   >
-                    <View className="bg-transparent p-4 items-center justify-center flex-row">
+                    <View className="flex-row items-center justify-center p-4 bg-transparent">
                       {isStartingCharge && (
                         <Animated.View
                           style={{
@@ -1625,7 +1625,7 @@ export default function ChargeSessionScreen() {
                           <Ionicons name="reload" size={20} color="white" />
                         </Animated.View>
                       )}
-                      <Text className="text-white text-xl font-bold">
+                      <Text className="text-xl font-bold text-white">
                         {isStartingCharge ? "กำลังเริ่มชาร์จ..." : "เริ่มชาร์จ"}
                       </Text>
                     </View>
@@ -1657,7 +1657,7 @@ export default function ChargeSessionScreen() {
                         <Ionicons name="reload" size={20} color="white" />
                       </Animated.View>
                     )}
-                    <Text className="text-white text-base font-bold">
+                    <Text className="text-base font-bold text-white">
                       {isStoppingCharge ? "กำลังหยุดชาร์จ..." : "หยุดชาร์จ"}
                     </Text>
                   </View>
@@ -1666,21 +1666,21 @@ export default function ChargeSessionScreen() {
             </View>
 
             {transactionSummary && (
-              <View className="mt-4 rounded-2xl p-5 bg-white shadow-sm">
+              <View className="p-5 mt-4 bg-white shadow-sm rounded-2xl">
                 <Text className="text-base font-bold text-[#1F274B] mb-3">สรุปการชาร์จ</Text>
-                <View className="flex-row justify-between items-center mb-2">
+                <View className="flex-row items-center justify-between mb-2">
                   <Text className="text-[13px] text-gray-500">เริ่ม</Text>
                   <Text className="text-[15px] font-semibold text-[#1F274B]">
                     {summaryStartTimeText ?? '-'}
                   </Text>
                 </View>
-                <View className="flex-row justify-between items-center mb-2">
+                <View className="flex-row items-center justify-between mb-2">
                   <Text className="text-[13px] text-gray-500">สิ้นสุด</Text>
                   <Text className="text-[15px] font-semibold text-[#1F274B]">
                     {summaryEndTimeText ?? '-'}
                   </Text>
                 </View>
-                <View className="flex-row justify-between items-center mb-2">
+                <View className="flex-row items-center justify-between mb-2">
                   <Text className="text-[13px] text-gray-500">ระยะเวลา</Text>
                   <Text className="text-[15px] font-semibold text-[#1F274B]">
                     {summaryDurationText ?? '-'}
@@ -1688,20 +1688,20 @@ export default function ChargeSessionScreen() {
                 </View>
                 <View className="h-[1px] bg-gray-200 my-3" />
                 {transactionSummary.appliedRate != null && (
-                  <View className="flex-row justify-between items-center mb-2">
+                  <View className="flex-row items-center justify-between mb-2">
                     <Text className="text-[13px] text-gray-500">อัตราค่าบริการ</Text>
                     <Text className="text-[15px] font-semibold text-[#1F274B]">
                       {formatCurrency(transactionSummary.appliedRate, params.currency ?? "บาท")}/kWh
                     </Text>
                   </View>
                 )}
-                <View className="flex-row justify-between items-center mb-2">
+                <View className="flex-row items-center justify-between mb-2">
                   <Text className="text-[13px] text-gray-500">พลังงานรวม</Text>
                   <Text className="text-[15px] font-semibold text-[#1F274B]">
                     {energyKWh != null ? `${formatNumber(energyKWh, 2)} kWh` : '-'}
                   </Text>
                 </View>
-                <View className="flex-row justify-between items-center mb-2">
+                <View className="flex-row items-center justify-between mb-2">
                   <Text className="text-[13px] text-gray-500">ค่าใช้จ่ายโดยประมาณ</Text>
                   <Text className="text-[15px] font-semibold text-[#1F274B]">
                     {costDisplay ?? '-'}
