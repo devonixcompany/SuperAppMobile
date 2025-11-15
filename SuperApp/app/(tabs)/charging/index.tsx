@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import * as Linking from "expo-linking";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,9 +18,9 @@ import {
 import { Region } from "react-native-maps";
 import { ChargingStation } from "../../../types/charging.types";
 import ChargingStationService from "./ChargingStationService";
+import ChargingMapView from "./components/ChargingMapView";
 import SearchBar from "./components/SearchBar";
 import SearchResults from "./components/SearchResults";
-import ChargingMapView from "./components/ChargingMapView";
 import StationBottomSheet from "./components/StationBottomSheet";
 
 
@@ -30,6 +30,7 @@ export default function ChargingScreen() {
   const [selectedStation, setSelectedStation] = useState<ChargingStation | null>(null);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshingStations, setRefreshingStations] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [region, setRegion] = useState<Region>({
     latitude: 13.7543,
@@ -89,6 +90,18 @@ export default function ChargingScreen() {
       setLoading(false);
     }
   }, [requestLocationPermission, service]);
+
+  const handleRefreshStations = useCallback(async () => {
+    try {
+      setRefreshingStations(true);
+      await service.loadChargingStations();
+    } catch (error) {
+      console.error("Error refreshing stations:", error);
+      Alert.alert("ข้อผิดพลาด", "ไม่สามารถรีเฟรชรายการสถานีได้");
+    } finally {
+      setRefreshingStations(false);
+    }
+  }, [service]);
 
   // Initialize data and permissions
   useEffect(() => {
@@ -320,11 +333,15 @@ export default function ChargingScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={goBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#1f2937" />
-          </TouchableOpacity>
+      
           <Text style={styles.headerTitle}>สถานีชาร์จ</Text>
-          <View style={styles.placeholder} />
+          <TouchableOpacity onPress={handleRefreshStations} style={styles.backButton}>
+            {refreshingStations ? (
+              <ActivityIndicator size="small" color="#1f2937" />
+            ) : (
+              <Ionicons name="refresh" size={20} color="#1f2937" />
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Search Bar */}
@@ -368,13 +385,12 @@ export default function ChargingScreen() {
         {filteredStations.length > 0 && (
           <ChargingMapView
             stations={filteredStations}
-            region={region}
-            onRegionChange={undefined}
-            onRegionChangeComplete={undefined}
+            initialRegion={region}
             onStationPress={handleStationPress}
             onMapPress={handleMapPress}
             showUserLocation={!!userLocation}
             onMyLocationPress={goToMyLocation}
+            focusStation={selectedStation}
           />
         )}
 

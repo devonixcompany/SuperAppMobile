@@ -1531,10 +1531,13 @@ export default function ChargeSessionScreen() {
               </View>
             </View>
 
-            {/* Car Image */}
             <View className="items-center w-full">
               <Image
-                source={require("../../assets/images/image.png")}
+                source={
+                  isConnectorPlugged
+                    ? require("../../assets/images/imagcarvhageging.png")
+                    : require("../../assets/images/image.png")
+                }
                 style={{ width: 350, height: 200 }}
                 resizeMode="contain"
               />

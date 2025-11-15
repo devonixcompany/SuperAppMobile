@@ -1,11 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Animated, Dimensions, PanResponder, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { ChargingStation, ConnectorTypeNames } from "../../../../types/charging.types";
-import ChargingStationService from "../ChargingStationService";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ChargingStation } from "../../../../types/charging.types";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
-const BOTTOM_SHEET_MAX_HEIGHT = SCREEN_HEIGHT * 0.4;
+const BOTTOM_SHEET_MAX_HEIGHT = SCREEN_HEIGHT * 0.7;
 
 interface StationBottomSheetProps {
   station: ChargingStation;
@@ -27,7 +27,7 @@ export default function StationBottomSheet({
   distanceInfo,
   bottomSheetAnimation,
 }: StationBottomSheetProps) {
-  const service = ChargingStationService.getInstance();
+  const insets = useSafeAreaInsets();
 
   const bottomSheetPanResponder = PanResponder.create({
     onMoveShouldSetPanResponder: (_, gestureState) => {
@@ -69,10 +69,10 @@ export default function StationBottomSheet({
           ],
         },
       ]}
-      {...bottomSheetPanResponder.panHandlers}
     >
       <TouchableOpacity
         style={styles.bottomSheetHandle}
+        {...bottomSheetPanResponder.panHandlers}
         onPress={() => {
           console.log('Bottom sheet handle pressed');
           onClose();
@@ -89,7 +89,7 @@ export default function StationBottomSheet({
 
       <ScrollView
         style={styles.bottomSheetContent}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={true}
         nestedScrollEnabled={true}
         keyboardShouldPersistTaps="handled"
@@ -99,8 +99,6 @@ export default function StationBottomSheet({
       >
         <StationHeader station={station} />
         <StationDetails station={station} distanceInfo={distanceInfo} />
-        <StationAmenities />
-        <StationDescription />
         <NavigateButton onNavigate={onNavigate} />
       </ScrollView>
     </Animated.View>
@@ -108,6 +106,25 @@ export default function StationBottomSheet({
 }
 
 function StationHeader({ station }: { station: ChargingStation }) {
+  const total = station.totalCount ?? 0;
+  const available = station.availableCount ?? 0;
+  let statusColor = '#6b7280';
+  let statusText = 'ไม่ทราบสถานะ';
+  if (total > 0) {
+    if (available === 0) {
+      statusColor = '#ef4444';
+      statusText = 'ไม่ว่าง';
+    } else if (available === total) {
+      statusColor = '#10b981';
+      statusText = 'หัวว่างทั้งหมด';
+    } else {
+      statusColor = '#f59e0b';
+      statusText = 'บางหัวว่าง';
+    }
+  } else {
+    statusColor = available > 0 ? '#10b981' : '#f59e0b';
+    statusText = available > 0 ? 'หัวว่าง' : 'ไม่ว่าง';
+  }
   return (
     <View style={styles.stationHeader}>
       <View style={styles.stationIconContainer}>
@@ -116,6 +133,10 @@ function StationHeader({ station }: { station: ChargingStation }) {
       <View style={styles.stationInfo}>
         <Text style={styles.stationName}>{station.name}</Text>
         <Text style={styles.stationAddress}>{station.address}</Text>
+      </View>
+      <View style={[styles.statusBadge, { borderColor: statusColor, backgroundColor: `${statusColor}20` }] }>
+        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+        <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
       </View>
     </View>
   );
@@ -133,11 +154,15 @@ function StationDetails({
     durationText: string;
   };
 }) {
-  const service = ChargingStationService.getInstance();
-
   return (
     <View style={styles.stationDetails}>
-      {/* เวลาเปิด-ปิด */}
+      <View style={styles.detailRow}>
+        <Ionicons name="navigate" size={16} color="#10b981" style={{ marginRight: 8 }} />
+        <Text style={styles.detailLabel}>
+          {distanceInfo.distanceText} ({distanceInfo.durationText})
+        </Text>
+      </View>
+
       <View style={styles.detailRow}>
         <Ionicons name="time-outline" size={16} color="#10b981" style={{ marginRight: 8 }} />
         <Text style={styles.detailLabel}>
@@ -145,7 +170,6 @@ function StationDetails({
         </Text>
       </View>
 
-      {/* ประเภทหัวชาร์จ */}
       <View style={styles.detailRow}>
         <Ionicons name="flash-outline" size={16} color="#10b981" style={{ marginRight: 8 }} />
         <Text style={styles.detailLabel}>ประเภทหัวจ่าย:</Text>
@@ -165,103 +189,69 @@ function StationDetails({
         </View>
       </View>
 
-      {/* รายละเอียดประเภทหัวชาร์จ */}
-      {station.connectorTypes && station.connectorTypes.length > 0 && (
+      {station.connectors && station.connectors.length > 0 && (
         <View style={styles.detailRow}>
-          <Text style={styles.detailSubLabel}>ชนิด: </Text>
+          <Text style={[styles.detailLabel, { marginRight: 8 }]}>สถานะหัว:</Text>
           <View style={styles.connectorDetailTypes}>
-            {station.connectorTypes.map((type, index) => (
-              <Text key={index} style={styles.connectorTypeText}>
-                {ConnectorTypeNames[type] || type}
-                {index < station.connectorTypes!.length - 1 ? ', ' : ''}
-              </Text>
-            ))}
+            {station.connectors.map((c, idx) => {
+              const isAvailable = c.connectorstatus === 'AVAILABLE';
+              const isFault = c.connectorstatus === 'FAULTED' || c.connectorstatus === 'UNAVAILABLE';
+              const color = isAvailable ? '#10b981' : isFault ? '#ef4444' : '#f59e0b';
+              return (
+                <View key={`${c.connectorId}-${idx}`} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: `${color}20`, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8, marginBottom: 8 }}>
+                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, marginRight: 6 }} />
+                  <Text style={{ fontSize: 12, fontWeight: '600', color }}>{`#${c.connectorId} ${c.type}`}</Text>
+                </View>
+              );
+            })}
           </View>
         </View>
       )}
 
-      {/* กำลังไฟ */}
+      <View style={styles.detailRow}>
+        {(() => {
+          const total = station.totalCount ?? 0;
+          const available = station.availableCount ?? 0;
+          let iconColor = '#6b7280';
+          let text = 'ไม่ทราบสถานะ';
+          if (total > 0) {
+            if (available === 0) {
+              iconColor = '#ef4444';
+              text = 'ไม่ว่าง';
+            } else if (available === total) {
+              iconColor = '#10b981';
+              text = 'หัวว่างทั้งหมด';
+            } else {
+              iconColor = '#f59e0b';
+              text = 'บางหัวว่าง';
+            }
+          } else {
+            iconColor = available > 0 ? '#10b981' : '#f59e0b';
+            text = available > 0 ? 'หัวว่าง' : 'ไม่ว่าง';
+          }
+          return (
+            <>
+              <Ionicons name={available > 0 ? 'checkmark-circle' : 'close-circle'} size={16} color={iconColor} style={{ marginRight: 8 }} />
+              <Text style={styles.detailLabel}>{text}</Text>
+            </>
+          );
+        })()}
+      </View>
+
       <View style={styles.detailRow}>
         <Ionicons name="speedometer-outline" size={16} color="#10b981" style={{ marginRight: 8 }} />
-        <Text style={styles.detailLabel}>กำลังไฟสูงสุด: {station.power}</Text>
+        <Text style={styles.detailLabel}>กำลังไฟ: {station.power}</Text>
       </View>
 
-      {/* ราคา */}
       <View style={styles.detailRow}>
         <Ionicons name="cash-outline" size={16} color="#10b981" style={{ marginRight: 8 }} />
-        <Text style={styles.detailLabel}>ราคา: </Text>
-        {station.offPeakRate && station.onPeakRate ? (
-          <View style={styles.pricingContainer}>
-            <Text style={styles.priceText}>
-              Peak: {station.onPeakRate?.toFixed(2)} บาท/kWh
-            </Text>
-            <Text style={styles.priceText}>
-              Off-Peak: {station.offPeakRate?.toFixed(2)} บาท/kWh
-            </Text>
-          </View>
-        ) : (
-          <Text style={styles.priceText}>
-            {station.pricePerUnit?.toFixed(2)} บาท/kWh
-          </Text>
-        )}
-      </View>
-
-      {/* ช่วงเวลา Peak */}
-      {station.onPeakStartTime && station.onPeakEndTime && (
-        <View style={styles.detailRow}>
-          <Text style={styles.detailSubLabel}>
-            Peak: {station.onPeakStartTime} - {station.onPeakEndTime} น.
-          </Text>
-        </View>
-      )}
-
-      {/* ระยะทาง */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statItem}>
-          <Ionicons name="navigate" size={20} color="#10b981" />
-          <Text style={styles.statValue}>
-            {distanceInfo.distanceText} ({distanceInfo.durationText})
-          </Text>
-        </View>
+        <Text style={styles.detailLabel}>ราคา: {station.pricePerUnit?.toFixed(2)} บาท/kWh</Text>
       </View>
     </View>
   );
 }
 
-function StationAmenities() {
-  return (
-    <View style={styles.additionalInfo}>
-      <Text style={styles.sectionTitle}>บริการเสริม</Text>
-      <View style={styles.amenityRow}>
-        <Ionicons name="wifi" size={16} color="#10b981" />
-        <Text style={styles.amenityText}>WiFi ฟรี</Text>
-      </View>
-      <View style={styles.amenityRow}>
-        <Ionicons name="cafe" size={16} color="#10b981" />
-        <Text style={styles.amenityText}>คาเฟ่</Text>
-      </View>
-      <View style={styles.amenityRow}>
-        <Ionicons name="car" size={16} color="#10b981" />
-        <Text style={styles.amenityText}>ที่จอดรถ 10 คัน</Text>
-      </View>
-    </View>
-  );
-}
-
-function StationDescription() {
-  return (
-    <View style={styles.additionalInfo}>
-      <Text style={styles.sectionTitle}>ข้อมูลสถานี</Text>
-      <Text style={styles.descriptionText}>
-        สถานีชาร์จรถยนต์ไฟฟ้าแห่งนี้ตั้งอยู่ในทำเลที่สะดวกสบาย
-        มีอุปกรณ์ชาร์จครบครันทั้งแบบ AC และ DC
-        รองรับรถยนต์ไฟฟ้าทุกรุ่น เปิดให้บริการทุกวัน
-        มีพนักงานคอยดูแลและให้คำแนะนำ พร้อมบริการเสริมต่างๆ
-        เพื่อความสะดวกสบายของผู้ใช้งาน
-      </Text>
-    </View>
-  );
-}
+// Removed non-essential sections
 
 function NavigateButton({ onNavigate }: { onNavigate: () => void }) {
   return (
@@ -326,15 +316,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stationName: {
-    fontSize: 18,
+    fontSize: 16, // reduced from 18
     fontWeight: "700",
     color: "#1f2937",
     marginBottom: 4,
   },
   stationAddress: {
-    fontSize: 14,
+    fontSize: 13, // reduced from 14
     color: "#6b7280",
-    lineHeight: 20,
+    lineHeight: 18, // reduced from 20
   },
   stationDetails: {
     marginBottom: 16,
@@ -346,11 +336,11 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   detailLabel: {
-    fontSize: 14,
+    fontSize: 13, // reduced from 14
     color: "#4b5563",
   },
   detailSubLabel: {
-    fontSize: 13,
+    fontSize: 12, // reduced from 13
     color: "#6b7280",
     marginLeft: 24,
   },
@@ -365,7 +355,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   connectorTypeText: {
-    fontSize: 13,
+    fontSize: 12, // reduced from 13
     color: "#059669",
     fontWeight: "500",
   },
@@ -374,7 +364,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   priceText: {
-    fontSize: 13,
+    fontSize: 12, // reduced from 13
     color: "#059669",
     fontWeight: "600",
   },
@@ -388,7 +378,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   connectorText: {
-    fontSize: 12,
+    fontSize: 11, // reduced from 12
     fontWeight: "600",
     color: "#10b981",
   },
@@ -401,7 +391,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   statValue: {
-    fontSize: 14,
+    fontSize: 13, // reduced from 14
     color: "#4b5563",
   },
   additionalInfo: {
@@ -411,10 +401,29 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 14, // reduced from 16
     fontWeight: "600",
     color: "#1f2937",
     marginBottom: 12,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    marginLeft: 8,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 11, // reduced from 12
+    fontWeight: '600',
   },
   amenityRow: {
     flexDirection: "row",
@@ -423,13 +432,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   amenityText: {
-    fontSize: 14,
+    fontSize: 13, // reduced from 14
     color: "#10b981",
   },
   descriptionText: {
-    fontSize: 14,
+    fontSize: 13, // reduced from 14
     color: "#4b5563",
-    lineHeight: 20,
+    lineHeight: 18, // reduced from 20
   },
   navigateButton: {
     flexDirection: "row",
@@ -443,7 +452,7 @@ const styles = StyleSheet.create({
   },
   navigateButtonText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 14, // reduced from 16
     fontWeight: "600",
   },
 });

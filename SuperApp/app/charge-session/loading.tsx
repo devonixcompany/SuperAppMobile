@@ -81,38 +81,38 @@ const LoadingScreen = () => {
   return (
      <>
       <Stack.Screen
-        options={{
-          headerShown: true,
-
-          headerTitleAlign: "center",
-          headerShadowVisible: false,
-          headerStyle: { backgroundColor: "#EEF0F6" },
-          headerTintColor: "#1F274B",
-        }}
+       options={{
+            headerShown: true,
+            title: "เชื่อมต่อเครื่องชาร์จ",
+            headerTitleAlign: "center",
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: "#EEF0F6" },
+            headerTintColor: "#1F274B",
+          }}
       />
     <SafeAreaView className="flex-1 bg-[#F3F6FB]">
       <View className="flex-1">
         {/* ภาพหลัก */}
-        <View className="flex-row justify-between items-start">
+        <View className="flex-row justify-between items-center pt-20">
           {/* รถยนต์ - แสดงเฉพาะด้านท้าย (ครอบภาพให้เห็นแค่ตูดรถ) */}
           <View
-            className='w-[60%]'
-            style={{ height: 240, overflow: 'hidden', position: 'relative' }}
+            className='w-[60%] '
+            style={{ height: 400, overflow: 'hidden', position: 'relative' }}
           >
             <Image
               source={require('../../assets/images/carloading.png')}
-              resizeMode="cover"              // ขยายและยึดซ้ายเพื่อให้ครอบเฉพาะด้านท้าย
-              style={{ position: 'absolute', right: 0, width: '140%', height: '100%' }}
+                     // ขยายและยึดซ้ายเพื่อให้ครอบเฉพาะด้านท้าย
+              style={{ position: 'absolute', right: 10, width: '400%', height: '120%',marginTop: 20 }}
             />
           </View>
 
           {/* หัวชาร์จ - โชว์เฉพาะเมื่อเชื่อมต่อจริง (websocket มีค่า) */}
-          <View className='w-[40%]' style={{ height: 240, justifyContent: 'flex-start', alignItems: 'flex-end' }}>
+          <View className='w-[50%] pr-10 scale-100' style={{ height: 300, justifyContent: 'flex-start', alignItems: 'flex-end' }}>
             {isConnected && (
               <Image
                 source={require('../../assets/images/connectorloadfing.png')}
                 resizeMode="contain"
-                style={{ width: '70%', height: 160 }}
+                style={{ width: '95%', height: 200 }}
               />
             )}
           </View>
@@ -122,12 +122,12 @@ const LoadingScreen = () => {
         <View className="px-6 pt-8">
           <Text className="text-[#1F274B] text-[18px] font-[700] text-center">รอสักครู่</Text>
           <Text className="text-[#1F274B] text-[13px] font-[300] text-center mt-2">
-            กำลังทำการเชื่อมต่อเครื่องชาร์จรถ
+            กำลังทำการเชื่อมต่อเครื่องชาร์จ
           </Text>
         </View>
 
         {/* แถบสถานะโหลด (แอนิเมชัน) */}
-        <View className="px-6 mt-8">
+        <View className="px-12 mt-8">
           <View
             className="h-3 rounded-full bg-[#D8DCE9] overflow-hidden"
             onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}

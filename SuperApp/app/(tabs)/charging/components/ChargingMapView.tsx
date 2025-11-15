@@ -1,38 +1,41 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useRef, useState } from "react";
-import { Dimensions, StyleSheet, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Dimensions, StyleSheet, TouchableOpacity, View, Text } from "react-native";
 import ClusteredMapView from "react-native-map-clustering";
 import { Marker, Region } from "react-native-maps";
 import { ChargingStation } from "../../../../types/charging.types";
 import ChargingStationService from "../ChargingStationService";
 import StationMarker from "./StationMarker";
 
-const BOTTOM_SHEET_MAX_HEIGHT = Dimensions.get('window').height * 0.4; // Match StationBottomSheet
+const BOTTOM_SHEET_MAX_HEIGHT = Dimensions.get('window').height * 0.6;
 
 interface ChargingMapViewProps {
   stations: ChargingStation[];
-  region: Region;
+  initialRegion: Region;
   onRegionChange?: (region: Region) => void;
   onRegionChangeComplete?: (region: Region) => void;
   onStationPress: (station: ChargingStation) => void;
   onMapPress: () => void;
   showUserLocation?: boolean;
   onMyLocationPress?: () => void;
+  focusStation?: ChargingStation | null;
 }
 
 export default function ChargingMapView({
   stations,
-  region,
+  initialRegion,
   onRegionChange,
   onRegionChangeComplete,
   onStationPress,
   onMapPress,
   showUserLocation = true,
   onMyLocationPress,
+  focusStation,
 }: ChargingMapViewProps) {
   const mapRef = useRef<ClusteredMapView>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isUserInteracting, setIsUserInteracting] = useState(false);
+  const [currentRegion, setCurrentRegion] = useState<Region>(initialRegion);
   const service = ChargingStationService.getInstance();
 
   const handleClusterPress = useCallback((cluster: any) => {
@@ -41,7 +44,7 @@ export default function ChargingMapView({
     }
 
     const { geometry } = cluster;
-    const currentDelta = region.latitudeDelta;
+    const currentDelta = currentRegion.latitudeDelta;
 
     // Calculate zoom level based on current delta
     let newDelta;
@@ -65,26 +68,44 @@ export default function ChargingMapView({
     };
 
     setIsAnimating(true);
-    onRegionChangeComplete(newRegion);
+    onRegionChangeComplete && onRegionChangeComplete(newRegion);
 
     // Reset animation flag after a delay
     setTimeout(() => {
       setIsAnimating(false);
     }, 500);
-  }, [isAnimating, isUserInteracting, region, onRegionChangeComplete]);
+  }, [isAnimating, isUserInteracting, currentRegion, onRegionChangeComplete]);
 
   const handleRegionChange = useCallback((newRegion: Region) => {
     if (!isAnimating) {
       setIsUserInteracting(true);
     }
-    onRegionChange(newRegion);
+    setCurrentRegion(newRegion);
+    onRegionChange && onRegionChange(newRegion);
   }, [isAnimating, onRegionChange]);
 
   const handleRegionChangeComplete = useCallback((newRegion: Region) => {
     setIsAnimating(false);
     setIsUserInteracting(false);
-    onRegionChangeComplete(newRegion);
+    setCurrentRegion(newRegion);
+    onRegionChangeComplete && onRegionChangeComplete(newRegion);
   }, [onRegionChangeComplete]);
+
+  useEffect(() => {
+    if (focusStation && mapRef.current) {
+      const coords = [{ latitude: focusStation.latitude, longitude: focusStation.longitude }];
+      const padding = {
+        top: 40,
+        right: 40,
+        bottom: BOTTOM_SHEET_MAX_HEIGHT + 60,
+        left: 40,
+      };
+      try {
+        // @ts-ignore fitToCoordinates exists on underlying MapView
+        mapRef.current.fitToCoordinates(coords, { edgePadding: padding, animated: true });
+      } catch {}
+    }
+  }, [focusStation]);
 
   const renderCluster = useCallback((cluster: any) => {
     const { id, geometry, properties } = cluster;
@@ -112,7 +133,7 @@ export default function ChargingMapView({
         ref={mapRef}
         style={styles.map}
         provider="google"
-        region={region}
+        initialRegion={initialRegion}
         showsUserLocation={showUserLocation}
         showsMyLocationButton={false}
         clusterColor="#10b981"
@@ -126,8 +147,8 @@ export default function ChargingMapView({
         animationEnabled={true}
         moveOnMarkerPress={false}
         onPress={onMapPress}
-        onRegionChange={undefined}
-        onRegionChangeComplete={undefined}
+        onRegionChange={handleRegionChange}
+        onRegionChangeComplete={handleRegionChangeComplete}
         onPanDrag={() => {
           setIsUserInteracting(true);
         }}

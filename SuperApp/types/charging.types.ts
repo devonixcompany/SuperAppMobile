@@ -16,12 +16,21 @@ export interface ChargingStation {
   openTime?: string;  // เวลาเปิด เช่น "06:00"
   closeTime?: string; // เวลาปิด เช่น "22:00"
   distance?: number;  // ระยะทาง (km)
+  availableCount?: number;
+  inUseCount?: number;
+  totalCount?: number;
   // ข้อมูลเพิ่มเติมจาก API
   onPeakRate?: number;      // ราคาช่วง Peak (บาท/kWh)
   offPeakRate?: number;     // ราคาช่วง Off-Peak (บาท/kWh)
   onPeakStartTime?: string; // เวลาเริ่ม Peak
   onPeakEndTime?: string;   // เวลาสิ้นสุด Peak
   connectorTypes?: string[]; // ประเภทหัวชาร์จทั้งหมด เช่น ['TYPE_2', 'CHADEMO']
+  connectors?: {
+    connectorId: number;
+    connectorstatus: string;
+    type: string;
+    maxPower?: number;
+  }[];
 }
 
 export interface MarkerColor {
