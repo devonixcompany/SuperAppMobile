@@ -308,7 +308,7 @@ export default function HomeScreen() {
       : Math.min(availableWidth, Math.max(desiredPhoneWidth, 220));
 
     const newsCardWidth = Math.max(
-      isTablet ? horizontalCardWidth * 0.5 : horizontalCardWidth * 0.7, //กำหนดวามกว้างของกรอบข่าว
+      isTablet ? horizontalCardWidth * 0.5 : horizontalCardWidth * 0.8, //กำหนดวามกว้างของกรอบข่าว
       50,// ขนาดของกรอบรูปของข่าว
     );
 
@@ -317,7 +317,7 @@ export default function HomeScreen() {
       : Math.max(120, newsCardWidth * 0.5); //กำหนดความสูงของรูปและข้อความ
 
     const recommendationCardWidth = Math.max(
-      isTablet ? horizontalCardWidth * 0.5 : horizontalCardWidth * 0.7, //กำหนดวามกว้างของกรอบหัวข้อแนะนำ
+      isTablet ? horizontalCardWidth * 0.5 : horizontalCardWidth * 0.8, //กำหนดวามกว้างของกรอบหัวข้อแนะนำ
       150, //กำหนดความสูงของรูปและข้อความ
     );
 
