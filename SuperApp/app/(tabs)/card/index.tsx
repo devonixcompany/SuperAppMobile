@@ -341,7 +341,7 @@ export default function CardScreen() {
 
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar
-    <SafeAreaView className="flex-1 bg-[#F8FAFC]">
+    <SafeAreaView className="flex-1 px-8 bg-[#F8FAFC]">
       {/* === HEADER SECTION === */}
       <View className="px-6 pt-4 pb-2">
         <View className="flex-row items-center justify-between mb-6">
@@ -350,8 +350,7 @@ export default function CardScreen() {
           </Text>
           {/* ปุ่มเพิ่ม (เพิ่มบัตรใหม่) */}
           <TouchableOpacity 
-            onPress={() => router.push('/(tabs)/card/add-payment-method')}
-            className="items-center justify-center w-10 h-10 bg-white rounded-full shadow-sm"
+            className="w-10 h-10 rounded-full bg-white items-center justify-center shadow-sm"
           >
             <Ionicons name="add-outline" size={24} color="#1F2937" />
           </TouchableOpacity>
@@ -533,14 +532,14 @@ export default function CardScreen() {
                  </TouchableOpacity>
                ))
              ) : (
-              <View className="items-center p-6 bg-white shadow-sm rounded-xl">
+              <View className="bg-white rounded-xl p-6 items-center shadow-sm">
                 <Ionicons name="card-outline" size={48} color="#9CA3AF" />
                 <Text className="text-[#6B7280] mt-2 mb-4">ยังไม่มีบัตรที่ผูกไว้</Text>
                 <TouchableOpacity
                   onPress={() => router.push('/(tabs)/card/add-payment-method')}
                   className="px-4 py-2 bg-[#51BC8E] rounded-lg"
                 >
-                  <Text className="font-medium text-white">เพิ่มบัตร</Text>
+                  <Text className="text-white font-medium">เพิ่มบัตร</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -559,7 +558,7 @@ export default function CardScreen() {
             </View>
 
             {/* กล่องรายการธุรกรรม */}
-            <View className="bg-white shadow-sm rounded-xl">
+            <View className="bg-white rounded-xl shadow-sm">
               {recentPayments.length > 0 ? (
                 recentPayments.map((payment, index) => {
                   const status = payment.status?.toLowerCase() ?? 'pending';

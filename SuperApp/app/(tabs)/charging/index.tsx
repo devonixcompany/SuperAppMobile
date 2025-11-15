@@ -386,6 +386,7 @@ export default function ChargingScreen() {
           <ChargingMapView
             stations={filteredStations}
             initialRegion={region}
+            region={region}
             onStationPress={handleStationPress}
             onMapPress={handleMapPress}
             showUserLocation={!!userLocation}

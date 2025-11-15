@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Dimensions, StyleSheet, TouchableOpacity, View, Text } from "react-native";
+import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import ClusteredMapView from "react-native-map-clustering";
 import { Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
 import { ChargingStation } from "../../../../types/charging.types";
@@ -12,6 +12,7 @@ const BOTTOM_SHEET_MAX_HEIGHT = Dimensions.get('window').height * 0.6;
 interface ChargingMapViewProps {
   stations: ChargingStation[];
   initialRegion: Region;
+  region?: Region;
   onRegionChange?: (region: Region) => void;
   onRegionChangeComplete?: (region: Region) => void;
   onStationPress: (station: ChargingStation) => void;
@@ -24,6 +25,7 @@ interface ChargingMapViewProps {
 export default function ChargingMapView({
   stations,
   initialRegion,
+  region,
   onRegionChange,
   onRegionChangeComplete,
   onStationPress,
@@ -133,7 +135,7 @@ export default function ChargingMapView({
         ref={mapRef}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
-        initialRegion={initialRegion}
+        region={currentRegion}
         showsUserLocation={showUserLocation}
         showsMyLocationButton={false}
         clusterColor="#10b981"
@@ -231,3 +233,16 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
 });
+  useEffect(() => {
+    if (region) {
+      setCurrentRegion(region);
+    }
+  }, [region]);
+
+  useEffect(() => {
+    if (mapRef.current && currentRegion) {
+      try {
+        (mapRef.current as any)?.animateToRegion(currentRegion, 600);
+      } catch {}
+    }
+  }, [currentRegion]);

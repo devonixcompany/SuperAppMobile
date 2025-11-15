@@ -478,9 +478,6 @@ export default function AddPaymentMethodScreen() {
             </TouchableOpacity>
           )}
 
-      
-
-       
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
