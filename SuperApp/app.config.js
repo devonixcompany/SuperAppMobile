@@ -32,7 +32,7 @@ export default {
     newArchEnabled: true,
     ios: {
       bundleIdentifier: "com.anonymous.SuperApp",
-      buildNumber: "5",
+      buildNumber: "10",
       supportsTablet: true,
       config: {
         googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
