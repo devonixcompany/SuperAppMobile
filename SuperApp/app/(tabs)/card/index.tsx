@@ -341,7 +341,7 @@ export default function CardScreen() {
 
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar
-    <SafeAreaView className="flex-1 bg-[#F8FAFC]">
+    <SafeAreaView className="flex-1 px-8 bg-[#F8FAFC]">
       {/* === HEADER SECTION === */}
       <View className="px-6 pt-4 pb-2">
         <View className="flex-row items-center justify-between mb-6">
@@ -350,7 +350,6 @@ export default function CardScreen() {
           </Text>
           {/* ปุ่มเพิ่ม (เพิ่มบัตรใหม่) */}
           <TouchableOpacity 
-            onPress={() => router.push('/(tabs)/card/add-payment-method')}
             className="w-10 h-10 rounded-full bg-white items-center justify-center shadow-sm"
           >
             <Ionicons name="add-outline" size={24} color="#1F2937" />
