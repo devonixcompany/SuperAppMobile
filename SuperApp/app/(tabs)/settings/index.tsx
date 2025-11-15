@@ -295,14 +295,14 @@ export default function SettingsScreen() {
 
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar
-    <SafeAreaView className="flex-1 bg-[#F8FAFC]">
+    <SafeAreaView className="flex-1  px-2 bg-[#F8FAFC]">
       {/* === HEADER SECTION === */}
-      <View className="px-6 pt-4 pb-2">
+      <View className="px-8 pt-4 pb-2">
         <Text className="text-2xl font-bold text-[#1F2937]">ตั้งค่า</Text>
       </View>
 
       {/* ScrollView: ทำให้เนื้อหาเลื่อนได้ */}
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <ScrollView className="flex-1 " showsVerticalScrollIndicator={false}>
         {/* === PROFILE SECTION === */}
         {/* การ์ดแสดงข้อมูลโปรไฟล์ผู้ใช้ */}
         <View className="px-6 mb-6">
