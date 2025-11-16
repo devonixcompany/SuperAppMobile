@@ -1,6 +1,6 @@
-import { ChargingStation } from '../../../types/charging.types';
 import { mockChargingStationsThai } from '../../../data/mockChargingStations';
 import { http } from '../../../services/api/client';
+import { ChargingStation } from '../../../types/charging.types';
 
 /**
  * Service for managing charging station data and API calls
@@ -27,7 +27,7 @@ export class ChargingStationService {
       console.log('🔌 Loading charging stations from API...');
 
       // เรียก API ผ่าน http client (จัดการ token อัตโนมัติ)
-      const response = await http.get<any[]>('/api/stations?page=1&limit=100');
+      const response = await http.get<any[]>('/api/v1/user/stations?page=1&limit=100');
 
       console.log('📡 API Response:', {
         success: response.success,

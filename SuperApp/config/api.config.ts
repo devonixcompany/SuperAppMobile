@@ -13,71 +13,90 @@ export const API_CONFIG = {
   ENDPOINTS: {
     // Authentication
     AUTH: {
-      LOGIN: '/api/v1/auth/auth/login',
-      REGISTER: '/api/v1/auth/auth/register',
-      REFRESH_TOKEN: '/api/auth/refresh',
-      LOGOUT: '/api/auth/logout',
-      VERIFY_OTP: '/api/auth/verify-otp',
-      RESEND_OTP: '/api/auth/resend-otp',
-      FORGOT_PASSWORD: '/api/auth/forgot-password',
-      RESET_PASSWORD: '/api/auth/reset-password',
+      LOGIN: '/api/v1/auth/login',
+      REGISTER: '/api/v1/auth/register',
+      REFRESH_TOKEN: '/api/v1/auth/refresh',
+      LOGOUT: '/api/v1/auth/logout',
+      VERIFY_PHONE: '/api/v1/auth/phone/verify',
+      GET_ME: '/api/v1/auth/me',
+      FORGOT_PASSWORD: '/api/v1/auth/forgot-password',
+      RESET_PASSWORD: '/api/v1/auth/reset-password',
     },
     
     // User Management
     USER: {
-      PROFILE: '/api/user/profile',
-      UPDATE_PROFILE: '/api/user/profile',
-      CHANGE_PASSWORD: '/api/user/change-password',
-      DELETE_ACCOUNT: '/api/user/account',
-      CHARGING_HISTORY: '/api/user/charging-history',
-      PAYMENT_METHODS: '/api/user/payment-methods',
+      PROFILE: '/api/v1/user/profile',
+      UPDATE_PROFILE: '/api/v1/user/profile',
+      CHANGE_PASSWORD: '/api/v1/user/change-password',
+      DELETE_ACCOUNT: '/api/v1/user/account',
+      CHARGING_HISTORY: '/api/v1/user/charging-history',
+      PAYMENT_METHODS: '/api/v1/user/payment-methods',
+      VEHICLES: '/api/v1/user/vehicles',
+      NEWS: '/api/v1/user/news',
+      TAX_INVOICES: '/api/v1/user/tax-invoices',
     },
     
     // Chargepoint Management
     CHARGEPOINT: {
       WEBSOCKET_URL: (identity: string, connectorId: number) => 
-        `/api/chargepoints/${encodeURIComponent(identity)}/${connectorId}/websocket-url`,
+        `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/${connectorId}/websocket-url`,
       STATUS: (identity: string) => 
-        `/api/chargepoints/${encodeURIComponent(identity)}/status`,
+        `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/status`,
       START_CHARGING: (identity: string, connectorId: number) => 
-        `/api/chargepoints/${encodeURIComponent(identity)}/${connectorId}/start`,
+        `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/${connectorId}/start`,
       STOP_CHARGING: (identity: string, connectorId: number) => 
-        `/api/chargepoints/${encodeURIComponent(identity)}/${connectorId}/stop`,
-      LIST: '/api/chargepoints',
+        `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/${connectorId}/stop`,
+      LIST: '/api/v1/user/chargepoints',
       DETAILS: (identity: string) => 
-        `/api/chargepoints/${encodeURIComponent(identity)}`,
+        `/api/v1/user/chargepoints/${encodeURIComponent(identity)}`,
+    },
+    
+    // Stations
+    STATIONS: {
+      LIST: '/api/v1/user/stations',
+      NEARBY: '/api/v1/user/stations/nearby',
+      DETAILS: (stationId: string) => 
+        `/api/v1/user/stations/${encodeURIComponent(stationId)}`,
     },
     
     // Payment
     PAYMENT: {
-      CARDS: '/api/payment/cards',
-      ADD_CARD: '/api/payment/cards',
+      CARDS: '/api/v1/user/payments/cards',
+      ADD_CARD: '/api/v1/user/payments/cards',
       REMOVE_CARD: (cardId: string) => 
-        `/api/payment/cards/${cardId}`,
+        `/api/v1/user/payments/cards/${cardId}`,
       SET_DEFAULT_CARD: (cardId: string) =>
-        `/api/payment/cards/${cardId}/default`,
-      PROCESS_PAYMENT: '/api/payment/process',
-      PAYMENT_HISTORY: '/api/payment/history',
-      STATUS: (paymentId: string) => `/api/payment/status/${encodeURIComponent(paymentId)}`,
+        `/api/v1/user/payments/cards/${cardId}/default`,
+      PROCESS_PAYMENT: '/api/v1/user/payments/process',
+      PAYMENT_HISTORY: '/api/v1/user/payments/history',
+      STATUS: (paymentId: string) => `/api/v1/user/payments/status/${encodeURIComponent(paymentId)}`,
+    },
+    
+    // Charging
+    CHARGING: {
+      START: '/api/v1/user/charging/start',
+      STOP: '/api/v1/user/charging/stop',
+      STATUS: '/api/v1/user/charging/status',
+      HISTORY: '/api/v1/user/charging/history',
     },
     
     // Notifications
     NOTIFICATIONS: {
-      LIST: '/api/notifications',
+      LIST: '/api/v1/user/notifications',
       MARK_READ: (notificationId: string) => 
-        `/api/notifications/${notificationId}/read`,
-      MARK_ALL_READ: '/api/notifications/read-all',
-      SETTINGS: '/api/notifications/settings',
+        `/api/v1/user/notifications/${notificationId}/read`,
+      MARK_ALL_READ: '/api/v1/user/notifications/read-all',
+      SETTINGS: '/api/v1/user/notifications/settings',
     },
     
     // Transactions
     TRANSACTIONS: {
-      CREATE: '/api/transactions',
+      CREATE: '/api/v1/user/transactions',
       SUMMARY: (transactionId: string) => 
-        `/api/transactions/${encodeURIComponent(transactionId)}/summary`,
-      LIST: '/api/transactions',
-      USER_TRANSACTIONS: (userId: string) => 
-        `/api/transactions/user/${encodeURIComponent(userId)}`,
+        `/api/v1/user/transactions/${encodeURIComponent(transactionId)}/summary`,
+      LIST: '/api/v1/user/transactions',
+      DETAILS: (transactionId: string) => 
+        `/api/v1/user/transactions/${encodeURIComponent(transactionId)}`,
     },
   },
   
