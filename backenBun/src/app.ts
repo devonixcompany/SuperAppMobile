@@ -49,7 +49,7 @@ const authenticatedProfileResponseModel = t.Object(
 const PUBLIC_ROUTES = [
   "/health",
   "/api/auth/login",
-  "/api/auth/register",
+  "/api/v1/auth/auth/login",
   "/api/auth/refresh",
   "/api/payment/omise/webhook", // Omise webhook - verified by signature
 ];
@@ -510,7 +510,7 @@ app.listen(port, () => {
   console.log(`📚 OpenAPI Documentation: ${serverUrl}/openapi`);
   console.log(`📄 OpenAPI Schema: ${serverUrl}/openapi/json`);
   console.log(`📝 API Endpoints:`);
-  console.log(`   POST /api/auth/register - User registration`);
+  console.log(`   POST /api/v1/auth/auth/login - User registration`);
   console.log(`   POST /api/auth/login - User login`);
   console.log(`   POST /api/auth/refresh - Refresh token`);
   console.log(`   GET /api/profile - Get user profile (protected)`);
