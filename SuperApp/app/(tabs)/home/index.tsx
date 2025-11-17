@@ -396,6 +396,8 @@ export default function HomeScreen() {
                         style={{
                           width: pointResponsive.heroLogoWidth,
                           height: pointResponsive.heroLogoHeight,
+                          marginLeft: pointResponsive.heroLogoMarginLeft,
+                          marginRight: pointResponsive.heroLogoMarginRight,
                         }}
                       />
                       <Text

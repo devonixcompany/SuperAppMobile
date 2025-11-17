@@ -5,13 +5,13 @@ const DESIGN_SPEC = {
   cardWidth: 375,
   cardHeight: 200,
   horizontalMargin: 0,
-  heroPaddingX: 10,
+  heroPaddingX: 25,
   heroPaddingTop: 10,
   heroPaddingBottom: 20,
   heroHeaderGap: 0,
   heroCoinSize: 35,
   heroCoinGap: 9,
-  heroSubtitleMarginTop: 5, //ระยะห่างบน คะแนนของฉัน
+  heroSubtitleMarginTop: 10, //ระยะห่างบน คะแนนของฉัน
   heroValueSpacing: 5,
   heroDividerSpacingTop: 25,
   heroDividerSpacingBottom: 5,
@@ -19,11 +19,13 @@ const DESIGN_SPEC = {
   heroBadgeOffsetRight: 20,
   heroBadgePaddingX: 10,
   heroBadgePaddingY: 4,
-  heroTitleFont: 20,
-  heroSubtitleFont: 20,
-  heroPointFontSize: 30,
+  heroTitleFont: 25, //Font Ponit
+  heroSubtitleFont: 20, //Font คะแนนของฉัน
+  heroPointFontSize: 30, //Font ตัวเลข
   heroBadgeFontSize: 12,
   heroExpiryFont: 14, 
+  heroLogoMarginRight: -10, //ระยะชิดซ้ายของ Point
+  heroLogoMarginLeft: -20, //ระยะขิดซ้ายของรูปโพนิกซ์
 };
 
 export type PointCardResponsive = {
@@ -51,6 +53,8 @@ export type PointCardResponsive = {
   heroLogoHeight: number;
   heroSubtitleFont: number;
   heroExpiryFont: number;
+  heroLogoMarginRight: number;
+  heroLogoMarginLeft: number;
   isSmallPhone: boolean;
   isTablet: boolean;
 };
@@ -154,6 +158,12 @@ export const usePointCardResponsive = (): PointCardResponsive => {
       : isSmallPhone
         ? DESIGN_SPEC.heroSubtitleFont - 4
         : DESIGN_SPEC.heroSubtitleFont;
+    const heroLogoMarginLeft = DESIGN_SPEC.heroLogoMarginLeft;
+    const heroLogoMarginRight = isTablet
+      ? DESIGN_SPEC.heroLogoMarginRight + 2
+      : isSmallPhone
+        ? DESIGN_SPEC.heroLogoMarginRight - 1
+        : DESIGN_SPEC.heroLogoMarginRight;
     const heroDividerSpacingTop = isTablet
       ? DESIGN_SPEC.heroDividerSpacingTop + 6
       : isSmallPhone
@@ -195,6 +205,8 @@ export const usePointCardResponsive = (): PointCardResponsive => {
       heroLogoHeight,
       heroSubtitleFont,
       heroExpiryFont,
+      heroLogoMarginRight,
+      heroLogoMarginLeft,
       isSmallPhone,
       isTablet,
     };
