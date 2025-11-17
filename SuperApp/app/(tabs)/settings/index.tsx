@@ -22,6 +22,7 @@ import {
   type AuthTokens,
   type LoginCredentials,
 } from "@/utils/keychain";
+import { TABS_HORIZONTAL_GUTTER } from "../_layout";
 
 // ฟังก์ชันหลักของหน้า Settings (ตั้งค่า)
 export default function SettingsScreen() {
@@ -295,9 +296,12 @@ export default function SettingsScreen() {
 
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar
-    <SafeAreaView className="flex-1  px-2 bg-[#F8FAFC]">
+    <SafeAreaView
+      className="flex-1 bg-[#F8FAFC]"
+      style={{ paddingHorizontal: TABS_HORIZONTAL_GUTTER }}
+    >
       {/* === HEADER SECTION === */}
-      <View className="px-8 pt-4 pb-2">
+      <View className="pt-4 pb-2">
         <Text className="text-2xl font-bold text-[#1F2937]">ตั้งค่า</Text>
       </View>
 
@@ -305,7 +309,7 @@ export default function SettingsScreen() {
       <ScrollView className="flex-1 " showsVerticalScrollIndicator={false}>
         {/* === PROFILE SECTION === */}
         {/* การ์ดแสดงข้อมูลโปรไฟล์ผู้ใช้ */}
-        <View className="px-6 mb-6">
+        <View className="mb-6">
           <TouchableOpacity className="bg-white rounded-xl p-4 shadow-sm">
             <View className="flex-row items-center">
               {/* วงกลมแสดงตัวอักษรจากเบอร์โทรที่บันทึกไว้ */}
@@ -335,7 +339,7 @@ export default function SettingsScreen() {
 
         {/* === SETTINGS SECTIONS === */}
         {/* แสดงการตั้งค่าแบ่งตามหมวดหมู่ */}
-        <View className="px-6">
+        <View>
           {/* วนลูปแสดงแต่ละหมวดหมู่ */}
           {settingSections.map((section, sectionIndex) => (
             <View key={sectionIndex} className="mb-6">

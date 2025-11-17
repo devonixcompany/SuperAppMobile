@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { TABS_HORIZONTAL_GUTTER } from "../_layout";
 
 export default function PaymentMethodsScreen() {
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
@@ -122,9 +123,12 @@ export default function PaymentMethodsScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F8FAFC]">
+    <SafeAreaView
+      className="flex-1 bg-[#F8FAFC]"
+      style={{ paddingHorizontal: TABS_HORIZONTAL_GUTTER }}
+    >
       {/* Header */}
-      <View className="px-6 pt-4 pb-2">
+      <View className="pt-4 pb-2">
         <View className="flex-row items-center justify-between mb-6">
           <View className="flex-row items-center">
             <TouchableOpacity
@@ -153,7 +157,7 @@ export default function PaymentMethodsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <View className="px-6">
+        <View>
           {paymentCards.length === 0 ? (
             // Empty state
             <View className="items-center justify-center py-20">

@@ -4,6 +4,9 @@ import React from "react";
 // นำเข้า component BottomNavigation ที่เราสร้างเองสำหรับแสดงแถบเมนูด้านล่าง
 import BottomNavigation from "../../components/ui/bottom-navigation";
 
+// กำหนดค่าคงที่สำหรับ padding ซ้าย-ขวา ของหน้าต่างๆ ในแท็บ
+export const TABS_HORIZONTAL_GUTTER = 20;
+
 // ฟังก์ชันหลักสำหรับจัดการ layout ของ tabs ทั้งหมด
 export default function TabLayout() {
   // ใช้ router สำหรับการนำทางไปหน้าต่างๆ
