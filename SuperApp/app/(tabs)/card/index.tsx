@@ -367,9 +367,9 @@ export default function CardScreen() {
         >
           <LinearGradient
             colors={["#1F274B", "#395F85", "#589FAF", "#67C1A5", "#5EC1A0"]}
-            locations={[0, 0.15, 0.45, 0.75, 1]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+            locations={[0, 0.25, 0.44, 0.77, 1]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
             style={{
               minHeight: pointResponsive.cardHeight,
               borderRadius: 28,
@@ -408,10 +408,7 @@ export default function CardScreen() {
                 </Text>
               </View>
             </View>
-            <LinearGradient
-              colors={["#F3F5FA", "#C9D1E0"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+            <View
               style={{
                 position: "absolute",
                 top: pointResponsive.heroBadgeOffsetTop,
@@ -419,6 +416,9 @@ export default function CardScreen() {
                 borderRadius: 999,
                 paddingHorizontal: pointResponsive.heroBadgePaddingX,
                 paddingVertical: pointResponsive.heroBadgePaddingY,
+                borderWidth: 1.5,
+                borderColor: "#FFFFFF",
+                backgroundColor: "rgba(243, 245, 250, 0.8)",
                 shadowColor: "#0F172A",
                 shadowOpacity: 0.25,
                 shadowRadius: 8,
@@ -435,7 +435,7 @@ export default function CardScreen() {
               >
                 รหัสสมาชิก 000000
               </Text>
-            </LinearGradient>
+            </View>
             <Text
               style={{
                 marginTop: pointResponsive.heroSubtitleMarginTop,

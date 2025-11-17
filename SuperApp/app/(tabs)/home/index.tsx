@@ -353,10 +353,10 @@ export default function HomeScreen() {
               style={{ alignSelf: "stretch", marginHorizontal: pointResponsive.cardHorizontalMargin }}
             >
               <LinearGradient
-                colors={["#1F274B", "#395F85", "#589FAF", "#67C1A5", "#5EC1A0"]}
-                locations={[0, 0.15, 0.45, 0.75, 1]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+                colors={["#1F274B", "#395F85", "#589FAF", "#67C1A5", "#5EC1A0"]} //เรียงแบบนี้สีเหมือนสุด #1F274B", "#395F85", "#589FAF", "#67C1A5", "#5EC1A0 
+                locations={[0.1, 0.4, 0.7, 0.99, 1]} //กำหนดขนาดสี  [0.1, 0.4, 0.7, 0.99, 1] ค่านี้เหมาะสมสุด
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
                 style={{
                   minHeight: pointResponsive.cardHeight,
                   borderRadius: 28,
@@ -460,10 +460,7 @@ export default function HomeScreen() {
                     </Text>
                   </View>
                 </View>
-                <LinearGradient
-                  colors={["#F3F5FA", "#C9D1E0"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+                <View
                   style={{
                     position: "absolute",
                     top: pointResponsive.heroBadgeOffsetTop,
@@ -471,6 +468,9 @@ export default function HomeScreen() {
                     borderRadius: 999,
                     paddingHorizontal: pointResponsive.heroBadgePaddingX,
                     paddingVertical: pointResponsive.heroBadgePaddingY,
+                    borderWidth: 0.5,
+                    borderColor: "#FFFFFF",
+                    backgroundColor: "rgba(243, 245, 250, 0.5)",
                     shadowColor: "#0F172A",
                     shadowOpacity: 0.25,
                     shadowRadius: 8,
@@ -487,7 +487,7 @@ export default function HomeScreen() {
                   >
                     รหัสสมาชิก 000000
                   </Text>
-                </LinearGradient>
+                </View>
               </LinearGradient>
             </TouchableScale>
           </View>
