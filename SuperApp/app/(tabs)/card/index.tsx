@@ -507,55 +507,7 @@ export default function CardScreen() {
           />
         }
       >
-        <View style={{ paddingHorizontal: pointResponsive.cardHorizontalMargin }}>
-          {/* === BALANCE CARD SECTION === */}
-          {/* การ์ดแสดงยอดเงินคงเหลือ */}
-       
-          {/* === QUICK ACTIONS SECTION === */}
-          {/* ปุ่มด่วนสำหรับการดำเนินการต่างๆ */}
-          <View className="mb-6">
-            <Text className="text-lg font-semibold text-[#1F2937] mb-4">
-              การดำเนินการ
-            </Text>
-            <View className="flex-row justify-between">
-              {/* Array ของ actions ทั้งหมด */}
-              {[
-                { icon: "card-outline", title: "จัดการบัตร", color: "#3B82F6" },
-                { icon: "receipt-outline", title: "ประวัติ", color: "#10B981" },
-                { icon: "gift-outline", title: "โปรโมชั่น", color: "#F59E0B" },
-                {
-                  icon: "settings-outline",
-                  title: "ตั้งค่า",
-                  color: "#6B7280",
-                },
-              ].map((action, index) => (
-                // วนลูปสร้างปุ่มแต่ละอัน
-                // กว้าง 22% (4 อันต่อแถว)
-                <TouchableOpacity
-                  key={index}
-                  className="items-center p-4 bg-white shadow-sm rounded-xl"
-                  style={{ width: "22%" }}
-                >
-                  {/* วงกลมไอคอน */}
-                  <View
-                    className="items-center justify-center w-12 h-12 mb-2 rounded-full"
-                    style={{ backgroundColor: `${action.color}20` }}
-                  >
-                    <Ionicons
-                      name={action.icon as any}
-                      size={24}
-                      color={action.color}
-                    />
-                  </View>
-                  {/* ชื่อ action */}
-                  <Text className="text-xs font-medium text-[#1F2937] text-center">
-                    {action.title}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
+      
           {/* === PAYMENT METHODS SECTION === */}
           {/* แสดงวิธีการชำระเงินที่เชื่อมโยง */}
           <View className="mb-6">
