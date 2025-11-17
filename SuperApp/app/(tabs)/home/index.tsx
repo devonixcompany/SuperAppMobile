@@ -1,7 +1,5 @@
 // นำเข้า Ionicons สำหรับใช้ไอคอนต่างๆ
 import { Ionicons } from "@expo/vector-icons";
-// นำเข้า LinearGradient สำหรับสร้างพื้นหลังแบบไล่สี
-import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 // นำเข้า components พื้นฐานจาก React Native
 import {
@@ -17,8 +15,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
-import CoinSvg from "@/assets/img/twemoji_coin.svg";
-import { usePointCardResponsive } from "@/hooks/usePointCardResponsive";
+import PointsCard from "@/components/ui/PointsCard";
 import { useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { TABS_HORIZONTAL_GUTTER } from "../_layout";
@@ -186,10 +183,6 @@ const recommendationTopics: Recommendation[] = [
 
 const CHARGING_STATUS_POLL_INTERVAL_MS = 5000; //ตั้งเวลาเรียก API ของ Pop-Up หน่วยเป็น ms.
 
-const CoinIcon = ({ size = 40 }: { size?: number }) => (
-  <CoinSvg width={size} height={size} />
-);
-
 // ฟังก์ชันหลักของหน้า Home
 export default function HomeScreen() {
   const router = useRouter();
@@ -250,8 +243,6 @@ export default function HomeScreen() {
       cardSpacing: isTablet ? 24 : 16,
     };
   }, [screenWidth]);
-
-  const pointResponsive = usePointCardResponsive();
 
   const contentBottomPadding = 90 + insets.bottom + (responsive.isTablet ? 48 : 32);
 
@@ -342,153 +333,12 @@ export default function HomeScreen() {
           </View>
 
           {/* === POINTS CARD SECTION === */}
-          <View className="mb-5">
-            <TouchableScale
-              activeOpacity={0.9}
-              onPress={() => router.push("/card")}
-              style={{ alignSelf: "stretch", marginHorizontal: pointResponsive.cardHorizontalMargin }}
-            >
-              <LinearGradient
-                colors={["#1F274B", "#395F85", "#589FAF", "#67C1A5", "#5EC1A0"]} //เรียงแบบนี้สีเหมือนสุด #1F274B", "#395F85", "#589FAF", "#67C1A5", "#5EC1A0 
-                locations={[0.1, 0.4, 0.7, 0.99, 1]} //กำหนดขนาดสี  [0.1, 0.4, 0.7, 0.99, 1] ค่านี้เหมาะสมสุด
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={{
-                  minHeight: pointResponsive.cardHeight,
-                  borderRadius: 28,
-                  borderWidth: 1,
-                  borderColor: "rgba(255,255,255,0.15)",
-                  paddingHorizontal: pointResponsive.heroPaddingX,
-                  paddingTop: pointResponsive.heroPaddingTop,
-                  paddingBottom: pointResponsive.heroPaddingBottom,
-                  shadowColor: "#0B1E2B",
-                  shadowOpacity: 0.25,
-                  shadowRadius: 18,
-                  shadowOffset: { width: 0, height: 12 },
-                  elevation: 12,
-                  position: "relative",
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    flexWrap: "wrap",
-                    gap: pointResponsive.heroHeaderGap,
-                  }}
-                >
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: pointResponsive.heroHeaderGap,
-                      }}
-                    >
-                      <Image
-                        source={require("../../../assets/img/ponix-logo-06.png")}
-                        resizeMode="contain"
-                        style={{
-                          width: pointResponsive.heroLogoWidth,
-                          height: pointResponsive.heroLogoHeight,
-                          marginLeft: pointResponsive.heroLogoMarginLeft,
-                          marginRight: pointResponsive.heroLogoMarginRight,
-                        }}
-                      />
-                      <Text
-                        style={{
-                          fontSize: pointResponsive.heroTitleFont,
-                          fontWeight: "600",
-                          color: "#F3F6FF",
-                        }}
-                      >
-                        Point
-                      </Text>
-                    </View>
-                    <Text
-                      style={{
-                        marginTop: pointResponsive.heroSubtitleMarginTop,
-                        fontSize: pointResponsive.heroSubtitleFont,
-                        color: "rgba(255,255,255,0.9)",
-                      }}
-                    >
-                      คะแนนของฉัน
-                    </Text>
-                    <View
-                      className="flex-row items-center"
-                      style={{ marginTop: pointResponsive.heroValueSpacing }}
-                    >
-                      <View
-                        className="items-center justify-center rounded-full bg-white/15"
-                        style={{
-                          width: pointResponsive.heroCoinSize + 2,
-                          height: pointResponsive.heroCoinSize + 2,
-                          backgroundColor: "rgba(255,255,255,0.2)",
-                        }}
-                      >
-                        <CoinIcon size={pointResponsive.heroCoinSize } />
-                      </View>
-                      <Text
-                        style={{
-                          marginLeft: pointResponsive.heroCoinGap,
-                          fontSize: pointResponsive.heroPointFontSize,
-                          fontWeight: "800",
-                          color: "#FFFFFF",
-                        }}
-                      >
-                        262 P
-                      </Text>
-                    </View>
-                    <View
-                      style={{
-                        height: 1,
-                        backgroundColor: "rgba(255,255,255,0.35)",
-                        marginTop: pointResponsive.heroDividerSpacingTop,
-                        marginBottom: pointResponsive.heroDividerSpacingBottom,
-                      }}
-                    />
-                    <Text
-                      style={{
-                        fontSize: pointResponsive.heroExpiryFont,
-                        color: "rgba(255,255,255,0.9)",
-                      }}
-                    >
-                      สิทธิพิเศษของคุณ
-                    </Text>
-                  </View>
-                </View>
-                <View
-                  style={{
-                    position: "absolute",
-                    top: pointResponsive.heroBadgeOffsetTop,
-                    right: pointResponsive.heroBadgeOffsetRight,
-                    borderRadius: 999,
-                    paddingHorizontal: pointResponsive.heroBadgePaddingX,
-                    paddingVertical: pointResponsive.heroBadgePaddingY,
-                    borderWidth: 0.5,
-                    borderColor: "#FFFFFF",
-                    backgroundColor: "rgba(243, 245, 250, 0.5)",
-                    shadowColor: "#0F172A",
-                    shadowOpacity: 0.25,
-                    shadowRadius: 8,
-                    shadowOffset: { width: 0, height: 4 },
-                    elevation: 8,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: pointResponsive.heroBadgeFontSize,
-                      fontWeight: "400",
-                      color: "#1B2344",
-                    }}
-                  >
-                    รหัสสมาชิก 000000
-                  </Text>
-                </View>
-              </LinearGradient>
-            </TouchableScale>
-          </View>
+          <PointsCard
+            points={262}
+            memberId="000000"
+            footerText="สิทธิพิเศษของคุณ"
+            onPress={() => router.push("/card")}
+          />
 
           {chargingPopupData && isChargingPopupVisible ? (
             <ChargingStatusInlineCard
