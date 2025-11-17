@@ -98,33 +98,33 @@ model admin_refresh_tokens {
 
 model charge_points {
   id              String  @id @default(uuid())
-  chargepointname String
+  chargepointname String                                                      // ชื่อจุดชาร์จ
   stationId       String?
 
-  openingHours   String?
-  is24Hours      Boolean     @default(false)
-  brand          String
-  serialNumber   String      @unique
-  powerRating    Float
-  powerSystem    Int         @default(1)
-  connectorCount Int         @default(1)
-  protocol       OCPPVersion
-  csmsUrl        String?
+  openingHours   String?                                        // เวลาทำการของจุดชาร์จ
+  is24Hours      Boolean     @default(false)                    // เปิดให้บริการ 24 ชั่วโมงหรือไม่
+  brand          String                                         // ยี่ห้อของจุดชาร์จ
+  serialNumber   String      @unique                            // หมายเลขซีเรียลของจุดชาร์จ
+  powerRating    Float                                          // กำลังไฟฟ้าของจุดชาร์จ (kW)
+  powerSystem    Int         @default(1)                        // ระบบไฟฟ้า (1: เดี่ยว, 3: 3 เฟส)
+  connectorCount Int         @default(1)                        // จำนวนคอนเน็กเตอร์ที่จุดชาร์จมี
+  protocol       OCPPVersion                                    // โปรโตคอล OCPP ที่จุดชาร์จรองรับ
+  csmsUrl        String?                                        // URL ของระบบจัดการจุดชาร์จ (CSMS)
 
-  chargePointIdentity  String            @unique
-  chargepointstatus    ChargePointStatus @default(AVAILABLE)
-  maxPower             Float?
-  lastSeen             DateTime?
-  heartbeatIntervalSec Int?
-  vendor               String?
-  model                String?
-  firmwareVersion      String?
-  ocppProtocolRaw      String?
-  ocppSessionId        String?
-  isWhitelisted        Boolean           @default(true)
-  ownerId              String?
-  ownershipType        OwnershipType     @default(PUBLIC)
-  isPublic             Boolean           @default(true)
+  chargePointIdentity  String            @unique                // รหัสประจำตัวของจุดชาร์จ (Charge Point Identity)
+  chargepointstatus    ChargePointStatus @default(AVAILABLE)    // สถานะปัจจุบันของจุดชาร์จ
+  maxPower             Float?                                   // กำลังไฟฟ้าสูงสุดที่จุดชาร์จสามารถจ่ายได้ (kW)
+  lastSeen             DateTime?                                // เวลาที่จุดชาร์จติดต่อครั้งล่าสุด
+  heartbeatIntervalSec Int?                                     // ช่วงเวลาการส่งสัญญาณหัวใจ (heartbeat) เป็นวินาที
+  vendor               String?                                  // ผู้ผลิตจุดชาร์จ
+  model                String?                                  // รุ่นของจุดชาร์จ
+  firmwareVersion      String?                                  // เวอร์ชันเฟิร์มแวร์ของจุดชาร์จ
+  ocppProtocolRaw      String?                                  // ข้อมูลโปรโตคอล OCPP ดิบ
+  ocppSessionId        String?                                  // รหัสเซสชัน OCPP ปัจจุบัน
+  isWhitelisted        Boolean           @default(true)         // ระบุว่าจุดชาร์จอยู่ในรายการอนุญาตหรือไม่
+  ownerId              String?                                  // รหัสเจ้าของจุดชาร์จ
+  ownershipType        OwnershipType     @default(PUBLIC)       // ประเภทความเป็นเจ้าของของจุดชาร์จ
+  isPublic             Boolean           @default(true)         // ระบุว่าจุดชาร์จเป็นสาธารณะหรือไม่
 
   createdAt    DateTime       @default(now())
   updatedAt    DateTime

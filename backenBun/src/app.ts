@@ -140,6 +140,7 @@ export const app = new Elysia()
           description: "API documentation for SuperApp backend services",
           version: "1.0.0",
         },
+        
         servers: [
           {
             url: serverUrl,
@@ -168,6 +169,26 @@ export const app = new Elysia()
             description: "Tax invoice profile management for users",
           },
           {
+            name: "Admin Authentication",
+            description: "Administrative login, registration, and credential flows.",
+          },
+          {
+            name: "Admin Station",
+            description: "Administrative station CRUD operations and media management.",
+          },
+          {
+            name: "Admin Charge Points",
+            description: "Admin APIs for provisioning and managing charge points.",
+          },
+          {
+            name: "Admin Connectors",
+            description: "Administrative connector CRUD and configuration endpoints.",
+          },
+          {
+            name: "Admin ChargePoint",
+            description: "Realtime admin controls for charge points and websocket operations.",
+          },
+          {
             name: "Health",
             description: "Service readiness and monitoring probes",
           },
@@ -191,9 +212,17 @@ export const app = new Elysia()
     name: 'jwt',
     secret: process.env.JWT_SECRET || 'your-secret-key'
   }))
-  // ✅ CRITICAL: Authentication middleware that runs BEFORE derive middleware
+  // Ã¢Å“â€¦ CRITICAL: Authentication middleware that runs BEFORE derive middleware
   .use((app: any) => {
-    let currentUser = null; // Store user at wrapper level
+    type AuthenticatedUser = {
+      id: string;
+      phoneNumber: string | null;
+      status: string;
+      typeUser: string | null;
+      createdAt: Date;
+    } | null;
+
+    let currentUser: AuthenticatedUser = null; // Store user at wrapper level
     
     return app.onBeforeHandle(async ({ request, set, cookie }: any) => {
     if (request.method === "OPTIONS") {
@@ -207,7 +236,7 @@ export const app = new Elysia()
     const authHeader = request.headers.get('authorization');
     let user = null;
 
-    console.log('🔍 [AUTH DEBUG] Request details:', {
+    console.log('Ã°Å¸â€Â [AUTH DEBUG] Request details:', {
       path,
       method,
       hasAuthHeader: !!authHeader,
@@ -217,20 +246,20 @@ export const app = new Elysia()
     // Try to authenticate if auth header exists
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
-      console.log('🎫 [AUTH] Extracting token, length:', token.length);
+      console.log('Ã°Å¸Å½Â« [AUTH] Extracting token, length:', token.length);
 
       try {
         const payload = await jwtService.verifyToken(token);
         if (payload) {
-          console.log('✅ [AUTH] Token verified for user:', payload.userId);
+          console.log('Ã¢Å“â€¦ [AUTH] Token verified for user:', payload.userId);
           
-          // แสดงเวลาหมดอายุของ token
+          // Ã Â¹ÂÃ Â¸ÂªÃ Â¸â€Ã Â¸â€¡Ã Â¹â‚¬Ã Â¸Â§Ã Â¸Â¥Ã Â¸Â²Ã Â¸Â«Ã Â¸Â¡Ã Â¸â€Ã Â¸Â­Ã Â¸Â²Ã Â¸Â¢Ã Â¸Â¸Ã Â¸â€šÃ Â¸Â­Ã Â¸â€¡ token
           if (payload.exp) {
             const expDate = new Date(payload.exp * 1000);
             const now = new Date();
             const timeLeft = Math.floor((expDate.getTime() - now.getTime()) / 1000);
-            console.log('⏰ [AUTH] Token expires at:', expDate.toLocaleString());
-            console.log('⏱️ [AUTH] Time left:', timeLeft > 0 ? `${timeLeft} seconds` : 'EXPIRED');
+            console.log('Ã¢ÂÂ° [AUTH] Token expires at:', expDate.toLocaleString());
+            console.log('Ã¢ÂÂ±Ã¯Â¸Â [AUTH] Time left:', timeLeft > 0 ? `${timeLeft} seconds` : 'EXPIRED');
           }
 
           // Get user from database
@@ -248,39 +277,45 @@ export const app = new Elysia()
 
           if (dbUser && dbUser.status === 'ACTIVE') {
             user = dbUser;
-            currentUser = dbUser; // Store for derive middleware
-            console.log('✅ [AUTH] User authenticated:', user.id);
+            currentUser = dbUser as AuthenticatedUser; // Store for derive middleware
+            console.log('Ã¢Å“â€¦ [AUTH] User authenticated:', user.id);
           } else {
-            console.log('❌ [AUTH] User not found or inactive');
+            console.log('Ã¢ÂÅ’ [AUTH] User not found or inactive');
           }
         } else {
-          console.log('❌ [AUTH] Token verification failed');
+          console.log('Ã¢ÂÅ’ [AUTH] Token verification failed');
         }
       } catch (error) {
-        console.error('❌ [AUTH] Authentication error:', error);
+        console.error('Ã¢ÂÅ’ [AUTH] Authentication error:', error);
       }
     }
 
     if (isPublicRoute(path)) {
-      console.log('🌐 [AUTH] Public route, allowing access:', path);
+      console.log('dYO? [AUTH] Public route, allowing access:', path);
+      return;
+    }
+
+    if (path.startsWith('/station-images/')) {
+      console.log('dYsï¿½ [AUTH] Station image route, allowing anonymous access:', path);
       return;
     }
 
     // Skip global guard for admin routes - they have their own strict authentication
     if (path.startsWith('/admin/') || path.startsWith('/api/admin/')) {
-      console.log('🔐 Admin route detected, skipping global guard (admin middleware will handle auth):', path);
+      console.log('dY"? Admin route detected, skipping global guard (admin middleware will handle auth):', path);
       return;
     }
 
+
     if (isGatewayRoute(method, path)) {
       const gatewayKey = extractGatewayKey(request);
-      console.log('🚪 [AUTH] Gateway route detected:', { path, hasKey: !!gatewayKey });
+      console.log('Ã°Å¸Å¡Âª [AUTH] Gateway route detected:', { path, hasKey: !!gatewayKey });
       if (gatewayKey && gatewayKey === GATEWAY_API_KEY) {
-        console.log('✅ [AUTH] Gateway key valid, allowing access');
+        console.log('Ã¢Å“â€¦ [AUTH] Gateway key valid, allowing access');
         return;
       }
 
-      console.log('❌ [AUTH] Invalid gateway key');
+      console.log('Ã¢ÂÅ’ [AUTH] Invalid gateway key');
       logger.warn("Unauthorized gateway access attempt", {
         path,
         method,
@@ -295,7 +330,7 @@ export const app = new Elysia()
 
     // For user routes, check user authentication
     if (!user) {
-      console.log('❌ [AUTH] User authentication failed:', {
+      console.log('Ã¢ÂÅ’ [AUTH] User authentication failed:', {
         path,
         method,
         hasAuthHeader: !!authHeader,
@@ -314,7 +349,7 @@ export const app = new Elysia()
       };
     }
 
-    console.log('✅ [AUTH] User authenticated successfully:', {
+    console.log('Ã¢Å“â€¦ [AUTH] User authenticated successfully:', {
       path,
       userId: user.id,
       phoneNumber: user.phoneNumber
@@ -324,12 +359,12 @@ export const app = new Elysia()
     (request as any).user = user;
     
     // Store user in closure variable for derive middleware
-    currentUser = user;
+    currentUser = user as AuthenticatedUser;
       })
-      // ✅ Derive middleware inside same wrapper to access currentUser
+      // Ã¢Å“â€¦ Derive middleware inside same wrapper to access currentUser
       .derive(({ request }: any) => {
         const user = currentUser || (request as any).user;
-        console.log('🔧 [DERIVE] Extracting user from context:', {
+        console.log('Ã°Å¸â€Â§ [DERIVE] Extracting user from context:', {
           hasCurrentUser: !!currentUser,
           hasRequestUser: !!(request as any).user,
           userId: user?.id,
@@ -345,15 +380,15 @@ export const app = new Elysia()
   .use(serviceContainer.getChargePointController())
   .use(serviceContainer.getStationController())
   .use((() => {
-    console.log('🔧 Registering admin auth controller');
+    console.log('Ã°Å¸â€Â§ Registering admin auth controller');
     const adminAuthCtrl = adminServiceContainer.getAuthController();
-    console.log('✅ Admin auth controller registered');
+    console.log('Ã¢Å“â€¦ Admin auth controller registered');
     return adminAuthCtrl;
   })())
   .use((() => {
-    console.log('🔧 Registering admin chargepoint controller');
+    console.log('Ã°Å¸â€Â§ Registering admin chargepoint controller');
     const adminChargePointCtrl = adminServiceContainer.getChargePointsCrudController();
-    console.log('✅ Admin chargepoint controller registered');
+    console.log('Ã¢Å“â€¦ Admin chargepoint controller registered');
     return adminChargePointCtrl;
   })())
   .use((() => {
@@ -368,6 +403,12 @@ export const app = new Elysia()
       adminServiceContainer.getChargePointConnectorController();
     console.log('Admin connector controller registered');
     return adminConnectorCtrl;
+  })())
+  .use((() => {
+    console.log('Registering station assets controller');
+    const assetsCtrl = adminServiceContainer.getStationAssetsController();
+    console.log('Station assets controller registered');
+    return assetsCtrl;
   })())
   .use(serviceContainer.getTransactionController())
   // Payment controller also needs user context, no need for wrapper since derive middleware is now available
@@ -447,7 +488,7 @@ export const app = new Elysia()
     {
       detail: {
         tags: ["Health"],
-        summary: "🏥 Health Check",
+        summary: "Ã°Å¸ÂÂ¥ Health Check",
         description:
           "Returns the current status and health information of the API server",
         responses: {
@@ -475,7 +516,7 @@ export const app = new Elysia()
       },
     },
   )
-  .onError(({ code, error, set }: { code: any; error: any; set: any }) => {
+  .onError(({ code, error, set }) => {
     switch (code) {
       case "VALIDATION":
         set.status = 400;
@@ -506,10 +547,10 @@ export const app = new Elysia()
   });
 
 app.listen(port, () => {
-  console.log(`🦊 Server is running on port ${port}`);
-  console.log(`📚 OpenAPI Documentation: ${serverUrl}/openapi`);
-  console.log(`📄 OpenAPI Schema: ${serverUrl}/openapi/json`);
-  console.log(`📝 API Endpoints:`);
+  console.log(`Ã°Å¸Â¦Å  Server is running on port ${port}`);
+  console.log(`Ã°Å¸â€œÅ¡ OpenAPI Documentation: ${serverUrl}/openapi`);
+  console.log(`Ã°Å¸â€œâ€ž OpenAPI Schema: ${serverUrl}/openapi/json`);
+  console.log(`Ã°Å¸â€œÂ API Endpoints:`);
   console.log(`   POST /api/auth/register - User registration`);
   console.log(`   POST /api/auth/login - User login`);
   console.log(`   POST /api/auth/refresh - Refresh token`);

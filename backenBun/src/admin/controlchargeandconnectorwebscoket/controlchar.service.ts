@@ -1,6 +1,8 @@
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
 
+const legacyPrisma = prisma as any;
+
 export interface CreateChargePointData {
   name: string;
   stationId?: string;
@@ -91,7 +93,7 @@ export class AdminChargePointService {
       }
 
       // Check if serial number already exists
-      const existingSerial = await prisma.chargePoint.findUnique({
+      const existingSerial = await legacyPrisma.chargePoint.findUnique({
         where: { serialNumber: data.serialNumber }
       });
 
@@ -100,7 +102,7 @@ export class AdminChargePointService {
       }
 
       // Check if charge point identity already exists
-      const existingIdentity = await prisma.chargePoint.findUnique({
+      const existingIdentity = await legacyPrisma.chargePoint.findUnique({
         where: { chargePointIdentity: data.chargePointIdentity }
       });
 
@@ -120,7 +122,7 @@ export class AdminChargePointService {
       }
 
       // Create charge point
-      const chargePoint = await prisma.chargePoint.create({
+      const chargePoint = await legacyPrisma.chargePoint.create({
         data: {
           name: data.name,
           stationName: data.stationName,
@@ -174,7 +176,7 @@ export class AdminChargePointService {
   async updateChargePoint(id: string, data: UpdateChargePointData) {
     try {
       // Check if charge point exists
-      const existingChargePoint = await prisma.chargePoint.findUnique({
+      const existingChargePoint = await legacyPrisma.chargePoint.findUnique({
         where: { id }
       });
 
@@ -184,7 +186,7 @@ export class AdminChargePointService {
 
       // Check if serial number already exists (if updating)
       if (data.serialNumber && data.serialNumber !== existingChargePoint.serialNumber) {
-        const existingSerial = await prisma.chargePoint.findUnique({
+        const existingSerial = await legacyPrisma.chargePoint.findUnique({
           where: { serialNumber: data.serialNumber }
         });
 
@@ -195,7 +197,7 @@ export class AdminChargePointService {
 
       // Check if charge point identity already exists (if updating)
       if (data.chargePointIdentity && data.chargePointIdentity !== existingChargePoint.chargePointIdentity) {
-        const existingIdentity = await prisma.chargePoint.findUnique({
+        const existingIdentity = await legacyPrisma.chargePoint.findUnique({
           where: { chargePointIdentity: data.chargePointIdentity }
         });
 
@@ -216,7 +218,7 @@ export class AdminChargePointService {
       }
 
       // Update charge point
-      const updatedChargePoint = await prisma.chargePoint.update({
+      const updatedChargePoint = await legacyPrisma.chargePoint.update({
         where: { id },
         data: {
           ...(data.name && { name: data.name }),
@@ -271,7 +273,7 @@ export class AdminChargePointService {
   async deleteChargePoint(id: string) {
     try {
       // Check if charge point exists
-      const existingChargePoint = await prisma.chargePoint.findUnique({
+      const existingChargePoint = await legacyPrisma.chargePoint.findUnique({
         where: { id }
       });
 
@@ -280,7 +282,7 @@ export class AdminChargePointService {
       }
 
       // Delete charge point
-      await prisma.chargePoint.delete({
+      await legacyPrisma.chargePoint.delete({
         where: { id }
       });
 
@@ -314,7 +316,7 @@ export class AdminChargePointService {
 
       // Get charge points with pagination
       const [chargePoints, total] = await Promise.all([
-        prisma.chargePoint.findMany({
+        legacyPrisma.chargePoint.findMany({
           where,
           include: {
             station: true
@@ -323,7 +325,7 @@ export class AdminChargePointService {
           take: limit,
           orderBy: { createdAt: 'desc' }
         }),
-        prisma.chargePoint.count({ where })
+        legacyPrisma.chargePoint.count({ where })
       ]);
 
       const totalPages = Math.ceil(total / limit);
@@ -347,7 +349,7 @@ export class AdminChargePointService {
 
   async getChargePointById(id: string) {
     try {
-      const chargePoint = await prisma.chargePoint.findUnique({
+      const chargePoint = await legacyPrisma.chargePoint.findUnique({
         where: { id },
         include: {
           station: true

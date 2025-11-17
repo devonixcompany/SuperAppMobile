@@ -3,6 +3,10 @@ import { access } from 'node:fs/promises'
 import { Elysia } from 'elysia'
 import { getMimeFromFilename, resolveStationImagePath } from '../../lib/station-images'
 
+declare const Bun: {
+  file: (path: string) => Blob;
+};
+
 export const stationAssetsController = () =>
   new Elysia({ name: 'station-assets-controller' }).get(
     '/station-images/:filename',
@@ -18,6 +22,7 @@ export const stationAssetsController = () =>
       }
 
       const filePath = resolveStationImagePath(filename)
+      console.log('[StationAssets] serving request', { filename, filePath })
       try {
         await access(filePath, constants.R_OK)
         const file = Bun.file(filePath)

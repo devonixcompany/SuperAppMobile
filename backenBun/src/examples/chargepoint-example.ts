@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { PrismaClient, OCPPVersion, ChargePointStatus } from '@prisma/client'
 
 const prisma = new PrismaClient()

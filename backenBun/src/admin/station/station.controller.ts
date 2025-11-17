@@ -469,6 +469,11 @@ import {
   return new Elysia({ prefix: '/api/admin/stations' })
     .use(requireAdminAuth(jwtService))
     .decorate('adminStationService', stationService)
+    .model({
+      AdminStationCreateRequest: stationCreateSchema,
+      AdminStationUpdateRequest: stationUpdateSchema,
+      AdminStationListResponse: stationListResponseSchema,
+    })
     .get(
       '/:stationId/details',
       async ({ params, set, adminStationService }) => {
@@ -499,7 +504,7 @@ import {
       },
       {
         detail: {
-          tags: ['Admin Station'],
+          tags: ['Admin Charge Points'],
           summary: 'Get station details by ID',
           description:
             'Returns detailed information for a station including charge points and connectors',
@@ -572,9 +577,6 @@ import {
               }),
             ),
           }),
-          response: {
-            200: stationListResponseSchema,
-          },
         },
       )
       .post(
@@ -664,7 +666,7 @@ import {
           }
         },
         {
-          parse: false,
+          parse: 'none',
           detail: {
             tags: ['Admin Station'],
             summary: 'Create charging station',
@@ -676,6 +678,38 @@ import {
                 'application/json': {
                   schema: {
                     $ref: '#/components/schemas/AdminStationCreateRequest',
+                  },
+                  examples: {
+                    basic: {
+                      summary: 'Create station (JSON)',
+                      value: {
+                        stationname: 'Central Plaza EV Station',
+                        location: '999/9 Rama I Rd, Pathum Wan, Bangkok 10330',
+                        openclosedays: 'Daily 06:00-22:00',
+                        flatRate: 8.2,
+                        onPeakRate: 12.5,
+                        onPeakStartTime: '09:00',
+                        onPeakEndTime: '17:00',
+                        chargePoints: [
+                          {
+                            chargepointname: 'Central Plaza AC #1',
+                            brand: 'ABB',
+                            serialNumber: 'ABB-AC-2025-0001',
+                            powerRating: 22,
+                            chargePointIdentity: 'CP-CENTRAL-PLAZA-001',
+                            protocol: 'OCPP16',
+                            connectors: [
+                              {
+                                connectorId: 1,
+                                type: 'TYPE_2',
+                                connectorstatus: 'AVAILABLE',
+                                maxPower: 22,
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    },
                   },
                 },
                 'multipart/form-data': {
@@ -698,6 +732,24 @@ import {
                     },
                     required: ['data'],
                   },
+                  encoding: {
+                    data: {
+                      contentType: 'application/json',
+                    },
+                    image: {
+                      contentType: 'image/png',
+                    },
+                  },
+                  examples: {
+                    multipart: {
+                      summary: 'Create station with image',
+                      value: {
+                        data:
+                          '{"stationname":"City EV - Test B","location":"88 Sukhumvit Rd, Khlong Toei, Bangkok","flatRate":8.9}',
+                        image: '<binary image>',
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -707,7 +759,6 @@ import {
               401: { description: 'Admin authentication required' },
             },
           },
-          body: t.Any(),
         },
       )
     .put(
@@ -945,7 +996,7 @@ import {
         },
       },
     )
-    .post(
+    .delete(
       '/:stationId/image',
       async ({ params, set, adminStationService }) => {
         try {

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Elysia, t } from 'elysia';
 import { prisma } from '../../lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { PaymentService } from './payment.service';
 
 type ChargeMetadata = {
@@ -9,12 +10,16 @@ type ChargeMetadata = {
   userId?: string;
 };
 
+type PaymentWithTransaction = Prisma.PaymentGetPayload<{
+  include: { transaction: true };
+}>;
+
 async function findPaymentByChargeInfo(
   chargeId?: string,
   metadata?: ChargeMetadata,
-  includeTransaction = false,
-) {
-  const include = includeTransaction ? { transaction: true } : undefined;
+  _includeTransaction = false,
+): Promise<PaymentWithTransaction | null> {
+  const include = { transaction: true } as const;
 
   if (chargeId) {
     const paymentByChargeId = await prisma.payment.findFirst({ where: { chargeId }, include });

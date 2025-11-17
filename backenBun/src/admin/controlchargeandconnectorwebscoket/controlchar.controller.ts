@@ -19,7 +19,7 @@ export const adminChargePointController = (jwtService: JWTService) => {
     async ({ body, set, adminChargePointService }) => {
       console.log('🎯 Admin chargepoint create route called');
       try {
-        const payload = body as CreateChargePointData;
+        const payload = body as unknown as CreateChargePointData;
         const result = await adminChargePointService.createChargePoint(payload);
         return {
           success: true,

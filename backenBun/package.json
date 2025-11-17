@@ -27,7 +27,8 @@
     "elysia": "^1.4.13",
     "express": "^5.1.0",
     "omise": "^1.0.0",
-    "winston": "^3.18.3"
+    "winston": "^3.18.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.4",

@@ -497,7 +497,7 @@ export class AdminService {
           connectors: {
             orderBy: { connectorId: "asc" },
           },
-          owner: {
+          User: {
             select: {
               id: true,
               email: true,
@@ -568,16 +568,14 @@ export class AdminService {
   private toNullableNumber = (value: unknown): number | null =>
     value === null || value === undefined ? null : Number(value);
 
-  private normalizeChargePoint = <
-    T extends { connectors?: any[] },
-  >(
-    chargePoint: T,
+  private normalizeChargePoint = (
+    chargePoint: any,
   ) => {
     const normalized: any = {
       ...chargePoint,
     };
 
-    if (Array.isArray(chargePoint.connectors)) {
+    if (Array.isArray(chargePoint?.connectors)) {
       normalized.connectors = chargePoint.connectors.map((connector: any) => ({
         ...connector,
         maxPower: this.toNullableNumber(connector.maxPower),

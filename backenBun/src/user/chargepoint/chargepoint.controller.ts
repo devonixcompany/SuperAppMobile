@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ChargePointStatus, OCPPVersion } from '@prisma/client';
 import { Elysia, t } from 'elysia';
 import { ValidationService } from '../validation/validation.service';

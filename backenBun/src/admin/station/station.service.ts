@@ -237,6 +237,7 @@ export class AdminStationService {
         stationname: true,
         imageUrl: true,
         openclosedays: true,
+        flatRate: true,
         onPeakRate: true,
         onPeakStartTime: true,
         onPeakEndTime: true,
