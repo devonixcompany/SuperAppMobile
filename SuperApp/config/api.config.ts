@@ -13,14 +13,14 @@ export const API_CONFIG = {
   ENDPOINTS: {
     // Authentication
     AUTH: {
-      LOGIN: '/api/v1/auth/login',
-      REGISTER: '/api/v1/auth/register',
-      REFRESH_TOKEN: '/api/v1/auth/refresh',
-      LOGOUT: '/api/v1/auth/logout',
-      VERIFY_PHONE: '/api/v1/auth/phone/verify',
-      GET_ME: '/api/v1/auth/me',
-      FORGOT_PASSWORD: '/api/v1/auth/forgot-password',
-      RESET_PASSWORD: '/api/v1/auth/reset-password',
+      LOGIN: '/api/v1/user/auth/login',
+      REGISTER: '/api/v1/user/auth/register',
+      REFRESH_TOKEN: '/api/v1/user/auth/refresh',
+      LOGOUT: '/api/v1/user/auth/logout',
+      VERIFY_PHONE: '/api/v1/user/auth/phone/verify',
+      GET_ME: '/api/v1/user/auth/me',
+      FORGOT_PASSWORD: '/api/v1/user/auth/forgot-password',
+      RESET_PASSWORD: '/api/v1/user/auth/reset-password',
     },
     
     // User Management

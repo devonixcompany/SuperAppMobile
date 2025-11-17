@@ -3,6 +3,59 @@ import { http } from '../../../services/api/client';
 import { ChargingStation } from '../../../types/charging.types';
 
 /**
+ * API Response interfaces
+ */
+interface StationConnector {
+  connectorId: number;
+  connectorstatus: 'AVAILABLE' | 'CHARGING' | 'FAULTED' | 'OFFLINE';
+  type: 'TYPE_2' | 'CCS_COMBO_2' | 'CHADEMO';
+  maxPower: number | null;
+}
+
+interface StationChargePoint {
+  id: string;
+  chargepointname: string;
+  chargePointIdentity: string;
+  chargepointstatus: 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE' | 'FAULTED';
+  connectorCount: number;
+  powerRating: number;
+  connectors: StationConnector[];
+}
+
+interface StationFromAPI {
+  id: string;
+  stationname: string;
+  location: string;
+  latitude: string;
+  longitude: string;
+  createdAt: string;
+  charge_points: StationChargePoint[];
+  // Optional fields for pricing and hours
+  onPeakRate?: number;
+  offPeakRate?: number;
+  onPeakStartTime?: string;
+  onPeakEndTime?: string;
+  openclosedays?: string;
+}
+
+interface StationsAPIResponse {
+  data: StationFromAPI[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+// Union type สำหรับ response ที่หลากหลาย format
+type APIResponseVariants = 
+  | StationsAPIResponse  // Format ที่คุณมีตอนนี้
+  | { success: boolean; message?: string; data: StationsAPIResponse }  // Wrapped format
+  | StationFromAPI[]  // Direct array
+  | { data: StationFromAPI[]; pagination?: any };  // Alternative format
+
+/**
  * Service for managing charging station data and API calls
  */
 export class ChargingStationService {
@@ -27,25 +80,62 @@ export class ChargingStationService {
       console.log('🔌 Loading charging stations from API...');
 
       // เรียก API ผ่าน http client (จัดการ token อัตโนมัติ)
-      const response = await http.get<any[]>('/api/v1/user/stations?page=1&limit=100');
+      const response = await http.get<any>('/api/v1/user/stations?page=1&limit=100');
 
-      console.log('📡 API Response:', {
+      console.log('📡 Raw API Response:', {
+        hasResponse: !!response,
+        responseKeys: Object.keys(response || {}),
+        dataType: typeof response.data,
+        dataKeys: response.data ? Object.keys(response.data) : null,
         success: response.success,
-        dataCount: response.data?.length || 0,
-        message: response.message || 'No message',
       });
 
-      if (response.success && response.data) {
+      // ตรวจสอบว่า response มีข้อมูลใน format ไหน
+      let stationsData: StationFromAPI[] = [];
+      let paginationData = null;
+
+      // Format 1: Response with success wrapper
+      if (response.success && response.data?.data && Array.isArray(response.data.data)) {
+        console.log('📦 Using wrapped response format');
+        stationsData = response.data.data;
+        paginationData = response.data.pagination;
+      }
+      // Format 2: Direct response (current API format)
+      else if (response.data && Array.isArray(response.data)) {
+        console.log('📦 Using direct array response format');
+        stationsData = response.data;
+      }
+      // Format 3: Response with data array directly
+      else if (response.data?.data && Array.isArray(response.data.data)) {
+        console.log('📦 Using data.data response format');
+        stationsData = response.data.data;
+        paginationData = response.data.pagination;
+      }
+      // Format 4: Raw response is the stations object (check if data has pagination sibling)
+      else if (response && response.data && (response as any).pagination) {
+        console.log('📦 Using root level data/pagination format');
+        stationsData = response.data.data || response.data;
+        paginationData = (response as any).pagination;
+      }
+
+      console.log('📊 Stations Data Check:', {
+        stationsDataLength: stationsData.length,
+        isArray: Array.isArray(stationsData),
+        firstStation: stationsData[0]?.stationname || 'No stations',
+        paginationTotal: paginationData?.total || 'No pagination',
+      });
+
+      if (stationsData.length > 0) {
         // Transform API response to ChargingStation format
-        const freshStations = this.transformStationsFromAPI(response.data);
+        const freshStations = this.transformStationsFromAPI(stationsData);
 
         // อัปเดต cache ด้วยข้อมูลใหม่
         this.stations = freshStations;
 
-        console.log(`✅ Loaded ${freshStations.length} stations from API`);
+        console.log(`✅ Loaded ${freshStations.length} stations from API (Total: ${paginationData?.total || freshStations.length})`);
         return freshStations;
       } else {
-        console.warn('⚠️ Invalid API response, using mock data');
+        console.warn('⚠️ No valid stations data found, using mock data');
         this.stations = mockChargingStationsThai;
         return this.stations;
       }
@@ -60,45 +150,66 @@ export class ChargingStationService {
   /**
    * Transform API station data to ChargingStation format
    */
-  private transformStationsFromAPI(apiStations: any[]): ChargingStation[] {
+  private transformStationsFromAPI(apiStations: StationFromAPI[]): ChargingStation[] {
     return apiStations.map((station) => {
-      console.log('Transforming station:', station.stationname);
+      console.log('🔄 Transforming station:', station.stationname);
 
-      const connectorList = (station.charge_points || []).flatMap((cp: any) => cp.connectors || []);
-      const connectorsAvailable = connectorList.filter((c: any) => c.connectorstatus === 'AVAILABLE').length;
+      const connectorList = (station.charge_points || []).flatMap((cp: StationChargePoint) => cp.connectors || []);
+      const connectorsAvailable = connectorList.filter((c: StationConnector) => c.connectorstatus === 'AVAILABLE').length;
+      const connectorsCharging = connectorList.filter((c: StationConnector) => c.connectorstatus === 'CHARGING').length;
       const connectorsTotal = connectorList.length;
-      const availableCount = connectorsTotal > 0
-        ? connectorsAvailable
-        : (station.charge_points?.filter((cp: any) => cp.chargepointstatus === 'AVAILABLE').length || 0);
-      const inUseCount = connectorsTotal > 0
-        ? (connectorsTotal - connectorsAvailable)
-        : (station.charge_points?.filter((cp: any) => cp.chargepointstatus === 'OCCUPIED' || cp.chargepointstatus === 'CHARGING').length || 0);
+
+      // ถ้าไม่มี connectors ให้ดูจาก charge_points status
+      const chargePointsAvailable = station.charge_points?.filter((cp: any) => cp.chargepointstatus === 'AVAILABLE').length || 0;
+      const chargePointsOccupied = station.charge_points?.filter((cp: any) => cp.chargepointstatus === 'OCCUPIED').length || 0;
+      const chargePointsMaintenance = station.charge_points?.filter((cp: any) => cp.chargepointstatus === 'MAINTENANCE').length || 0;
+
+      // Calculate availability
+      const availableCount = connectorsTotal > 0 ? connectorsAvailable : chargePointsAvailable;
+      const inUseCount = connectorsTotal > 0 ? connectorsCharging : chargePointsOccupied;
+      const offlineCount = chargePointsMaintenance;
 
       // Determine overall station status
       let status: 'available' | 'in-use' | 'offline' = 'offline';
-      if (availableCount > 0) {
-        status = 'available';
+      
+      if (offlineCount > 0 && availableCount === 0 && inUseCount === 0) {
+        status = 'offline'; // สถานีออฟไลน์
+      } else if (availableCount > 0) {
+        status = 'available'; // มีหัวจ่ายว่าง
       } else if (inUseCount > 0) {
-        status = 'in-use';
+        status = 'in-use'; // ใช้งานเต็ม
       }
 
-      // Count connectors by type (AC/DC)
-      // ถ้า powerRating >= 50 kW = DC, ต่ำกว่านั้น = AC
+      // Count connectors by type (AC/DC) based on power rating and connector types
       let acCount = 0;
       let dcCount = 0;
       const connectorTypesSet = new Set<string>();
 
-      station.charge_points?.forEach((cp: any) => {
+      station.charge_points?.forEach((cp: StationChargePoint) => {
         const power = cp.powerRating || 0;
-        const count = cp.connectorCount || 0;
-
-        // ตรวจสอบว่าเป็น DC หรือ AC จากกำลังไฟ
-        if (power >= 50) {
-          dcCount += count;
-          connectorTypesSet.add('DC');
-        } else if (power > 0) {
-          acCount += count;
-          connectorTypesSet.add('AC');
+        const connectors = cp.connectors || [];
+        
+        // ใช้ type จาก connectors เป็นหลัก ถ้าไม่มีให้ใช้ power เป็นเกณฑ์
+        if (connectors.length > 0) {
+          connectors.forEach((connector: StationConnector) => {
+            if (['TYPE_2'].includes(connector.type) && power < 50) {
+              acCount++;
+              connectorTypesSet.add('AC');
+            } else if (['CCS_COMBO_2', 'CHADEMO'].includes(connector.type) || power >= 50) {
+              dcCount++;
+              connectorTypesSet.add('DC');
+            }
+          });
+        } else {
+          // Fallback: ใช้ power เป็นเกณฑ์
+          const count = cp.connectorCount || 0;
+          if (power >= 50) {
+            dcCount += count;
+            connectorTypesSet.add('DC');
+          } else if (power > 0) {
+            acCount += count;
+            connectorTypesSet.add('AC');
+          }
         }
       });
 
@@ -132,7 +243,7 @@ export class ChargingStationService {
 
       const totalCount = connectorsTotal > 0
         ? connectorsTotal
-        : (station.charge_points?.reduce((sum: number, cp: any) => sum + (cp.connectorCount || 0), 0) || 0);
+        : (station.charge_points?.reduce((sum: number, cp: StationChargePoint) => sum + (cp.connectorCount || 0), 0) || 0);
 
       const transformed = {
         id: station.id,
@@ -156,11 +267,11 @@ export class ChargingStationService {
         onPeakStartTime: station.onPeakStartTime || '',
         onPeakEndTime: station.onPeakEndTime || '',
         connectorTypes: Array.from(connectorTypesSet),
-        connectors: connectorList.map((c: any) => ({
+        connectors: connectorList.map((c: StationConnector) => ({
           connectorId: c.connectorId,
           connectorstatus: c.connectorstatus,
           type: c.type,
-          maxPower: c.maxPower,
+          maxPower: c.maxPower || undefined,
         })),
       };
 
@@ -170,10 +281,15 @@ export class ChargingStationService {
         acCount: transformed.acCount,
         dcCount: transformed.dcCount,
         power: transformed.power,
-        pricePerUnit: `${transformed.pricePerUnit} บาท/kWh`,
+        availableCount: transformed.availableCount,
+        inUseCount: transformed.inUseCount,
+        totalCount: transformed.totalCount,
+        pricePerUnit: `${transformed.pricePerUnit || 'ไม่ระบุ'} บาท/kWh`,
         hours: `${transformed.openTime} - ${transformed.closeTime}`,
         location: `${transformed.latitude}, ${transformed.longitude}`,
         chargePoints: station.charge_points?.length || 0,
+        connectors: transformed.connectors.length,
+        connectorTypes: transformed.connectorTypes.join(', '),
       });
 
       return transformed;
@@ -192,16 +308,16 @@ export class ChargingStationService {
       console.log('🔌 Loading nearby stations from API...');
 
       // เรียก API ผ่าน http client (จัดการ token อัตโนมัติ)
-      const response = await http.get<any[]>(
+      const response = await http.get<StationsAPIResponse>(
         `/api/stations/nearby/search?latitude=${latitude}&longitude=${longitude}&radius=${radiusKm}`
       );
 
-      if (response.success && response.data) {
-        const stations = this.transformStationsFromAPI(response.data);
+      if (response.success && response.data?.data && Array.isArray(response.data.data)) {
+        const stations = this.transformStationsFromAPI(response.data.data);
         console.log(`✅ Loaded ${stations.length} nearby stations from API`);
         return stations;
       } else {
-        console.warn('⚠️ Invalid API response, using local filtering');
+        console.warn('⚠️ Invalid nearby API response, using local filtering');
         return this.getNearbyStations(latitude, longitude, radiusKm);
       }
     } catch (error) {
