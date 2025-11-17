@@ -75,7 +75,7 @@ export default function QRScannerScreen() {
 
   const resolveScannedPayload = (raw: string): ResolvedPayload => {
     const value = raw.trim();
-    console.log('QR Scanner Debug - Raw input to resolveScannedPayload:', value);
+    console.log('QR Scanner DEBUG [v2] - Raw input to resolveScannedPayload:', value);
 
     try {
       const parsed = JSON.parse(value);
@@ -184,35 +184,92 @@ export default function QRScannerScreen() {
       
       console.log('QR Scanner Debug - Cleaned direct URL:', cleanedValue);
       
-      const fullUrl = new URL(cleanedValue);
-      console.log('QR Scanner Debug - Treating as direct URL');
+      // Try to parse as URL - but handle custom schemes like myapp://
+      let fullUrl: URL | null = null;
+      let chargePointId: string | null = null;
+      let connectorIdParam: string | null = null;
       
-      // Try to extract chargePointIdentity and connectorId from the URL path
-      const pathParts = fullUrl.pathname.split('/');
-      const chargepointsIndex = pathParts.indexOf('chargepoints');
-      
-      console.log('QR Scanner Debug - Direct URL path parts:', pathParts);
-      console.log('QR Scanner Debug - Direct URL chargepoints index:', chargepointsIndex);
-      
-      if (chargepointsIndex !== -1 && pathParts.length > chargepointsIndex + 2) {
-        const extractedIdentity = decodeURIComponent(pathParts[chargepointsIndex + 1]);
-        const extractedConnectorId = Number(pathParts[chargepointsIndex + 2]);
+      try {
+        fullUrl = new URL(cleanedValue);
+        console.log('QR Scanner Debug - Successfully parsed as URL');
+        console.log('QR Scanner Debug - URL protocol:', fullUrl.protocol);
+        console.log('QR Scanner Debug - URL search params:', fullUrl.searchParams.toString());
         
-        console.log('QR Scanner Debug - Direct URL extracted Identity:', extractedIdentity);
-        console.log('QR Scanner Debug - Direct URL extracted Connector ID:', extractedConnectorId);
+        // Extract parameters from URL
+        chargePointId = fullUrl.searchParams.get('chargePointId') || fullUrl.searchParams.get('chargePointIdentity');
+        connectorIdParam = fullUrl.searchParams.get('connectorId') || fullUrl.searchParams.get('connector');
+      } catch (urlError) {
+        console.log('QR Scanner Debug - URL parse failed, trying manual parsing:', urlError);
         
-        if (extractedIdentity && Number.isFinite(extractedConnectorId)) {
-          const result = {
-            requestUrl: normalizeUrlToDevice(cleanedValue, env.apiUrl),
-            chargePointIdentity: extractedIdentity,
-            connectorId: extractedConnectorId,
-          };
+        // Fallback: manually parse URL parameters for custom schemes
+        const queryIndex = cleanedValue.indexOf('?');
+        if (queryIndex !== -1) {
+          const queryString = cleanedValue.substring(queryIndex + 1);
+          const params = new URLSearchParams(queryString);
           
-          console.log('QR Scanner Debug - Direct URL final result:', result);
-          return result;
+          chargePointId = params.get('chargePointId') || params.get('chargePointIdentity');
+          connectorIdParam = params.get('connectorId') || params.get('connector');
+          
+          console.log('QR Scanner Debug - Manual query parsing result:', { chargePointId, connectorIdParam });
         }
       }
       
+      console.log('QR Scanner Debug - Final extracted params:', { chargePointId, connectorIdParam });
+
+      if (chargePointId && connectorIdParam) {
+        console.log('QR Scanner Debug - BOTH PARAMETERS FOUND - entering the success path');
+        const connectorId = Number(connectorIdParam);
+
+        if (Number.isFinite(connectorId)) {
+          // Build the API URL for getting WebSocket URL
+          const apiBase = env.apiUrl.replace(/\/$/, "");
+          const requestUrl = `${apiBase}/api/chargepoints/${encodeURIComponent(chargePointId)}/${connectorId}/websocket-url`;
+
+          const result = {
+            requestUrl: normalizeUrlToDevice(requestUrl, env.apiUrl),
+            chargePointIdentity: chargePointId,
+            connectorId,
+          };
+
+          console.log('QR Scanner Debug - URL params final result:', result);
+          return result;
+        }
+      }
+
+      // If we have chargePointId from URL params but no connectorId, still try to extract from path
+      if (chargePointId) {
+        console.log('QR Scanner Debug - Found chargePointId but no connectorId, checking path...');
+
+        // Try to extract connectorId from URL path if fullUrl was successfully parsed
+        if (fullUrl) {
+          const pathParts = fullUrl.pathname.split('/');
+          const chargepointsIndex = pathParts.indexOf('chargepoints');
+
+          console.log('QR Scanner Debug - Path parts for connector extraction:', pathParts);
+          console.log('QR Scanner Debug - Chargepoints index:', chargepointsIndex);
+
+          if (chargepointsIndex !== -1 && pathParts.length > chargepointsIndex + 2) {
+            const extractedConnectorId = Number(pathParts[chargepointsIndex + 2]);
+
+            if (Number.isFinite(extractedConnectorId)) {
+              const apiBase = env.apiUrl.replace(/\/$/, "");
+              const requestUrl = `${apiBase}/api/chargepoints/${encodeURIComponent(chargePointId)}/${extractedConnectorId}/websocket-url`;
+
+              const result = {
+                requestUrl: normalizeUrlToDevice(requestUrl, env.apiUrl),
+                chargePointIdentity: chargePointId,
+                connectorId: extractedConnectorId,
+              };
+
+              console.log('QR Scanner Debug - Mixed param+path result:', result);
+              return result;
+            }
+          }
+        }
+      }
+    
+      // If we couldn't extract required params from URL, return as direct URL
+      console.log('QR Scanner Debug - No valid chargePointIdentity/connectorId found, treating as direct URL');
       return {
         requestUrl: normalizeUrlToDevice(cleanedValue, env.apiUrl),
       };
@@ -270,108 +327,16 @@ export default function QRScannerScreen() {
         throw new Error("QR Code ไม่มีข้อมูลเครื่องชาร์จหรือหัวชาร์จที่ถูกต้อง");
       }
 
-      // Use chargepoint service to get WebSocket URL
-      let response;
-      try {
-        response = await chargepointService.getWebSocketUrl(
-          payload.chargePointIdentity,
-          payload.connectorId,
-          {
-            userId: credentials.id,
-          }
-        );
-      } catch (apiError: any) {
-        // จัดการ error จาก API โดยเฉพาะ
-        console.log('QR Scanner Debug - API Error caught:', apiError);
+    // ข้ามการตรวจสอบสถานะ ไปตรงที่หน้า loading เพื่อเริ่มชาร์จ
+      console.log('QR Scanner DEBUG [V3] - Skipping status check, proceeding directly to charging session...');
 
-        // ตรวจสอบว่าเป็น error 402 (Payment Required)
-        if (apiError?.status === 402 || apiError?.data?.code === 'NO_PAYMENT_CARDS') {
-          console.log('🚫 [QR] User has no payment cards, redirecting to add card page');
-
-          setIsProcessing(false);
-
-          Alert.alert(
-            "กรุณาเพิ่มบัตร",
-            apiError?.data?.message || apiError?.message || "กรุณาเพิ่มบัตรเครดิตก่อนใช้งานเครื่องชาร์จ",
-            [
-              {
-                text: "ยกเลิก",
-                style: "cancel",
-                onPress: () => {
-                  setScanned(false);
-                  isHandlingScanRef.current = false;
-                }
-              },
-              {
-                text: "เพิ่มบัตร",
-                onPress: () => {
-                  setScanned(false);
-                  isHandlingScanRef.current = false;
-                  router.push("/card" as never);
-                }
-              }
-            ]
-          );
-          return;
-        }
-
-        // ถ้าไม่ใช่ error เรื่องบัตร ให้ throw ต่อไป
-        throw apiError;
-      }
-
-      console.log('QR Scanner Debug - Service Response:', response);
-
-      if (!response.success) {
-        throw new Error(response.error || response.message || "ไม่สามารถเรียก API ได้");
-      }
-
-      if (!response.data) {
-        throw new Error("ไม่พบข้อมูลในการตอบกลับจากเซิร์ฟเวอร์");
-      }
-
-      const body = response.data;
-
-      const websocketUrl =
-        body?.data?.websocketUrl ||
-        body?.data?.websocketURL ||
-        body?.websocketUrl ||
-        body?.websocketURL;
-
-      if (!websocketUrl) {
-        throw new Error("ไม่พบ WebSocket URL ในข้อมูลที่ได้รับ");
-      }
-
-      const normalizedWs = normalizeWebSocketUrlToDevice(
-        websocketUrl,
-        env.apiUrl,
-      );
-
-      const identity =
-        body?.data?.chargePoint?.chargePointIdentity ||
-        payload.chargePointIdentity;
-      const connectorId =
-        body?.data?.connector?.connectorId || payload.connectorId;
-      const chargePointData =
-        (body?.data?.chargePoint || body?.chargePoint || {}) as ChargePointDetails;
-      const pricingTier =
-        (body?.data?.pricingTier || body?.pricingTier || null) as PricingTierInfo | null;
-      const chargePointName = chargePointData?.name;
-
+      // สร้าง parameters สำหรับหน้าถัดไป
       const params: Record<string, string> = {
-        websocketUrl: normalizedWs,
+        chargePointIdentity: payload.chargePointIdentity,
+        connectorId: String(payload.connectorId),
       };
 
-      if (identity) params.chargePointIdentity = identity;
-      if (connectorId != null) params.connectorId = String(connectorId);
-      if (chargePointName) params.chargePointName = chargePointName;
-      if (chargePointData?.stationName) params.stationName = chargePointData.stationName;
-      if (chargePointData?.location) params.stationLocation = chargePointData.location;
-      if (chargePointData?.powerRating != null) params.powerRating = String(chargePointData.powerRating);
-      if (chargePointData?.brand) params.chargePointBrand = chargePointData.brand;
-      if (chargePointData?.protocol) params.protocol = chargePointData.protocol;
-      if (pricingTier?.baseRate != null) params.baseRate = String(pricingTier.baseRate);
-      if (pricingTier?.currency) params.currency = pricingTier.currency;
-      if (pricingTier?.name) params.pricingTierName = pricingTier.name;
+      console.log('QR Scanner Debug - Basic navigation params:', params);
 
       setIsProcessing(false);
       router.push({

@@ -38,16 +38,18 @@ export const API_CONFIG = {
     
     // Chargepoint Management
     CHARGEPOINT: {
-      WEBSOCKET_URL: (identity: string, connectorId: number) => 
+      WEBSOCKET_URL: (identity: string, connectorId: number) =>
         `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/${connectorId}/websocket-url`,
-      STATUS: (identity: string) => 
-        `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/status`,
-      START_CHARGING: (identity: string, connectorId: number) => 
+      STATUS: (identity: string, connectorId?: number) =>
+        connectorId
+          ? `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/connectors/${connectorId}/status`
+          : `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/status`,
+      START_CHARGING: (identity: string, connectorId: number) =>
         `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/${connectorId}/start`,
-      STOP_CHARGING: (identity: string, connectorId: number) => 
+      STOP_CHARGING: (identity: string, connectorId: number) =>
         `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/${connectorId}/stop`,
       LIST: '/api/v1/user/chargepoints',
-      DETAILS: (identity: string) => 
+      DETAILS: (identity: string) =>
         `/api/v1/user/chargepoints/${encodeURIComponent(identity)}`,
     },
     
@@ -74,6 +76,7 @@ export const API_CONFIG = {
     
     // Charging
     CHARGING: {
+      INITIATE: '/api/v1/user/charging/initiate',
       START: '/api/v1/user/charging/start',
       STOP: '/api/v1/user/charging/stop',
       STATUS: '/api/v1/user/charging/status',
