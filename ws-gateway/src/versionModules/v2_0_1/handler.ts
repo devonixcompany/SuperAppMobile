@@ -2,6 +2,7 @@
 // Implements version-specific logic for OCPP 2.0.1 messages
 
 import { BACKEND_URL, WS_GATEWAY_API_KEY } from '../../config/env';
+import { gatewaySessionManager } from '../../handlers/gatewaySessionManager';
 
 const withGatewayHeaders = (headers: Record<string, string> = {}) => ({
   'X-Api-Key': WS_GATEWAY_API_KEY,
@@ -86,21 +87,20 @@ export function handleBootNotification(payload: OCPP201BootNotificationRequest):
   };
 }
 
-export function handleStatusNotification(payload: OCPP201StatusNotificationRequest): any {
+export function handleStatusNotification(chargePointId: string, payload: OCPP201StatusNotificationRequest): any {
   console.log('OCPP 2.0.1 - Handling StatusNotification:', payload);
   
   // Validate required fields
   if (!payload.timestamp || !payload.connectorStatus || !payload.evseId || !payload.connectorId) {
     throw new Error('Missing required fields in StatusNotification');
   }
-
-  // Process status notification
-  // TODO: Update connector status in database
-  
-  return {}; // Empty response for StatusNotification
+  try {
+    gatewaySessionManager.updateConnectorStatus(chargePointId, payload.connectorId, payload.connectorStatus);
+  } catch {}
+  return {};
 }
 
-export function handleTransactionEvent(payload: OCPP201TransactionEventRequest): any {
+export function handleTransactionEvent(chargePointId: string, payload: OCPP201TransactionEventRequest): any {
   console.log('OCPP 2.0.1 - Handling TransactionEvent:', payload);
   
   // Validate required fields
@@ -129,6 +129,42 @@ export function handleTransactionEvent(payload: OCPP201TransactionEventRequest):
   }
 
   return response;
+}
+
+export async function handleGet15118EVCertificate(
+  chargePointId: string,
+  payload: {
+    iso15118SchemaVersion: string;
+    action: 'Install' | 'Update';
+    exiRequest: string;
+  }
+): Promise<any> {
+  console.log('OCPP 2.0.1 - Handling Get15118EVCertificate:', payload);
+  if (!payload.iso15118SchemaVersion || !payload.action || !payload.exiRequest) {
+    throw new Error('Missing required fields in Get15118EVCertificate');
+  }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(`${BACKEND_URL}/api/iso15118/get-ev-certificate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Api-Key': WS_GATEWAY_API_KEY
+      },
+      body: JSON.stringify({ chargePointId, ...payload }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      return { status: 'Failed', exiResponse: '' };
+    }
+    const data: any = await res.json().catch(() => ({} as any));
+    const exiResponse = typeof data.exiResponse === 'string' ? data.exiResponse : '';
+    return { status: 'Accepted', exiResponse };
+  } catch {
+    return { status: 'Failed', exiResponse: '' };
+  }
 }
 
 export async function handleHeartbeat(
@@ -198,14 +234,24 @@ export function handleAuthorize(payload: {
   };
   certificate?: string;
   iso15118CertificateHashData?: any[];
-}): any {
+}, chargePointId?: string): any {
   console.log('OCPP 2.0.1 - Handling Authorize:', payload);
   
   if (!payload.idToken?.idToken || !payload.idToken?.type) {
     throw new Error('Missing idToken in Authorize request');
   }
 
-  // TODO: Validate ID token against database
+  try {
+    if (chargePointId && payload.idToken?.type === 'MacAddress') {
+      const cp = gatewaySessionManager.getChargePoint(chargePointId);
+      if (cp) {
+        const first = cp.connectors.find(c => c.connectorId === 1);
+        if (first && first.metrics) {
+          first.metrics.transactionIdTag = payload.idToken.idToken;
+        }
+      }
+    }
+  } catch {}
   
   return {
     idTokenInfo: {
@@ -214,7 +260,7 @@ export function handleAuthorize(payload: {
   };
 }
 
-export function handleMeterValues(payload: {
+export function handleMeterValues(chargePointId: string, payload: {
   evseId: number;
   meterValue: Array<{
     timestamp: string;
@@ -237,11 +283,18 @@ export function handleMeterValues(payload: {
   if (!payload.evseId || !payload.meterValue) {
     throw new Error('Missing required fields in MeterValues');
   }
-
-  // Process meter values
-  // TODO: Store meter values in database
-  
-  return {}; // Empty response for MeterValues
+  try {
+    const converted = (payload.meterValue || []).map(mv => ({
+      timestamp: mv.timestamp,
+      sampledValue: (mv.sampledValue || []).map(sv => ({
+        value: String(sv.value),
+        measurand: sv.measurand,
+        unit: sv.unitOfMeasure?.unit
+      }))
+    }));
+    gatewaySessionManager.updateConnectorMeterValues(chargePointId, payload.evseId, converted);
+  } catch {}
+  return {};
 }
 
 export function handleNotifyReport(payload: {
@@ -305,19 +358,31 @@ export async function handleMessage(
       return handleBootNotification(payload);
     
     case 'StatusNotification':
-      return handleStatusNotification(payload);
+      return handleStatusNotification(chargePointId || 'unknown', payload);
     
     case 'TransactionEvent':
-      return handleTransactionEvent(payload);
+      return handleTransactionEvent(chargePointId || 'unknown', payload);
     
     case 'Heartbeat':
       return handleHeartbeat(chargePointId || 'unknown', messageId || 'unknown', payload);
     
     case 'Authorize':
-      return handleAuthorize(payload);
+      return handleAuthorize(payload, chargePointId);
     
     case 'MeterValues':
-      return handleMeterValues(payload);
+      return handleMeterValues(chargePointId || 'unknown', payload);
+    
+    case 'Get15118EVCertificate':
+      return handleGet15118EVCertificate(chargePointId || 'unknown', payload);
+    
+    case 'InstallCertificate':
+      return { status: 'Accepted' };
+    
+    case 'CertificateSigned':
+      return { status: 'Accepted' };
+    
+    case 'GetCertificateStatus':
+      return { status: 'Accepted' };
     
     case 'NotifyReport':
       return handleNotifyReport(payload);

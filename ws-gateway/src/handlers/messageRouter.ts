@@ -133,7 +133,7 @@ export async function routeMessage(routeInfo: RouteInfo): Promise<MessageRespons
       case 'ocpp2.0':
       case 'ocpp2.0.1':
         // ใช้ handler สำหรับ OCPP 2.0/2.0.1
-        response = await handleV201Message(message.action!, message.payload);
+        response = await handleV201Message(message.action!, message.payload, chargePointId, message.messageId);
         break;
       
       default:
