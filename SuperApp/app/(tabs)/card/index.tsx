@@ -11,6 +11,7 @@ import { usePointCardResponsive } from "@/hooks/usePointCardResponsive";
 import { paymentService, type PaymentCard, type PaymentHistoryEntry } from "@/services/api/payment.service";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { ClipPath, Defs, G, Path, Rect } from "react-native-svg";
+import { TABS_HORIZONTAL_GUTTER } from "../_layout";
 
 type TouchableScaleProps = PressableProps & {
   className?: string;
@@ -341,9 +342,12 @@ export default function CardScreen() {
 
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar
-    <SafeAreaView className="flex-1 px-8 bg-[#F8FAFC]">
+    <SafeAreaView
+      className="flex-1 bg-[#F8FAFC]"
+      style={{ paddingHorizontal: TABS_HORIZONTAL_GUTTER }}
+    >
       {/* === HEADER SECTION === */}
-      <View className="px-6 pt-4 pb-2">
+      <View className="pt-4 pb-2">
         <View className="flex-row items-center justify-between mb-6">
           <Text className="text-2xl font-bold text-[#1F2937]">
             บัตรและกระเป๋าเงิน

@@ -21,6 +21,7 @@ import CoinSvg from "@/assets/img/twemoji_coin.svg";
 import { usePointCardResponsive } from "@/hooks/usePointCardResponsive";
 import { useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { TABS_HORIZONTAL_GUTTER } from "../_layout";
 import MiniProfileModal, { DEFAULT_PROFILE_AVATAR } from "./miniprofile";
 import NotificationModal from "./notification";
 import {
@@ -213,13 +214,8 @@ export default function HomeScreen() {
     const isLargePhone = screenWidth >= 414 && screenWidth < 768;
     const isTablet = screenWidth >= 768;
 
-    const horizontalGutter = isTablet
-      ? 48
-      : isLargePhone
-        ? 28
-        : isSmallPhone
-          ? 16
-          : 22;
+    // ใช้ค่าคงที่สำหรับ padding ซ้าย-ขวา จาก layout (ปรับเลขได้ใน /app/(tabs)/_layout.tsx)
+    const horizontalGutter = TABS_HORIZONTAL_GUTTER;
 
     const availableWidth = Math.max(screenWidth - horizontalGutter * 2, 200);
     const desiredPhoneWidth = Math.min(screenWidth * 0.85, 360);
@@ -311,7 +307,7 @@ export default function HomeScreen() {
       >
         {/* ส่วนหลัก: padding ด้านข้างปรับตามหน้าจอ */}
         <View
-          className="pt-4 pb-0"
+          className="pt-4 pb-0" // ระยะห่างบนจอ
           style={{ paddingHorizontal: responsive.horizontalGutter }}
         >
           {/* === HEADER SECTION === */}

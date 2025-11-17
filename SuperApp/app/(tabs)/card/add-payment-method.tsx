@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
+import { TABS_HORIZONTAL_GUTTER } from "../_layout";
 
 export default function AddPaymentMethodScreen() {
   const [loading, setLoading] = useState(false);
@@ -285,7 +286,7 @@ export default function AddPaymentMethodScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View className="px-6 pt-4 pb-2">
+        <View className="pt-4 pb-2" style={{ paddingHorizontal: TABS_HORIZONTAL_GUTTER }}>
           <View className="flex-row items-center mb-6">
             <TouchableOpacity
               onPress={() => router.back()}
@@ -300,7 +301,7 @@ export default function AddPaymentMethodScreen() {
         </View>
 
         <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}>
-          <View className="px-6">
+          <View style={{ paddingHorizontal: TABS_HORIZONTAL_GUTTER }}>
             {canUseOmiseUI ? (
               <View className="rounded-xl overflow-hidden mb-6">
                 <WebView
