@@ -7,7 +7,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const ACTIVE_TRANSACTION_STATUS = "ACTIVE";
+const ACTIVE_TRANSACTION_STATUS = "CHARGING";
+const ACTIVE_STATUSES = ["CHARGING", "ACTIVE", "PREPARING"];
 
 type RawTransaction = {
   status?: string;
@@ -28,10 +29,12 @@ type ChargingDataPayload = {
 };
 
 const getStatusString = (transaction: RawTransaction) => {
+  // Check common status field names
   const candidates = [
     transaction.status,
     transaction.transactionStatus,
     transaction.state,
+    transaction.connector?.status, // API returns status in connector.status
   ];
 
   for (const candidate of candidates) {
@@ -83,7 +86,7 @@ const extractActiveTransaction = (payload: unknown): RawTransaction | null => {
     const candidate = payload as RawTransaction;
     const status = getStatusString(candidate);
 
-    if (status && status.toUpperCase() === ACTIVE_TRANSACTION_STATUS) {
+    if (status && ACTIVE_STATUSES.includes(status.toUpperCase())) {
       return candidate;
     }
 
@@ -330,13 +333,43 @@ const loadActiveTransaction = async (): Promise<ChargingStatusResult> => {
       return { data: null, hadError: false };
     }
 
-    const endpoint = `/api/transactions/user/${credentials.id}`;
+    const endpoint = `/api/v1/user/charging/active`;
     console.log('🔍 [POPUP] Fetching active transaction from:', endpoint);
-    const response = await http.get<any>(endpoint);
+    
+    // Create a shorter timeout (8 seconds) for this specific request to avoid long hangs
+    let response;
+    try {
+      response = await Promise.race([
+        http.get<any>(endpoint),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request timeout after 8 seconds')), 8000)
+        )
+      ]);
+    } catch (err: any) {
+      if (err.message?.includes('timeout')) {
+        console.warn('⏱️ [POPUP] Request timeout - will retry on next poll');
+        return { data: null, hadError: false };
+      }
+      throw err;
+    }
+
     console.log('📦 [POPUP] Raw API response:', response);
     const payload = response?.data ?? response;
     console.log('📦 [POPUP] Payload:', payload);
-    const activeTransaction = extractActiveTransaction(payload);
+    
+    // The response format is { success, data: [] } where data is an array
+    let activeTransaction = null;
+    if (Array.isArray(payload)) {
+      // If payload is the array directly
+      activeTransaction = payload.length > 0 ? payload[0] : null;
+    } else if (Array.isArray(payload?.data)) {
+      // If payload has data array
+      activeTransaction = payload.data.length > 0 ? payload.data[0] : null;
+    } else {
+      // Try to extract from payload
+      activeTransaction = extractActiveTransaction(payload);
+    }
+    
     console.log('🎯 [POPUP] Active transaction:', activeTransaction);
 
     if (!activeTransaction) {
@@ -346,8 +379,8 @@ const loadActiveTransaction = async (): Promise<ChargingStatusResult> => {
 
     const status = getStatusString(activeTransaction);
     console.log('📊 [POPUP] Transaction status:', status);
-    if (!status || status.toUpperCase() !== ACTIVE_TRANSACTION_STATUS) {
-      console.log('❌ [POPUP] Status is not ACTIVE');
+    if (!status || !ACTIVE_STATUSES.includes(status.toUpperCase())) {
+      console.log('❌ [POPUP] Status is not one of:', ACTIVE_STATUSES);
       return { data: null, hadError: false };
     }
 
@@ -356,7 +389,7 @@ const loadActiveTransaction = async (): Promise<ChargingStatusResult> => {
     // Extract chargePoint data
     const chargePoint = activeTransaction.chargePoint;
     const connector = activeTransaction.connector;
-    const station = chargePoint?.Station ?? chargePoint?.station;
+    const station = chargePoint?.station ?? chargePoint?.Station;
 
     console.log('🔌 [POPUP] ChargePoint:', chargePoint);
     console.log('🔌 [POPUP] Connector:', connector);
@@ -376,10 +409,11 @@ const loadActiveTransaction = async (): Promise<ChargingStatusResult> => {
         activeTransaction.transactionID ??
         null,
       startTime: activeTransaction.startTime ?? null,
-      websocketUrl: activeTransaction.websocketUrl ?? chargePoint?.urlwebSocket ?? chargePoint?.websocketUrl ?? null,
-      chargePointIdentity: chargePoint?.chargePointIdentity ?? activeTransaction.chargePointIdentity ?? null,
+      // Use identity field from chargePoint instead of chargePointIdentity
+      websocketUrl: activeTransaction.websocketUrl ?? chargePoint?.urlwebSocket ?? chargePoint?.websocketUrl ?? station?.websocketUrl ?? null,
+      chargePointIdentity: chargePoint?.identity ?? chargePoint?.chargePointIdentity ?? activeTransaction.chargePointIdentity ?? null,
       connectorId: connector?.connectorId ?? activeTransaction.connectorId ?? null,
-      stationName: station?.stationname ?? station?.name ?? chargePoint?.stationName ?? null,
+      stationName: station?.stationName ?? station?.stationname ?? station?.name ?? chargePoint?.stationName ?? chargePoint?.name ?? null,
       stationLocation: station?.location ?? chargePoint?.location ?? null,
       powerRating: chargePoint?.powerRating ?? chargePoint?.maxPower ?? null,
       baseRate: station?.onPeakRate ?? station?.offPeakRate ?? null,
@@ -395,9 +429,22 @@ const loadActiveTransaction = async (): Promise<ChargingStatusResult> => {
       data: popupData,
       hadError: false,
     };
-  } catch (error) {
-    console.error("โหลดข้อมูลธุรกรรมการชาร์จไม่สำเร็จ:", error);
-    return { data: null, hadError: true };
+  } catch (error: any) {
+    // Check if it's a timeout error
+    const isTimeout = error?.message?.includes('timeout');
+    const errorCode = error?.code;
+    const errorMessage = error?.message || 'Unknown error';
+    
+    console.error("❌ [POPUP] Failed to load active transaction:", {
+      message: errorMessage,
+      code: errorCode,
+      isTimeout,
+      status: error?.response?.status,
+    });
+
+    // For timeout errors, return false for hadError so we can retry
+    // For other errors, also return false to avoid blocking the UI
+    return { data: null, hadError: false };
   }
 };
 
@@ -621,15 +668,15 @@ const ChargingStatusCardContent: React.FC<ChargingStatusCardContentProps> = ({
       return;
     }
 
-    // Navigate to charge session with all required parameters
+    // Navigate to charge session with all available parameters
     console.log('🚀 [POPUP NAV] Checking required fields...');
-    console.log('🚀 [POPUP NAV] websocketUrl:', data?.websocketUrl);
     console.log('🚀 [POPUP NAV] chargePointIdentity:', data?.chargePointIdentity);
     console.log('🚀 [POPUP NAV] connectorId:', data?.connectorId);
+    console.log('🚀 [POPUP NAV] stationName:', data?.stationName);
 
-    if (data?.websocketUrl && data?.chargePointIdentity && data?.connectorId) {
+    // Only require chargePointIdentity and connectorId - websocketUrl is optional
+    if (data?.chargePointIdentity && data?.connectorId != null) {
       const navParams = {
-        websocketUrl: data.websocketUrl,
         chargePointIdentity: data.chargePointIdentity,
         chargePointName: data.chargePointName ?? '',
         connectorId: String(data.connectorId),
@@ -642,9 +689,10 @@ const ChargingStatusCardContent: React.FC<ChargingStatusCardContentProps> = ({
         chargePointBrand: data.chargePointBrand ?? '',
         protocol: data.protocol ?? '',
         startTime: data.startTime ?? undefined,
+        transactionId: data.transactionId ? String(data.transactionId) : undefined,
       };
 
-      console.log('✅ [POPUP NAV] All required fields present, navigating...');
+      console.log('✅ [POPUP NAV] Required fields present, navigating to charge-session...');
       console.log('✅ [POPUP NAV] Navigation params:', navParams);
 
       try {
@@ -659,7 +707,6 @@ const ChargingStatusCardContent: React.FC<ChargingStatusCardContentProps> = ({
       }
     } else {
       console.warn('❌ [POPUP NAV] Missing required data for navigation:', {
-        websocketUrl: data?.websocketUrl,
         chargePointIdentity: data?.chargePointIdentity,
         connectorId: data?.connectorId,
       });
