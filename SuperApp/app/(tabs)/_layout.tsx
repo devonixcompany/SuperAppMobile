@@ -227,11 +227,11 @@ export const useAppBarActions = (
 
 const styles = StyleSheet.create({
   appBarWrapper: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#EFF0F2",
   },
   appBarContainer: {
-    backgroundColor: "#F8FAFC", //สีพื้นหลังของ App Bar เปลี่ยนตรงนี้
-    borderBottomColor: "#E5E7EB",
+    backgroundColor: "#D9DEED80", //สีพื้นหลังของ App Bar เปลี่ยนตรงนี้
+    borderBottomColor: "#D9DEED",//สีเส้นของ App Bar
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   appBarContent: {

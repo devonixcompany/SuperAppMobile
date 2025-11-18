@@ -336,7 +336,7 @@ export default function ChargingScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <StatusBar style="dark" backgroundColor="#ffffff" />
+        <StatusBar style="dark" backgroundColor="#D9DEED80" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#10b981" />
           <Text style={styles.loadingText}>กำลังโหลดข้อมูลสถานีชาร์จ...</Text>
@@ -348,7 +348,7 @@ export default function ChargingScreen() {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.container}>
-        <StatusBar style="dark" backgroundColor="#ffffff" />
+        <StatusBar style="dark" backgroundColor="#D9DEED80" />
 
         {/* Search Bar */}
         <SearchBar
@@ -418,7 +418,7 @@ export default function ChargingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#D9DEED80",
   },
   loadingContainer: {
     flex: 1,
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: "#fff",
+    backgroundColor: "#D9DEED80",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   clearSearchText: {
-    color: "#fff",
+    color: "#D9DEED80",
     fontSize: 16,
     fontWeight: "600",
   },

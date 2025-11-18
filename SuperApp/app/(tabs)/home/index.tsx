@@ -309,7 +309,7 @@ export default function HomeScreen() {
 
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar, ตั้งพื้นหลังเป็นสีเทาอ่อน
-    <SafeAreaView edges={["left", "right", "bottom"]} className="flex-1 bg-[#EEF0F6]">
+    <SafeAreaView edges={["left", "right", "bottom"]} className="flex-1 bg-[#D9DEED80]">
       {/* ScrollView: ทำให้เนื้อหาสามารถเลื่อนได้, ซ่อน scrollbar */}
       <ScrollView
         className="flex-1"

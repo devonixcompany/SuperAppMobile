@@ -297,7 +297,7 @@ export default function SettingsScreen() {
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar
     <SafeAreaView
-      className="  flex-1 bg-[#F8FAFC]"
+      className="  flex-1 bg-[#D9DEED80]"
       edges={["left", "right", "bottom"]}
       style={{ paddingHorizontal: TABS_HORIZONTAL_GUTTER }}
     >

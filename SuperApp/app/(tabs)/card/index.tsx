@@ -193,30 +193,28 @@ export default function CardScreen() {
     return `${symbol} ${amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`;
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView className="flex-1 bg-[#F8FAFC] items-center justify-center">
-        <ActivityIndicator size="large" color="#51BC8E" />
-        <Text className="text-[#6B7280] mt-4">กำลังโหลด...</Text>
-      </SafeAreaView>
-    );
-  }
-
+if (loading) {
   return (
-    // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar
     <SafeAreaView
-      className="flex-1 bg-[#F8FAFC] mt-4"
-      edges={["left", "right", "bottom"]}
-      style={{ paddingHorizontal: TABS_HORIZONTAL_GUTTER }}
+      className="items-center justify-center flex-1"
+      style={{ backgroundColor: "#D9DEED80" }}
     >
-      {/* === POINTS CARD SECTION === */}
-      <PointsCard
-        points={262}
-        memberId="000000"
-        footerText="หมดอายุ : 30 ก.ย. 2568"
-        disabled
-      />
+      <ActivityIndicator size="large" color="#51BC8E" />
+      <Text className="text-[#6B7280] mt-4">กำลังโหลด...</Text>
+    </SafeAreaView>
+  );
+}
 
+return (
+  // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar
+  <SafeAreaView 
+    className="flex-1"
+    edges={["left", "right", "bottom"]}
+    style={{
+      paddingHorizontal: TABS_HORIZONTAL_GUTTER,
+      backgroundColor: "#D9DEED80",
+    }}
+  >
       {/* ScrollView: ทำให้เนื้อหาเลื่อนได้ */}
       <ScrollView 
         className="flex-1" 
@@ -230,7 +228,16 @@ export default function CardScreen() {
           />
         }
       >
-      
+        {/* === POINTS CARD SECTION === */}
+        <View className="mt-4 mb-6">
+          <PointsCard
+            points={262}
+            memberId="000000"
+            footerText="หมดอายุ : 30 ก.ย. 2568"
+            disabled
+          />
+        </View>
+
           {/* === PAYMENT METHODS SECTION === */}
           {/* แสดงวิธีการชำระเงินที่เชื่อมโยง */}
           <View className="mb-6 ">
