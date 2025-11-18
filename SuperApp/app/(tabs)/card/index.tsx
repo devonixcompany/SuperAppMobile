@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 // นำเข้า components พื้นฐานจาก React Native
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
-import PointsCard from "@/components/ui/PointsCard";
+import PointsCard, { DEFAULT_POINTS_CARD_PROPS } from "@/components/ui/PointsCard";
 import { paymentService, type PaymentCard, type PaymentHistoryEntry } from "@/services/api/payment.service";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TABS_HORIZONTAL_GUTTER, useAppBarActions } from "../_layout";
@@ -230,12 +230,7 @@ return (
       >
         {/* === POINTS CARD SECTION === */}
         <View className="mt-4 mb-6">
-          <PointsCard
-            points={262}
-            memberId="000000"
-            footerText="หมดอายุ : 30 ก.ย. 2568"
-            disabled
-          />
+          <PointsCard {...DEFAULT_POINTS_CARD_PROPS} disabled />
         </View>
 
           {/* === PAYMENT METHODS SECTION === */}

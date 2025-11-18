@@ -55,8 +55,8 @@ type AppBarConfig = {
 
 const APP_BAR_CONFIG: Record<string, AppBarConfig> = {
   home: { title: "หน้าหลัก" },
-  charging: { title: "สถานีชาร์จ" },
-  card: { title: "บัตรและกระเป๋าตัง" },
+  charging: { title: "ค้นหาสถานีชาร์จ" },
+  card: { title: "บัตร" },
   settings: { title: "ตั้งค่า" },
 };
 

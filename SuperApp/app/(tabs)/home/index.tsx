@@ -15,7 +15,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
-import PointsCard from "@/components/ui/PointsCard";
+import PointsCard, { DEFAULT_POINTS_CARD_PROPS } from "@/components/ui/PointsCard";
 import { useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { TABS_HORIZONTAL_GUTTER, useAppBarActions } from "../_layout";
@@ -323,9 +323,7 @@ export default function HomeScreen() {
         >
           {/* === POINTS CARD SECTION === */}
           <PointsCard
-            points={262}
-            memberId="000000"
-            footerText="สิทธิพิเศษของคุณ"
+            {...DEFAULT_POINTS_CARD_PROPS}
             onPress={() => router.push("/card")}
           />
 

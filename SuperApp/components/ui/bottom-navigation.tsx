@@ -124,7 +124,7 @@ export default function BottomNavigation({
     },
     {
       id: "card",
-      label: "เป๋าตัง",
+      label: "บัตร",
       Icon: WalletIcon,
       segmentFlex: 1,
     },

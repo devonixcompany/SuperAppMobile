@@ -30,6 +30,15 @@ type PointsCardProps = {
   style?: StyleProp<ViewStyle>;
 };
 
+export const DEFAULT_POINTS_CARD_PROPS: Pick<
+  PointsCardProps,
+  "points" | "memberId" | "footerText"
+> = {
+  points: 9999,
+  memberId: "PN00000",
+  footerText: "ชาร์จรับเหรียญคืน 1% ของจำนวนเงิน",
+};
+
 const ponixLogo = require("@/assets/img/ponix-logo-06.png");
 const GRADIENT_COLORS = [
   "#1F274B",
@@ -119,9 +128,9 @@ const getCoinWrapperSize = (responsiveSize: number) => responsiveSize + 2;
 const getCoinSize = (responsiveSize: number) => responsiveSize;
 
 export default function PointsCard({
-  points,
-  memberId = "000000",
-  footerText,
+  points = DEFAULT_POINTS_CARD_PROPS.points,
+  memberId = DEFAULT_POINTS_CARD_PROPS.memberId,
+  footerText = DEFAULT_POINTS_CARD_PROPS.footerText,
   onPress,
   disabled = false,
   style,
@@ -131,8 +140,8 @@ export default function PointsCard({
   const badgeBorderWidth = 0.5;
   const badgeBackgroundColor = "rgba(243, 245, 250, 0.5)";
 
-  const bottomText = footerText ?? "สิทธิพิเศษของคุณ";
-  const pointsLabel = `${points} P`;
+  const bottomText = footerText ?? DEFAULT_POINTS_CARD_PROPS.footerText;
+  const pointsLabel = `${points} Ponix`;
 
   return (
     <View style={[{ marginBottom: 20, alignSelf: "stretch" }, style]}>
@@ -229,7 +238,7 @@ export default function PointsCard({
               color: "rgba(255,255,255,0.9)",
             }}
           >
-            คะแนนของฉัน
+            เหรียญของฉัน
           </Text>
 
           <View
