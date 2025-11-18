@@ -297,24 +297,20 @@ export default function SettingsScreen() {
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar
     <SafeAreaView
-      className="flex-1 bg-[#F8FAFC]"
+      className="  flex-1 bg-[#F8FAFC]"
+      edges={["left", "right", "bottom"]}
       style={{ paddingHorizontal: TABS_HORIZONTAL_GUTTER }}
     >
-      {/* === HEADER SECTION === */}
-      <View className="pt-4 pb-2">
-        <Text className="text-2xl font-bold text-[#1F2937]">ตั้งค่า</Text>
-      </View>
-
       {/* ScrollView: ทำให้เนื้อหาเลื่อนได้ */}
       <ScrollView className="flex-1 " showsVerticalScrollIndicator={false}>
         {/* === PROFILE SECTION === */}
         {/* การ์ดแสดงข้อมูลโปรไฟล์ผู้ใช้ */}
-        <View className="mb-6">
-          <TouchableOpacity className="bg-white rounded-xl p-4 shadow-sm">
+        <View className="mt-4 mb-6">
+          <TouchableOpacity className="p-4 bg-white shadow-sm rounded-xl">
             <View className="flex-row items-center">
               {/* วงกลมแสดงตัวอักษรจากเบอร์โทรที่บันทึกไว้ */}
               <View className="w-16 h-16 bg-[#51BC8E] rounded-full items-center justify-center mr-4">
-                <Text className="text-white text-xl font-bold">
+                <Text className="text-xl font-bold text-white">
                   {profileInitials}
                 </Text>
               </View>
@@ -348,7 +344,7 @@ export default function SettingsScreen() {
                 {section.title}
               </Text>
               {/* กล่องรายการในหมวดหมู่ */}
-              <View className="bg-white rounded-xl shadow-sm">
+              <View className="bg-white shadow-sm rounded-xl">
                 {/* วนลูปแสดงรายการในหมวดหมู่ */}
                 {section.items.map((item, itemIndex) => (
                   <TouchableOpacity
@@ -363,7 +359,7 @@ export default function SettingsScreen() {
                   >
                     <View className="flex-row items-center">
                       {/* ไอคอนของรายการ */}
-                      <View className="w-10 h-10 bg-gray-100 rounded-full items-center justify-center mr-3">
+                      <View className="items-center justify-center w-10 h-10 mr-3 bg-gray-100 rounded-full">
                         <Ionicons
                           name={item.icon as any}
                           size={20}
@@ -406,8 +402,8 @@ export default function SettingsScreen() {
           {/* === CLEAR DATA BUTTON (DEV/DEBUG) === */}
           {/* แสดงข้อมูลที่ดึงจาก keychain สำหรับ debug */}
           {__DEV__ && (
-            <View className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 shadow-sm mb-4">
-              <Text className="text-blue-800 font-semibold">
+            <View className="p-4 mb-4 border-2 border-blue-200 shadow-sm bg-blue-50 rounded-xl">
+              <Text className="font-semibold text-blue-800">
                 🔐 Keychain Debug
               </Text>
               <View className="mt-3 space-y-2">
@@ -438,15 +434,15 @@ export default function SettingsScreen() {
           {__DEV__ && ( // แสดงเฉพาะตอน development เท่านั้น
             <TouchableOpacity
               onPress={handleClearAllData}
-              className="bg-orange-50 border-2 border-orange-300 rounded-xl p-4 shadow-sm mb-4"
+              className="p-4 mb-4 border-2 border-orange-300 shadow-sm bg-orange-50 rounded-xl"
             >
               <View className="flex-row items-center justify-center">
                 <Ionicons name="trash-outline" size={20} color="#F97316" />
-                <Text className="text-orange-600 font-semibold ml-2">
+                <Text className="ml-2 font-semibold text-orange-600">
                   🧹 ล้างข้อมูลทั้งหมด (Dev)
                 </Text>
               </View>
-              <Text className="text-xs text-orange-500 text-center mt-2">
+              <Text className="mt-2 text-xs text-center text-orange-500">
                 ลบ tokens และ credentials ทั้งหมดออกจาก SecureStore
               </Text>
             </TouchableOpacity>
@@ -456,7 +452,7 @@ export default function SettingsScreen() {
           {/* ปุ่มออกจากระบบ */}
           <TouchableOpacity
             onPress={handleLogout} // เรียกฟังก์ชัน handleLogout
-            className="bg-white rounded-xl p-4 shadow-sm mb-6"
+            className="p-4 mb-6 bg-white shadow-sm rounded-xl"
           >
             <View className="flex-row items-center justify-center">
               {/* ไอคอนออกจากระบบ (สีแดง) */}

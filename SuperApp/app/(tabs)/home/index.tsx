@@ -18,7 +18,7 @@ import {
 import PointsCard from "@/components/ui/PointsCard";
 import { useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { TABS_HORIZONTAL_GUTTER } from "../_layout";
+import { TABS_HORIZONTAL_GUTTER, useAppBarActions } from "../_layout";
 import MiniProfileModal, { DEFAULT_PROFILE_AVATAR } from "./miniprofile";
 import NotificationModal from "./notification";
 import {
@@ -287,9 +287,29 @@ export default function HomeScreen() {
     }
   }, [hideChargingPopup, router, chargingPopupData]);
 
+  const handleShowProfile = useCallback(() => setProfileVisible(true), []);
+  const handleShowNotification = useCallback(
+    () => setNotificationVisible(true),
+    [],
+  );
+
+  useAppBarActions(
+    "home",
+    useMemo(
+      () => ({
+        leftAvatar: profileAvatar,
+        onLeftPress: handleShowProfile,
+        rightActions: [
+          { icon: "notifications-outline", onPress: handleShowNotification },
+        ],
+      }),
+      [handleShowNotification, handleShowProfile, profileAvatar],
+    ),
+  );
+
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar, ตั้งพื้นหลังเป็นสีเทาอ่อน
-    <SafeAreaView edges={["top"]} className="flex-1 bg-[#EEF0F6]">
+    <SafeAreaView edges={["left", "right", "bottom"]} className="flex-1 bg-[#EEF0F6]">
       {/* ScrollView: ทำให้เนื้อหาสามารถเลื่อนได้, ซ่อน scrollbar */}
       <ScrollView
         className="flex-1"
@@ -301,37 +321,6 @@ export default function HomeScreen() {
           className="pt-4 pb-0" // ระยะห่างบนจอ
           style={{ paddingHorizontal: responsive.horizontalGutter }}
         >
-          {/* === HEADER SECTION === */}
-          <View className="flex-row items-center justify-between mb-5">
-            <TouchableScale
-              className="w-11 h-11 rounded-full border border-[#EEF0F6] overflow-hidden bg-[#4EBB8E] shadow-sm"
-              onPress={() => setProfileVisible(true)}
-              androidRippleColor="rgba(255,255,255,0.25)"
-            >
-              <Image source={profileAvatar} className="w-full h-full" />
-            </TouchableScale>
-            <Text
-              className="font-semibold text-[#1F2937]"
-              style={{
-                fontSize: responsive.isTablet
-                  ? 22
-                  : responsive.isSmallPhone
-                    ? 16
-                    : 18,
-              }}
-            >
-              หน้าหลัก
-            </Text>
-            <TouchableScale
-              className="items-center justify-center w-10 h-10"
-              onPress={() => setNotificationVisible(true)}
-              hitSlop={8}
-              androidRippleColor="rgba(78,187,142,0.2)"
-            >
-              <Ionicons name="notifications-outline" size={32} color="#4EBB8E" />
-            </TouchableScale>
-          </View>
-
           {/* === POINTS CARD SECTION === */}
           <PointsCard
             points={262}

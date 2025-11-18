@@ -3,7 +3,7 @@ import * as Linking from "expo-linking";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { Region } from "react-native-maps";
 import { ChargingStation } from "../../../types/charging.types";
+import { useAppBarActions } from "../_layout";
 import ChargingStationService from "./ChargingStationService";
 import ChargingMapView from "./components/ChargingMapView";
 import SearchBar from "./components/SearchBar";
@@ -127,6 +128,24 @@ export default function ChargingScreen() {
       setShowSearchResults(true);
     }
   }, [searchQuery]);
+
+  useAppBarActions(
+    "charging",
+    useMemo(
+      () => ({
+        rightActions: [
+          {
+            icon: "refresh",
+            onPress: handleRefreshStations,
+            loading: refreshingStations,
+            disabled: refreshingStations,
+            backgroundColor: "#F3F4F6",
+          },
+        ],
+      }),
+      [handleRefreshStations, refreshingStations],
+    ),
+  );
 
   const handleStationPress = useCallback((station: ChargingStation) => {
     setSelectedStation(station);
@@ -331,19 +350,6 @@ export default function ChargingScreen() {
       <View style={styles.container}>
         <StatusBar style="dark" backgroundColor="#ffffff" />
 
-        {/* Header */}
-        <View style={styles.header}>
-      
-          <Text style={styles.headerTitle}>สถานีชาร์จ</Text>
-          <TouchableOpacity onPress={handleRefreshStations} style={styles.backButton}>
-            {refreshingStations ? (
-              <ActivityIndicator size="small" color="#1f2937" />
-            ) : (
-              <Ionicons name="refresh" size={20} color="#1f2937" />
-            )}
-          </TouchableOpacity>
-        </View>
-
         {/* Search Bar */}
         <SearchBar
           searchQuery={searchQuery}
@@ -423,38 +429,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: "#6b7280",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingTop: 60,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    zIndex: 20,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f3f4f6",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 16,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1f2937",
-    textAlign: "center",
-  },
-  placeholder: {
-    width: 40,
-    height: 40,
-    marginRight: 16,
   },
   locationButton: {
     position: "absolute",

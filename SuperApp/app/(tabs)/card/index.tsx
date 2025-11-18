@@ -1,14 +1,14 @@
 // นำเข้า Ionicons สำหรับแสดงไอคอนต่างๆ
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 // นำเข้า components พื้นฐานจาก React Native
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
 import PointsCard from "@/components/ui/PointsCard";
 import { paymentService, type PaymentCard, type PaymentHistoryEntry } from "@/services/api/payment.service";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { TABS_HORIZONTAL_GUTTER } from "../_layout";
+import { TABS_HORIZONTAL_GUTTER, useAppBarActions } from "../_layout";
 
 // ฟังก์ชันหลักของหน้า Card (บัตรและกระเป๋าเงิน)
 export default function CardScreen() {
@@ -19,6 +19,25 @@ export default function CardScreen() {
   const [balance] = useState(1250.00); // Mock balance for now
   const [selectedCard, setSelectedCard] = useState<PaymentCard | null>(null);
   const [isDeducting, setIsDeducting] = useState(false);
+  const handleAddPaymentMethod = useCallback(() => {
+    router.push("/(tabs)/card/add-payment-method");
+  }, []);
+
+  useAppBarActions(
+    "card",
+    useMemo(
+      () => ({
+        rightActions: [
+          {
+            icon: "add-outline",
+            onPress: handleAddPaymentMethod,
+            backgroundColor: "#F3F4F6",
+          },
+        ],
+      }),
+      [handleAddPaymentMethod],
+    ),
+  );
 
   // Load data
   const loadData = async () => {
@@ -186,25 +205,10 @@ export default function CardScreen() {
   return (
     // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar
     <SafeAreaView
-      className="flex-1 bg-[#F8FAFC]"
+      className="flex-1 bg-[#F8FAFC] mt-4"
+      edges={["left", "right", "bottom"]}
       style={{ paddingHorizontal: TABS_HORIZONTAL_GUTTER }}
     >
-      {/* === HEADER SECTION === */}
-      <View className="pt-4 pb-2">
-        <View className="flex-row items-center justify-between mb-6">
-          <Text className="text-2xl font-bold text-[#1F2937]">
-            บัตรและกระเป๋าเงิน
-          </Text>
-          {/* ปุ่มเพิ่ม (เพิ่มบัตรใหม่) */}
-          <TouchableOpacity 
-            onPress={() => router.push('/(tabs)/card/add-payment-method')}
-            className="items-center justify-center w-10 h-10 bg-white rounded-full shadow-sm"
-          >
-            <Ionicons name="add-outline" size={24} color="#1F2937" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
       {/* === POINTS CARD SECTION === */}
       <PointsCard
         points={262}
@@ -229,7 +233,7 @@ export default function CardScreen() {
       
           {/* === PAYMENT METHODS SECTION === */}
           {/* แสดงวิธีการชำระเงินที่เชื่อมโยง */}
-          <View className="mb-6">
+          <View className="mb-6 ">
             <View className="flex-row items-center justify-between mb-4">
               <Text className="text-lg font-semibold text-[#1F2937]">
                 วิธีการชำระเงิน
