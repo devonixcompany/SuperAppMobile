@@ -3,7 +3,7 @@
  * Handles all payment-related API calls
  */
 
-import API_CONFIG from '@/config/api.config';
+import { API_CONFIG } from '@/config/api.config';
 import type { ApiResponse } from './client';
 import { http } from './client';
 
@@ -69,6 +69,11 @@ export interface ProcessTransactionPaymentRequest {
   cardId?: string;
 }
 
+export interface ChargePaymentRequest {
+  transactionId: string;
+  cardId: string;
+}
+
 class PaymentService {
   /**
    * Retrieve saved payment cards
@@ -122,7 +127,8 @@ class PaymentService {
   }
 
   /**
-   * Process payment for a specific transaction
+   * Process payment for a specific transaction (Legacy endpoint - deprecated)
+   * @deprecated Use processChargePayment instead
    */
   async processTransactionPayment(
     transactionId: string,
@@ -130,6 +136,18 @@ class PaymentService {
   ): Promise<ApiResponse<PaymentProcessingResult>> {
     return http.post<PaymentProcessingResult>(
       `/api/transactions/${encodeURIComponent(transactionId)}/payment`,
+      payload,
+    );
+  }
+
+  /**
+   * Process charging payment using new endpoint
+   */
+  async processChargePayment(
+    payload: ChargePaymentRequest,
+  ): Promise<ApiResponse<PaymentProcessingResult>> {
+    return http.post<PaymentProcessingResult>(
+      API_CONFIG.ENDPOINTS.PAYMENT.CHARGE_PAYMENT,
       payload,
     );
   }

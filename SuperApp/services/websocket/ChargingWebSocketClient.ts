@@ -12,6 +12,7 @@ export interface MeterValues {
   currentSoC?: number;
   powerDelivered: number;
   currentMeterValue?: number;
+  estimatedTimeToFull?: number; // ⏰ เวลาคาดการณ์ที่จะเต็ม (วินาที)
   timestamp: string;
 }
 
@@ -28,6 +29,7 @@ export interface TransactionUpdate {
     powerDelivered?: number;
     currentCost?: number;
     chargingDurationMinutes?: number;
+    estimatedTimeToFull?: number; // ⏰ เวลาคาดการณ์ที่จะเต็ม (วินาที)
     [key: string]: any;
   };
 }
@@ -35,6 +37,34 @@ export interface TransactionUpdate {
 export interface ConnectionStatus {
   status: 'connected' | 'disconnected' | 'error' | 'failed';
   message: string;
+}
+
+export interface ChargingCompletionData {
+  transactionId: string;
+  status: 'COMPLETED';
+  chargePointId?: string;
+  connectorId?: number;
+  currentPower: number;
+  currentEnergy: number;
+  currentCost: number;
+  currentSoC?: number; // 🔋 Battery State of Charge (%)
+  duration: number;
+  meterValue: number;
+  finalMeterReading: number;
+  totalEnergyConsumed: number;
+  stopReason: string;
+  completedAt: string;
+  timestamp: string;
+}
+
+export interface PaymentNotification {
+  transactionId: string;
+  status: 'PAYMENT_COMPLETED' | 'PAYMENT_FAILED';
+  paymentProcessed?: boolean;
+  paymentTimestamp?: string;
+  errorMessage?: string;
+  message?: string;
+  timestamp: string;
 }
 
 export class ChargingWebSocketClient {
@@ -50,6 +80,9 @@ export class ChargingWebSocketClient {
   public onTransactionUpdate?: (update: TransactionUpdate) => void;
   public onMeterValues?: (values: MeterValues) => void;
   public onConnectionStatus?: (status: ConnectionStatus) => void;
+  public onChargingCompleted?: (data: ChargingCompletionData) => void;
+  public onPaymentCompleted?: (data: PaymentNotification) => void;
+  public onPaymentFailed?: (data: PaymentNotification) => void;
 
   /**
    * เชื่อมต่อ WebSocket
@@ -76,7 +109,8 @@ export class ChargingWebSocketClient {
       }
 
       // สร้าง URL ใหม่ตามรูปแบบที่ต้องการ: /mobile-ws/{userId}?token=...
-      const wsUrl = `ws://172.20.10.2:3001/mobile-ws/${userId}?token=${token}`;
+      const wsBaseUrl = process.env.EXPO_PUBLIC_WEBSOCKET_URL || 'ws://192.168.1.40:3001';
+      const wsUrl = `${wsBaseUrl}/mobile-ws/${userId}?token=${token}`;
       
       console.log('🔌 [WEBSOCKET] Connecting to:', wsUrl);
       this.ws = new WebSocket(wsUrl);
@@ -213,6 +247,13 @@ export class ChargingWebSocketClient {
   private handleMeterValues(payload: any): void {
     console.log('⚡ [WEBSOCKET] Meter values updated:', payload);
     
+    // 🕐 Debug: Check if estimatedTimeToFull is present
+    if (payload.estimatedTimeToFull) {
+      console.log(`⏰ [METER_VALUES] Estimated time to full: ${payload.estimatedTimeToFull} seconds (${ChargingWebSocketClient.formatEstimatedTimeToFull(payload.estimatedTimeToFull)})`);
+    } else {
+      console.log('⚠️ [METER_VALUES] No estimatedTimeToFull in payload:', Object.keys(payload));
+    }
+    
     if (this.onMeterValues) {
       this.onMeterValues({
         transactionId: payload.transactionId,
@@ -222,6 +263,7 @@ export class ChargingWebSocketClient {
         currentSoC: payload.currentSoC || null,
         powerDelivered: payload.powerDelivered || 0,
         currentMeterValue: payload.currentMeterValue || 0,
+        estimatedTimeToFull: payload.estimatedTimeToFull, // ⏰ เวลาคาดการณ์
         timestamp: payload.timestamp || new Date().toISOString()
       });
     }
@@ -229,6 +271,7 @@ export class ChargingWebSocketClient {
 
   /**
    * Charging Status Real-time
+   * Handles all charging status updates including completion notifications
    */
   private handleChargingStatus(message: any): void {
     console.log('🔋 [WEBSOCKET] Charging status updated:', message);
@@ -236,7 +279,67 @@ export class ChargingWebSocketClient {
     const payload = message.data;
     const transactionId = message.transactionId;
     
-    // อัปเดต Transaction Data
+    // 🕐 Debug: Check if estimatedTimeToFull is present
+    if (payload.estimatedTimeToFull) {
+      console.log(`⏰ [WEBSOCKET] Estimated time to full: ${payload.estimatedTimeToFull} seconds (${ChargingWebSocketClient.formatEstimatedTimeToFull(payload.estimatedTimeToFull)})`);
+    } else {
+      console.log('⚠️ [WEBSOCKET] No estimatedTimeToFull in payload:', Object.keys(payload));
+    }
+    
+    // Handle charging completion notifications
+    if (payload.status === 'COMPLETED') {
+      console.log('🎉 [WEBSOCKET] Charging completed!');
+      if (this.onChargingCompleted) {
+        this.onChargingCompleted({
+          transactionId: transactionId,
+          status: 'COMPLETED',
+          chargePointId: payload.chargePointId,
+          connectorId: payload.connectorId,
+          currentPower: payload.currentPower || 0,
+          currentEnergy: payload.currentEnergy || payload.totalEnergyConsumed || 0,
+          currentCost: payload.currentCost || 0,
+          currentSoC: payload.currentSoC, // 🔋 Battery percentage
+          duration: payload.duration || 0,
+          meterValue: payload.meterValue || 0,
+          finalMeterReading: payload.finalMeterReading || payload.meterValue || 0,
+          totalEnergyConsumed: payload.totalEnergyConsumed || payload.currentEnergy || 0,
+          stopReason: payload.stopReason || 'Unknown',
+          completedAt: payload.completedAt || payload.timestamp || new Date().toISOString(),
+          timestamp: payload.timestamp || new Date().toISOString()
+        });
+      }
+    }
+    
+    // Handle payment completion notifications
+    if (payload.status === 'PAYMENT_COMPLETED') {
+      console.log('💰 [WEBSOCKET] Payment completed successfully!');
+      if (this.onPaymentCompleted) {
+        this.onPaymentCompleted({
+          transactionId: transactionId,
+          status: 'PAYMENT_COMPLETED',
+          paymentProcessed: true,
+          paymentTimestamp: payload.paymentTimestamp || payload.timestamp,
+          message: payload.message || 'ชาร์จเต็มแล้ว ตัดเงินเรียบร้อยแล้ว',
+          timestamp: payload.timestamp || new Date().toISOString()
+        });
+      }
+    }
+    
+    // Handle payment failure notifications  
+    if (payload.status === 'PAYMENT_FAILED') {
+      console.log('❌ [WEBSOCKET] Payment failed!');
+      if (this.onPaymentFailed) {
+        this.onPaymentFailed({
+          transactionId: transactionId,
+          status: 'PAYMENT_FAILED',
+          paymentProcessed: false,
+          errorMessage: payload.errorMessage || 'การตัดเงินล้มเหลว กรุณาตรวจสอบบัญชี',
+          timestamp: payload.timestamp || new Date().toISOString()
+        });
+      }
+    }
+    
+    // อัปเดต Transaction Data สำหรับ real-time updates (existing logic)
     if (this.onTransactionUpdate) {
       this.onTransactionUpdate({
         type: 'update',
@@ -245,19 +348,23 @@ export class ChargingWebSocketClient {
           status: payload.status,
           energyDelivered: payload.currentEnergy,
           duration: payload.duration,
+          estimatedTimeToFull: payload.estimatedTimeToFull, // ⏰ เวลาคาดการณ์
           timestamp: payload.timestamp
         }
       });
     }
     
-    // อัปเดต Meter Values
+    // อัปเดต Meter Values สำหรับ real-time updates (existing logic)
     if (this.onMeterValues) {
       this.onMeterValues({
         transactionId: transactionId,
+        chargePointId: payload.chargePointId,
+        connectorId: payload.connectorId,
         energyDelivered: payload.currentEnergy || 0,
         currentMeterValue: payload.meterValue || 0,
-        powerDelivered: 0, // ไม่มีข้อมูล power ใน message นี้
-        currentSoC: undefined, // ไม่มีข้อมูล SoC ใน message นี้
+        powerDelivered: payload.currentPower || 0,
+        currentSoC: payload.currentSoC, // 🔋 Include battery percentage
+        estimatedTimeToFull: payload.estimatedTimeToFull, // ⏰ เวลาคาดการณ์
         timestamp: payload.timestamp || new Date().toISOString()
       });
     }
@@ -380,5 +487,90 @@ export class ChargingWebSocketClient {
    */
   get connected(): boolean {
     return this.isConnected;
+  }
+
+  /**
+   * Get connection status with detailed info
+   */
+  getConnectionInfo(): { connected: boolean; attempts: number; maxAttempts: number } {
+    return {
+      connected: this.isConnected,
+      attempts: this.reconnectAttempts,
+      maxAttempts: this.maxReconnectAttempts
+    };
+  }
+
+  /**
+   * Force reconnect (useful for manual retry)
+   */
+  forceReconnect(): void {
+    console.log('🔄 [WEBSOCKET] Force reconnecting...');
+    this.reconnectAttempts = 0; // Reset attempts
+    if (this.userId) {
+      this.disconnect();
+      setTimeout(() => {
+        this.connect(this.userId!);
+      }, 1000);
+    }
+  }
+
+  /**
+   * Send heartbeat ping to keep connection alive
+   */
+  sendHeartbeat(): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.send({
+        type: 'ping',
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
+  /**
+   * Format estimated time to full for display
+   * แสดงแค่ 2 หน่วยที่ใหญ่ที่สุด เช่น "3 ชม. 20 นาที", "45 นาที 30 วิ", "2 นาที"
+   * @param seconds - เวลาในวินาที
+   * @returns formatted string
+   */
+  static formatEstimatedTimeToFull(seconds?: number): string {
+    if (!seconds || seconds <= 0) {
+      return 'ไม่ทราบ';
+    }
+
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+
+    // แสดงแค่ 2 หน่วยที่ใหญ่ที่สุด
+    if (hours > 0) {
+      if (minutes > 0) {
+        return `${hours} ชม. ${minutes} นาที`;
+      } else {
+        return `${hours} ชั่วโมง`;
+      }
+    } else if (minutes > 0) {
+      if (remainingSeconds > 0) {
+        return `${minutes} นาที ${remainingSeconds} วิ`;
+      } else {
+        return `${minutes} นาที`;
+      }
+    } else {
+      return `${remainingSeconds} วินาที`;
+    }
+  }
+
+  /**
+   * Get estimated completion time (current time + estimatedTimeToFull)
+   * @param estimatedTimeToFull - เวลาในวินาที
+   * @returns Date object ของเวลาที่คาดว่าจะเต็ม
+   */
+  static getEstimatedCompletionTime(estimatedTimeToFull?: number): Date | null {
+    if (!estimatedTimeToFull || estimatedTimeToFull <= 0) {
+      return null;
+    }
+
+    const now = new Date();
+    const completionTime = new Date(now.getTime() + (estimatedTimeToFull * 1000));
+    return completionTime;
   }
 }

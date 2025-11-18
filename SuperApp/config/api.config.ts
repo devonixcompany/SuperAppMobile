@@ -70,6 +70,11 @@ export const API_CONFIG = {
       SET_DEFAULT_CARD: (cardId: string) =>
         `/api/v1/user/payments/cards/${cardId}/default`,
       PROCESS_PAYMENT: '/api/v1/user/payments/process',
+      CHARGE_PAYMENT: '/api/v1/user/payments/charge', // Old endpoint - deprecated
+      SELECT_CARD: (transactionId: string) => 
+        `/api/v1/user/payments/transactions/${encodeURIComponent(transactionId)}/select-card`,
+      PROCESS_TRANSACTION_PAYMENT: (transactionId: string) => 
+        `/api/v1/user/payments/transactions/${encodeURIComponent(transactionId)}/process-payment`,
       PAYMENT_HISTORY: '/api/v1/user/payments/history',
       STATUS: (paymentId: string) => `/api/v1/user/payments/status/${encodeURIComponent(paymentId)}`,
     },
@@ -100,6 +105,26 @@ export const API_CONFIG = {
       LIST: '/api/v1/user/transactions',
       DETAILS: (transactionId: string) => 
         `/api/v1/user/transactions/${encodeURIComponent(transactionId)}`,
+    },
+    
+    // WebSocket
+    WEBSOCKET: {
+      CHARGING_UPDATES: '/ws/charging',
+      NOTIFICATIONS: '/ws/notifications',
+      MOBILE_WS: (userId: string) => `/mobile-ws/${encodeURIComponent(userId)}`,
+    },
+    
+    // Webhooks
+    WEBHOOKS: {
+      PAYMENTS: '/webhooks/payments',
+    },
+    
+    // Testing (Development only)
+    TEST: {
+      CHARGING_COMPLETE: '/api/test/charging/complete',
+      PAYMENT_COMPLETE: '/api/test/payment/complete',
+      PAYMENT_FAILED: '/api/test/payment/failed',
+      WEBSOCKET_TEST: '/api/test/websocket/send',
     },
   },
   

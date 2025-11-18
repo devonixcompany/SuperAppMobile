@@ -6,15 +6,15 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 const COLORS = {
@@ -113,6 +113,8 @@ export default function ChargeSummaryScreen() {
   const selectedCardIdParam = resolveParam(params.selectedCardId);
 
   const homeNavigationRef = useRef(false);
+  const historyNavigationRef = useRef(false);
+  
   const goHome = useCallback(() => {
     if (homeNavigationRef.current) {
       return;
@@ -123,6 +125,36 @@ export default function ChargeSummaryScreen() {
     }, 50);
   }, [router]);
 
+  const goToChargingHistory = useCallback(() => {
+    console.log('🚀 [FUNCTION] goToChargingHistory function called');
+    
+    if (historyNavigationRef.current) {
+      console.log('⚠️ [NAVIGATION] Already navigating to history, skipping');
+      return;
+    }
+    console.log('🔍 [NAVIGATION] Going to charging history with transactionId:', transactionId);
+    
+    if (!transactionId) {
+      console.warn('⚠️ [NAVIGATION] No transactionId available, going home instead');
+      goHome();
+      return;
+    }
+    
+    historyNavigationRef.current = true;
+    setTimeout(() => {
+      const path = `/charging-history/${transactionId}`;
+      console.log('📍 [NAVIGATION] Attempting navigation to path:', path);
+      try {
+        router.push(path);
+        console.log('✅ [NAVIGATION] Router.push called successfully');
+      } catch (error) {
+        console.error('❌ [NAVIGATION] Router error:', error);
+        // Fallback to home if routing fails
+        router.replace("/(tabs)/home");
+      }
+    }, 50);
+  }, [router, transactionId, goHome]);
+
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [isPaymentModalVisible, setPaymentModalVisible] = useState(false);
@@ -130,6 +162,7 @@ export default function ChargeSummaryScreen() {
   const [isLoadingCards, setLoadingCards] = useState(true);
   const [isWaiting3DS, setIsWaiting3DS] = useState(false);
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
+  const [force3DS, setForce3DS] = useState(false); // For 3DS testing
   const pollerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -292,6 +325,7 @@ export default function ChargeSummaryScreen() {
     try {
       const response = await transactionService.processTransactionPayment(transactionId, {
         cardId: selectedCardId ?? undefined,
+        force3DS: force3DS, // Pass force3DS for testing
       });
 
       if (!response.success || !response.data) {
@@ -300,30 +334,62 @@ export default function ChargeSummaryScreen() {
 
       const result = response.data;
 
-      if (!result.success) {
-        Alert.alert('ชำระเงินไม่สำเร็จ', result.error ?? 'ไม่สามารถชำระเงินได้');
-        return;
+      // Check for payment success from transformed response
+      const paymentSuccessful = result.success === true;
+
+      console.log('🔍 [PAYMENT CHECK] Payment status details:', {
+        responseSuccess: response.success,
+        resultSuccess: result.success,
+        requiresAction: result.requiresAction,
+        paymentId: result.paymentId,
+        paymentSuccessful
+      });
+
+      if (!paymentSuccessful) {
+        console.log('❌ [PAYMENT] Payment was not successful, checking for 3DS requirements');
+        // Check if 3DS authentication is required
+        if (result.requiresAction && result.authorizeUri && result.paymentId) {
+          console.log('🔐 [3DS] 3DS authentication required, opening browser');
+          setIsWaiting3DS(true);
+          setPendingPaymentId(result.paymentId);
+          startPollingPayment(result.paymentId);
+          await WebBrowser.openBrowserAsync(result.authorizeUri);
+          return;
+        } else {
+          console.log('❌ [PAYMENT] Payment failed without 3DS option');
+          const errorMessage = result.error || 'ไม่สามารถชำระเงินได้';
+          Alert.alert('ชำระเงินไม่สำเร็จ', errorMessage);
+          return;
+        }
       }
 
-      // 3DS flow: keep modal open, start polling for result
-      if (result.requiresAction && result.authorizeUri && result.paymentId) {
-        setIsWaiting3DS(true);
-        setPendingPaymentId(result.paymentId);
-        startPollingPayment(result.paymentId);
-        await WebBrowser.openBrowserAsync(result.authorizeUri);
-        return;
-      }
-
-      // No 3DS required: close modal and refresh cards
+      console.log('✅ [PAYMENT] Payment successful! Starting cleanup and navigation process');
+      
+      // Payment successful: close modal first
       setPaymentModalVisible(false);
+      console.log('📱 [PAYMENT] Payment modal closed');
 
-      await loadPaymentCards();
-      try { await WebBrowser.dismissBrowser(); } catch {}
-      Alert.alert(
-        'ชำระเงินสำเร็จ',
-        'บันทึกการชำระเงินเรียบร้อยแล้ว',
-        [{ text: 'ตกลง', onPress: goHome }]
-      );
+      // Navigate directly to charging history immediately (don't wait for other operations)
+      console.log('🎉 [PAYMENT] Payment successful, navigating directly to charging history');
+      goToChargingHistory();
+
+      // Do cleanup operations in background (don't block navigation)
+      setTimeout(async () => {
+        try {
+          console.log('🔄 [PAYMENT] Refreshing payment cards in background...');
+          await loadPaymentCards();
+          console.log('✅ [PAYMENT] Payment cards refreshed successfully');
+        } catch (cardError) {
+          console.warn('⚠️ [PAYMENT] Failed to refresh payment cards:', cardError);
+        }
+
+        try { 
+          await WebBrowser.dismissBrowser(); 
+          console.log('🌐 [PAYMENT] Browser dismissed');
+        } catch (browserError) {
+          console.log('🌐 [PAYMENT] Browser dismiss failed (probably not open):', browserError);
+        }
+      }, 100);
     } catch (error: any) {
       console.error('Process payment error:', error);
       const message =
@@ -334,7 +400,7 @@ export default function ChargeSummaryScreen() {
     } finally {
       setProcessingPayment(false);
     }
-  }, [loadPaymentCards, selectedCardId, transactionId, goHome]);
+  }, [loadPaymentCards, selectedCardId, transactionId, goHome, force3DS]);
 
   // Stop polling if modal is closed or on unmount
   useEffect(() => {
@@ -488,14 +554,6 @@ export default function ChargeSummaryScreen() {
 
           {/* Action Buttons */}
           <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              activeOpacity={0.85}
-              onPress={goHome}
-            >
-              <Text style={styles.secondaryButtonText}>กลับหน้าหลัก</Text>
-            </TouchableOpacity>
-
             {canInitiatePayment && (
               <TouchableOpacity
                 style={styles.paymentButton}
@@ -588,6 +646,29 @@ export default function ChargeSummaryScreen() {
                 <Ionicons name="add" size={16} color={COLORS.accent} />
                 <Text style={styles.modalAddCardLabel}>เพิ่มบัตรใหม่</Text>
               </TouchableOpacity>
+
+              {/* 3DS Testing Toggle */}
+              <View style={styles.modal3DSToggle}>
+                <TouchableOpacity
+                  style={styles.modal3DSToggleContainer}
+                  onPress={() => setForce3DS(!force3DS)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.modal3DSToggleInfo}>
+                    <Text style={styles.modal3DSToggleTitle}>🧪 ทดสอบ 3DS</Text>
+                    <Text style={styles.modal3DSToggleHint}>บังคับใช้ 3DS Authentication</Text>
+                  </View>
+                  <View style={[
+                    styles.toggleSwitch,
+                    force3DS && styles.toggleSwitchActive
+                  ]}>
+                    <View style={[
+                      styles.toggleThumb,
+                      force3DS && styles.toggleThumbActive
+                    ]} />
+                  </View>
+                </TouchableOpacity>
+              </View>
 
               <View style={styles.modalActions}>
                 <TouchableOpacity
@@ -895,5 +976,61 @@ const styles = StyleSheet.create({
   modalEmptyStateHint: {
     fontSize: 12,
     color: COLORS.textSecondary,
+  },
+  modal3DSToggle: {
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  modal3DSToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F8F9FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+  },
+  modal3DSToggleInfo: {
+    flex: 1,
+  },
+  modal3DSToggleTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: 2,
+  },
+  modal3DSToggleHint: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  toggleSwitch: {
+    width: 44,
+    height: 24,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleSwitchActive: {
+    backgroundColor: COLORS.accent,
+  },
+  toggleThumb: {
+    width: 20,
+    height: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleThumbActive: {
+    transform: [{ translateX: 20 }],
   },
 });

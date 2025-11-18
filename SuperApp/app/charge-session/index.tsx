@@ -3,26 +3,27 @@ import { useChargingWebSocket } from "@/hooks/useChargingWebSocket";
 import { chargepointService, transactionService } from "@/services/api";
 import type { ChargingInitiateResponse } from "@/services/api/chargepoint.service";
 import { http } from "@/services/api/client";
+import { ChargingWebSocketClient } from "@/services/websocket/ChargingWebSocketClient";
 import { getCredentials } from "@/utils/keychain";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 import {
-  Alert,
-  Animated,
-  Easing,
-  Image,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Animated,
+    Easing,
+    Image,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 type ConnectionState = "connecting" | "connected" | "error" | "closed";
@@ -1148,9 +1149,11 @@ export default function ChargeSessionScreen() {
     }
   };
 
-  // ใช้ status?.status (จาก API polling) เป็นหลัก
-  // fallback ไปที่ chargingData?.status ถ้าไม่มี
-  const rawStatus = (status?.status ?? chargingData?.status ?? "") as string;
+  // ใช้ WebSocket chargingData?.status เป็นหลักถ้าเชื่อมต่อแล้ว
+  // fallback ไปที่ status?.status (จาก API polling) ถ้าไม่มี WebSocket data
+  const rawStatus = (connectionState === 'connected' && chargingData?.status 
+    ? chargingData?.status 
+    : status?.status ?? chargingData?.status ?? "") as string;
   const normalizedStatus = rawStatus
     .toString()
     .toLowerCase()
@@ -1695,9 +1698,24 @@ export default function ChargeSessionScreen() {
     energyKWh
   );
   const currentPower = formatNumber(chargingData?.currentPower ?? 0, 2);
-  const estimatedTimeText = formatDuration(
-    chargingData?.estimatedRemainingSeconds ?? chargingData?.duration
-  );
+  
+  // ⏰ ใช้ข้อมูลเวลาคาดการณ์จาก WebSocket หากมี, ถ้าไม่มีใช้ข้อมูลเดิม
+  const estimatedTimeSeconds = wsMeterValues?.estimatedTimeToFull ?? 
+                               chargingData?.estimatedRemainingSeconds ?? 
+                               chargingData?.duration;
+  
+  const estimatedTimeText = estimatedTimeSeconds 
+    ? (wsMeterValues?.estimatedTimeToFull 
+        ? ChargingWebSocketClient.formatEstimatedTimeToFull(estimatedTimeSeconds)
+        : formatDuration(estimatedTimeSeconds))
+    : "กำลังคำนวณ...";
+    
+  console.log('⏰ [TIME DISPLAY] estimatedTimeSeconds:', estimatedTimeSeconds, {
+    fromWebSocket: wsMeterValues?.estimatedTimeToFull,
+    fromChargingData: chargingData?.estimatedRemainingSeconds,
+    fallback: chargingData?.duration,
+    formattedText: estimatedTimeText
+  });
   const elapsedLabel = formatDuration(elapsedSeconds);
   // ดึงเวลาเริ่มชาร์จจาก transaction (จาก backend หรือ WebSocket)
   const startTimeLabel = formatDateTime(

@@ -64,6 +64,7 @@ export function useChargingWebSocket(userId?: string): ChargingWebSocketData & {
           currentSoC: values.currentSoC,
           powerDelivered: values.powerDelivered,
           currentMeterValue: values.currentMeterValue || 0,
+          estimatedTimeToFull: values.estimatedTimeToFull, // ⏰ เพิ่มเวลาคาดการณ์
           timestamp: values.timestamp
         });
       };
