@@ -3,7 +3,7 @@ import * as Linking from "expo-linking";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { Region } from "react-native-maps";
 import { ChargingStation } from "../../../types/charging.types";
+import { useAppBarActions } from "../_layout";
 import ChargingStationService from "./ChargingStationService";
 import ChargingMapView from "./components/ChargingMapView";
 import SearchBar from "./components/SearchBar";
@@ -127,6 +128,24 @@ export default function ChargingScreen() {
       setShowSearchResults(true);
     }
   }, [searchQuery]);
+
+  useAppBarActions(
+    "charging",
+    useMemo(
+      () => ({
+        rightActions: [
+          {
+            icon: "refresh",
+            onPress: handleRefreshStations,
+            loading: refreshingStations,
+            disabled: refreshingStations,
+            backgroundColor: "#F3F4F6",
+          },
+        ],
+      }),
+      [handleRefreshStations, refreshingStations],
+    ),
+  );
 
   const handleStationPress = useCallback((station: ChargingStation) => {
     setSelectedStation(station);
@@ -317,7 +336,7 @@ export default function ChargingScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <StatusBar style="dark" backgroundColor="#ffffff" />
+        <StatusBar style="dark" backgroundColor="#D9DEED80" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#10b981" />
           <Text style={styles.loadingText}>กำลังโหลดข้อมูลสถานีชาร์จ...</Text>
@@ -329,20 +348,7 @@ export default function ChargingScreen() {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.container}>
-        <StatusBar style="dark" backgroundColor="#ffffff" />
-
-        {/* Header */}
-        <View style={styles.header}>
-      
-          <Text style={styles.headerTitle}>สถานีชาร์จ</Text>
-          <TouchableOpacity onPress={handleRefreshStations} style={styles.backButton}>
-            {refreshingStations ? (
-              <ActivityIndicator size="small" color="#1f2937" />
-            ) : (
-              <Ionicons name="refresh" size={20} color="#1f2937" />
-            )}
-          </TouchableOpacity>
-        </View>
+        <StatusBar style="dark" backgroundColor="#D9DEED80" />
 
         {/* Search Bar */}
         <SearchBar
@@ -412,7 +418,7 @@ export default function ChargingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#D9DEED80",
   },
   loadingContainer: {
     flex: 1,
@@ -424,38 +430,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#6b7280",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingTop: 60,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    zIndex: 20,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f3f4f6",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 16,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1f2937",
-    textAlign: "center",
-  },
-  placeholder: {
-    width: 40,
-    height: 40,
-    marginRight: 16,
-  },
   locationButton: {
     position: "absolute",
     bottom: 20,
@@ -463,7 +437,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: "#fff",
+    backgroundColor: "#D9DEED80",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -500,7 +474,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   clearSearchText: {
-    color: "#fff",
+    color: "#D9DEED80",
     fontSize: 16,
     fontWeight: "600",
   },

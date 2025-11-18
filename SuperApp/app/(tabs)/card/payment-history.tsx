@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { paymentService, type PaymentHistory } from "@/services/api/payment.service";
+import { TABS_HORIZONTAL_GUTTER } from "../_layout";
 
 export default function PaymentHistoryScreen() {
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
@@ -100,9 +101,12 @@ export default function PaymentHistoryScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F8FAFC]">
+    <SafeAreaView
+      className="flex-1 bg-[#F8FAFC]"
+      style={{ paddingHorizontal: TABS_HORIZONTAL_GUTTER }}
+    >
       {/* Header */}
-      <View className="px-6 pt-4 pb-2">
+      <View className="pt-4 pb-2">
         <View className="flex-row items-center mb-6">
           <TouchableOpacity
             onPress={() => router.back()}
@@ -123,7 +127,7 @@ export default function PaymentHistoryScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <View className="px-6">
+        <View>
           {paymentHistory.length === 0 ? (
             // Empty state
             <View className="items-center justify-center py-20">
