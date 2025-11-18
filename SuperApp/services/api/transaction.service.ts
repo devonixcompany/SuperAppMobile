@@ -49,6 +49,76 @@ export interface ProcessPaymentRequest {
   force3DS?: boolean; // Force 3DS authentication for testing
 }
 
+export interface ChargingHistoryItem {
+  id: string;
+  transactionId: string;
+  ocppTransactionId?: string;
+  status: string;
+  station: {
+    name: string;
+    chargePointName?: string;
+    location?: string;
+    latitude?: number;
+    longitude?: number;
+  };
+  timing: {
+    startTime: string;
+    endTime: string;
+    chargingDurationMinutes?: number;
+    completedAt: string;
+  };
+  charging: {
+    totalEnergy: number;
+    startMeterValue?: number;
+    endMeterValue?: number;
+    currentSoC?: number;
+    appliedRate?: number;
+  };
+  financial: {
+    totalCost: number;
+    totalPaid: number;
+    currency?: string;
+    paymentStatus: string;
+    paymentMethod?: string;
+    latestPayment?: {
+      id: string;
+      amount: number;
+      paidAt: string;
+      provider?: string;
+      status?: string;
+    };
+  };
+  payments: Array<{
+    id: string;
+    amount: number;
+    paidAt: string;
+    provider?: string;
+  }>;
+  vehicle?: any;
+  summary?: {
+    isLatestPaidSession?: boolean;
+    totalPayments?: number;
+    sessionCompletedDate?: string;
+  };
+  stopReason?: string;
+  createdAt: string;
+}
+
+export interface ChargingHistoryResponse {
+  data: ChargingHistoryItem[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+  summary?: {
+    totalEnergy: number;
+    totalSpent: number;
+    totalPaid: number;
+  };
+}
+
 export interface LatestCompletedTransactionResponse {
   id: string;
   userId: string;
@@ -214,16 +284,62 @@ class TransactionService {
     }
   }
 
+  /**
+   * Get latest completed transaction (already paid)
+   */
   async getLatestCompletedTransaction() {
     try {
       console.log('📊 [API] Fetching latest completed transaction');
-      const response = await http.get(
-        `${API_CONFIG.BASE_URL}/api/v1/user/payments/charging-history/latest-completed`
-      );
+      const response = await http.get(API_CONFIG.ENDPOINTS.CHARGING_HISTORY.LATEST_COMPLETED);
       console.log('✅ [API] Latest completed transaction fetched successfully');
       return response;
     } catch (error) {
       console.error('❌ [API] Error fetching latest completed transaction:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get charging history with pagination and filters
+   * @param page Page number (default: 1)
+   * @param limit Items per page (default: 20)
+   * @param status Filter by status (COMPLETED, PENDING, etc.)
+   * @param startDate Filter by start date
+   * @param endDate Filter by end date
+   */
+  async getChargingHistory(params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse<ChargingHistoryResponse>> {
+    try {
+      const page = params?.page ?? 1;
+      const limit = params?.limit ?? 20;
+      const queryParams = new URLSearchParams({
+        page: String(page),
+        limit: String(limit),
+      });
+
+      if (params?.status) {
+        queryParams.append('status', params.status);
+      }
+      if (params?.startDate) {
+        queryParams.append('startDate', params.startDate);
+      }
+      if (params?.endDate) {
+        queryParams.append('endDate', params.endDate);
+      }
+
+      console.log('📊 [API] Fetching charging history with params:', params);
+      const response = await http.get<ChargingHistoryResponse>(
+        `${API_CONFIG.ENDPOINTS.CHARGING_HISTORY.LIST}?${queryParams.toString()}`
+      );
+      console.log('✅ [API] Charging history fetched successfully');
+      return response;
+    } catch (error) {
+      console.error('❌ [API] Error fetching charging history:', error);
       throw error;
     }
   }

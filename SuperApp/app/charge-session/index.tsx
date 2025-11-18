@@ -9,21 +9,21 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import React, {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 import {
-    Alert,
-    Animated,
-    Easing,
-    Image,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Animated,
+  Easing,
+  Image,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 type ConnectionState = "connecting" | "connected" | "error" | "closed";
@@ -1201,6 +1201,61 @@ export default function ChargeSessionScreen() {
     return params.chargePointBrand || null;
   }, [initiateData?.chargePoint?.brand, params.chargePointBrand]);
 
+  // Handle payment processing for completed charging
+  const handlePaymentProcess = useCallback(async () => {
+    if (!transactionSummary?.totalCost) {
+      Alert.alert("ข้อผิดพลาด", "ไม่พบข้อมูลค่าใช้จ่าย");
+      return;
+    }
+
+    if (!backendTransactionId) {
+      Alert.alert("ข้อผิดพลาด", "ไม่พบข้อมูลธุรกรรม");
+      return;
+    }
+
+    try {
+      appendLog("info", "กำลังไปยังหน้าเลือกบัตรเครดิต...");
+
+      // Navigate to payment screen with transaction details
+      router.push({
+        pathname: "/charge-session/select-credit-card",
+        params: {
+          transactionId: backendTransactionId,
+          amount: String(transactionSummary.totalCost),
+          energy: String(transactionSummary.totalEnergy || 0),
+          duration: String(transactionSummary.durationSeconds || 0),
+          chargePointName: displayChargePointName,
+          stationLocation: params.stationLocation || "-",
+        },
+      });
+
+      appendLog("success", "เปิดหน้าเลือกบัตรเครดิต");
+    } catch (error: any) {
+      const errorMsg = error?.message || "ไม่สามารถดำเนินการชำระเงิน";
+      appendLog("error", errorMsg);
+      Alert.alert("ข้อผิดพลาด", errorMsg);
+    }
+  }, [
+    transactionSummary?.totalCost,
+    transactionSummary?.totalEnergy,
+    transactionSummary?.durationSeconds,
+    backendTransactionId,
+    displayChargePointName,
+    params.stationLocation,
+    appendLog,
+  ]);
+
+  // Navigate to transaction history
+  const handleViewHistory = useCallback(() => {
+    appendLog("info", "ไปยังประวัติการชาร์จ");
+    router.push({
+      pathname: "/charging-history/[transactionId]",
+      params: {
+        transactionId: backendTransactionId || "history",
+      },
+    });
+  }, [appendLog, backendTransactionId]);
+
   const displayConnectorInfo = useMemo(() => {
     // ใช้ nested structure จาก connector object
     if (initiateData?.connector) {
@@ -2150,13 +2205,42 @@ export default function ChargeSessionScreen() {
                       : "-"}
                   </Text>
                 </View>
-                <View className="flex-row justify-between items-center mb-2">
+                <View className="flex-row justify-between items-center mb-4">
                   <Text className="text-[13px] text-gray-500">
                     ค่าใช้จ่ายโดยประมาณ
                   </Text>
                   <Text className="text-[15px] font-semibold text-[#1F274B]">
                     {costDisplay ?? "-"}
                   </Text>
+                </View>
+
+                {/* Payment and History Action Buttons */}
+                <View className="flex-col gap-3 mt-4">
+                  <TouchableOpacity
+                    className="rounded-lg overflow-hidden bg-[#5EC1A0] py-4"
+                    onPress={handlePaymentProcess}
+                    activeOpacity={0.8}
+                  >
+                    <View className="flex-row items-center justify-center">
+                      <Ionicons name="card" size={18} color="white" />
+                      <Text className="text-white text-base font-bold ml-2">
+                        ดำเนินการชำระเงิน
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    className="rounded-lg overflow-hidden bg-[#395F85] py-4"
+                    onPress={handleViewHistory}
+                    activeOpacity={0.8}
+                  >
+                    <View className="flex-row items-center justify-center">
+                      <Ionicons name="list" size={18} color="white" />
+                      <Text className="text-white text-base font-bold ml-2">
+                        ประวัติการชาร์จ
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                 </View>
               </View>
             )}

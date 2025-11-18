@@ -72,6 +72,8 @@ export interface ProcessTransactionPaymentRequest {
 export interface ChargePaymentRequest {
   transactionId: string;
   cardId: string;
+  returnUri?: string; // Only required if force3DS is true
+  force3DS?: boolean; // Only send if true (for 3DS, default is no 3DS)
 }
 
 class PaymentService {

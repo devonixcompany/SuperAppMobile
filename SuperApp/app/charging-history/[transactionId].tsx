@@ -4,15 +4,15 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const COLORS = {
@@ -124,14 +124,14 @@ interface ChargingHistoryData {
       id: string;
       amount: number;
       paidAt: string;
-      provider: string;
+      provider?: string;
     } | null;
   };
   payments: {
     id: string;
     amount: number;
     paidAt: string;
-    provider: string;
+    provider?: string;
   }[];
   vehicle: any;
   summary: {
@@ -156,68 +156,69 @@ export default function ChargingHistoryScreen() {
     try {
       setIsLoading(true);
       
-      // Use real API to fetch latest completed transaction
-      const response = await transactionService.getLatestCompletedTransaction();
+      // Use new API to fetch charging history (latest/completed transactions)
+      const response = await transactionService.getChargingHistory({
+        page: 1,
+        limit: 1, // Get only the latest one for detail view
+        status: 'COMPLETED'
+      });
       
       console.log('🗗️ [DEBUG] Full API response:', JSON.stringify(response, null, 2));
       
-      if (response.success && response.data) {
-        console.log('✅ [HISTORY] Raw API data:', JSON.stringify(response.data, null, 2));
+      // Check if response has data array and it's not empty
+      if (response.success && response.data && Array.isArray(response.data) && response.data.length > 0) {
+        const latestTransaction = response.data[0];
+        console.log('✅ [HISTORY] Raw API data:', JSON.stringify(latestTransaction, null, 2));
         
-        // Map the API response to match our interface structure
+        // Map the API response directly to our interface
         const mappedData: ChargingHistoryData = {
-          id: response.data.id,
-          transactionId: response.data.transactionId,
-          ocppTransactionId: response.data.ocppTransactionId,
-          status: response.data.status,
+          id: latestTransaction.id,
+          transactionId: latestTransaction.transactionId,
+          ocppTransactionId: latestTransaction.ocppTransactionId,
+          status: latestTransaction.status,
           station: {
-            name: response.data.station?.name || 'Unknown Station',
-            location: response.data.station?.location || 'Unknown Location',
-            latitude: response.data.station?.latitude || '',
-            longitude: response.data.station?.longitude || '',
-            chargePointName: response.data.station?.chargePointName || 'Unknown Charge Point',
-            connectorId: response.data.station?.connectorId || ''
+            name: latestTransaction.station?.name || 'Unknown Station',
+            location: latestTransaction.station?.location || 'Unknown Location',
+            latitude: String(latestTransaction.station?.latitude || ''),
+            longitude: String(latestTransaction.station?.longitude || ''),
+            chargePointName: latestTransaction.station?.chargePointName || 'Unknown Charge Point',
+            connectorId: latestTransaction.station?.connectorId || ''
           },
           chargePoint: {
-            powerKw: 50, // Default power since not provided in API
-            connectorType: 'Type 2', // Default connector type
-            maxPower: 50
+            powerKw: latestTransaction.chargePoint?.powerKw || 50,
+            connectorType: latestTransaction.chargePoint?.connectorType || 'Type 2',
+            maxPower: latestTransaction.chargePoint?.maxPower || 50
           },
-          timing: response.data.timing || {
-            startTime: new Date().toISOString(),
-            endTime: new Date().toISOString(),
-            chargingDurationMinutes: 0,
-            completedAt: new Date().toISOString()
+          timing: {
+            startTime: latestTransaction.timing?.startTime || new Date().toISOString(),
+            endTime: latestTransaction.timing?.endTime || new Date().toISOString(),
+            chargingDurationMinutes: latestTransaction.timing?.chargingDurationMinutes || 0,
+            completedAt: latestTransaction.timing?.completedAt || new Date().toISOString()
           },
-          charging: response.data.charging || {
-            totalEnergy: 0,
-            startMeterValue: 0,
-            endMeterValue: 0,
-            currentSoC: 0,
-            appliedRate: null
+          charging: {
+            totalEnergy: (latestTransaction.charging?.totalEnergy || 0) / 1000, // Convert Wh to kWh
+            startMeterValue: latestTransaction.charging?.startMeterValue || 0,
+            endMeterValue: latestTransaction.charging?.endMeterValue || 0,
+            currentSoC: latestTransaction.charging?.currentSoC || 0,
+            appliedRate: latestTransaction.charging?.appliedRate || null
           },
-          financial: response.data.financial || {
-            totalCost: 0,
-            totalPaid: 0,
-            currency: 'THB',
-            paymentStatus: 'PENDING',
-            paymentMethod: null,
-            latestPayment: null
+          financial: {
+            totalCost: latestTransaction.financial?.totalCost || 0,
+            totalPaid: latestTransaction.financial?.totalPaid || 0,
+            currency: latestTransaction.financial?.currency || 'THB',
+            paymentStatus: latestTransaction.financial?.paymentStatus || 'PENDING',
+            paymentMethod: latestTransaction.financial?.paymentMethod || null,
+            latestPayment: latestTransaction.financial?.latestPayment || null
           },
-          payments: response.data.financial?.latestPayment ? [{
-            id: response.data.financial.latestPayment.id,
-            amount: response.data.financial.latestPayment.amount,
-            paidAt: response.data.financial.latestPayment.paidAt,
-            provider: response.data.financial.latestPayment.provider
-          }] : [],
-          vehicle: response.data.vehicle,
-          summary: response.data.summary || {
+          payments: latestTransaction.payments || [],
+          vehicle: latestTransaction.vehicle,
+          summary: latestTransaction.summary || {
             isLatestPaidSession: false,
             totalPayments: 0,
             sessionCompletedDate: new Date().toISOString().split('T')[0]
           },
-          stopReason: response.data.stopReason || 'Unknown',
-          createdAt: response.data.createdAt || new Date().toISOString()
+          stopReason: latestTransaction.stopReason || 'Unknown',
+          createdAt: latestTransaction.createdAt || new Date().toISOString()
         };
         
         console.log('✅ [HISTORY] Mapped data:', JSON.stringify(mappedData, null, 2));
@@ -342,7 +343,7 @@ export default function ChargingHistoryScreen() {
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>พลังงาน:</Text>
-            <Text style={styles.infoValue}>{formatNumber((historyData.charging?.totalEnergy || 0) / 1000, 2)} kWh</Text>
+            <Text style={styles.infoValue}>{formatNumber(historyData.charging?.totalEnergy || 0, 2)} kWh</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>ขนาดชาร์จเจอร์:</Text>

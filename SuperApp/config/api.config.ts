@@ -107,6 +107,12 @@ export const API_CONFIG = {
         `/api/v1/user/transactions/${encodeURIComponent(transactionId)}`,
     },
     
+    // Charging History (after payment)
+    CHARGING_HISTORY: {
+      LIST: '/api/v1/user/payments/charging-history',
+      LATEST_COMPLETED: '/api/v1/user/payments/charging-history/latest-completed',
+    },
+    
     // WebSocket
     WEBSOCKET: {
       CHARGING_UPDATES: '/ws/charging',
