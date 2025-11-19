@@ -190,10 +190,10 @@ export default function SettingsScreen() {
 
                   {/* User Info */}
                   <View className="flex-1">
-                    <Text className="text-white text-lg font-bold mb-1">
+                    <Text className="text-white text-xl font-bold mb-1">
                       User2025001
                     </Text>
-                    <Text className="text-white/80 text-sm">
+                    <Text className="text-white/80 text-xl">
                       รหัสสมาชิก : P202501
                     </Text>
                   </View>
