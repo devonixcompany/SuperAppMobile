@@ -8,12 +8,12 @@ import env from './env';
 export const API_CONFIG = {
   // Base URL
   BASE_URL: env.apiUrl,
-  
+
   // API Endpoints
   ENDPOINTS: {
     // Authentication
     AUTH: {
-      LOGIN: '/api/v1/user/auth/login',
+      LOGIN: '/api/auth/login',
       REGISTER: '/api/v1/user/auth/register',
       REFRESH_TOKEN: '/api/v1/user/auth/refresh',
       LOGOUT: '/api/v1/user/auth/logout',
@@ -22,7 +22,7 @@ export const API_CONFIG = {
       FORGOT_PASSWORD: '/api/v1/user/auth/forgot-password',
       RESET_PASSWORD: '/api/v1/user/auth/reset-password',
     },
-    
+
     // User Management
     USER: {
       PROFILE: '/api/v1/user/profile',
@@ -35,7 +35,7 @@ export const API_CONFIG = {
       NEWS: '/api/v1/user/news',
       TAX_INVOICES: '/api/v1/user/tax-invoices',
     },
-    
+
     // Chargepoint Management
     CHARGEPOINT: {
       WEBSOCKET_URL: (identity: string, connectorId: number) =>
@@ -52,20 +52,20 @@ export const API_CONFIG = {
       DETAILS: (identity: string) =>
         `/api/v1/user/chargepoints/${encodeURIComponent(identity)}`,
     },
-    
+
     // Stations
     STATIONS: {
       LIST: '/api/v1/user/stations',
       NEARBY: '/api/v1/user/stations/nearby',
-      DETAILS: (stationId: string) => 
+      DETAILS: (stationId: string) =>
         `/api/v1/user/stations/${encodeURIComponent(stationId)}`,
     },
-    
+
     // Payment
     PAYMENT: {
       CARDS: '/api/v1/user/payments/cards',
       ADD_CARD: '/api/v1/user/payments/cards',
-      REMOVE_CARD: (cardId: string) => 
+      REMOVE_CARD: (cardId: string) =>
         `/api/v1/user/payments/cards/${cardId}`,
       SET_DEFAULT_CARD: (cardId: string) =>
         `/api/v1/user/payments/cards/${cardId}/default`,
@@ -73,7 +73,7 @@ export const API_CONFIG = {
       PAYMENT_HISTORY: '/api/v1/user/payments/history',
       STATUS: (paymentId: string) => `/api/v1/user/payments/status/${encodeURIComponent(paymentId)}`,
     },
-    
+
     // Charging
     CHARGING: {
       INITIATE: '/api/v1/user/charging/initiate',
@@ -82,34 +82,34 @@ export const API_CONFIG = {
       STATUS: '/api/v1/user/charging/status',
       HISTORY: '/api/v1/user/charging/history',
     },
-    
+
     // Notifications
     NOTIFICATIONS: {
       LIST: '/api/v1/user/notifications',
-      MARK_READ: (notificationId: string) => 
+      MARK_READ: (notificationId: string) =>
         `/api/v1/user/notifications/${notificationId}/read`,
       MARK_ALL_READ: '/api/v1/user/notifications/read-all',
       SETTINGS: '/api/v1/user/notifications/settings',
     },
-    
+
     // Transactions
     TRANSACTIONS: {
       CREATE: '/api/v1/user/transactions',
-      SUMMARY: (transactionId: string) => 
+      SUMMARY: (transactionId: string) =>
         `/api/v1/user/transactions/${encodeURIComponent(transactionId)}/summary`,
       LIST: '/api/v1/user/transactions',
-      DETAILS: (transactionId: string) => 
+      DETAILS: (transactionId: string) =>
         `/api/v1/user/transactions/${encodeURIComponent(transactionId)}`,
     },
   },
-  
+
   // Request Configuration
   REQUEST: {
     TIMEOUT: 30000, // 30 seconds
     RETRY_ATTEMPTS: 3,
     RETRY_DELAY: 1000, // 1 second
   },
-  
+
   // Headers
   HEADERS: {
     DEFAULT: {
@@ -122,7 +122,7 @@ export const API_CONFIG = {
       'Authorization': `Bearer ${token}`,
     }),
   },
-  
+
   // Response Status Codes
   STATUS_CODES: {
     SUCCESS: 200,
@@ -137,7 +137,7 @@ export const API_CONFIG = {
     INTERNAL_SERVER_ERROR: 500,
     SERVICE_UNAVAILABLE: 503,
   },
-  
+
   // Error Messages
   ERROR_MESSAGES: {
     NETWORK_ERROR: 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต',

@@ -41,7 +41,7 @@ type AppBarContextValue = {
 
 const AppBarActionsContext = React.createContext<AppBarContextValue>({
   routeActions: {},
-  setRouteActions: () => {},
+  setRouteActions: () => { },
 });
 
 type AppBarConfig = {
@@ -147,6 +147,7 @@ export default function TabLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const isQRScannerRoute = pathname?.includes("qr-scanner");
+  const isSettingsSubRoute = pathname?.startsWith("/settings/");
   const [routeActions, setRouteActionsState] = React.useState<
     Record<string, RouteAppBarState | undefined>
   >({});
@@ -173,7 +174,7 @@ export default function TabLayout() {
       <Tabs
         // ตั้งค่าพื้นฐานสำหรับทุก screen ใน tabs
         screenOptions={({ route }) => ({
-          headerShown: !isQRScannerRoute, // แสดง AppBar เฉพาะหน้าที่ไม่ใช่ QR
+          headerShown: !isQRScannerRoute && !isSettingsSubRoute, // แสดง AppBar เฉพาะหน้าที่ไม่ใช่ QR และไม่ใช่หน้าย่อยของ Settings
           header: () => (
             <AppBar
               config={APP_BAR_CONFIG[route.name] ?? APP_BAR_CONFIG.home}
