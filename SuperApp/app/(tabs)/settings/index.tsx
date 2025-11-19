@@ -1,17 +1,11 @@
 // นำเข้า Ionicons สำหรับแสดงไอคอนต่างๆ
 import { Ionicons } from "@expo/vector-icons";
 // นำเข้า router สำหรับการนำทาง
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React from "react";
 // นำเข้า components พื้นฐานจาก React Native
-import {
-  Alert,
-  ScrollView,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Alert, Modal, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
 // นำเข้า SafeAreaView เพื่อหลีกเลี่ยงพื้นที่ notch และ status bar
 import { SafeAreaView } from "react-native-safe-area-context";
 // นำเข้าฟังก์ชันล้างข้อมูล
@@ -28,29 +22,14 @@ import { TABS_HORIZONTAL_GUTTER } from "../_layout";
 export default function SettingsScreen() {
   // State สำหรับการแจ้งเตือน (เปิด/ปิด)
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
-  // State สำหรับการใช้ลายนิ้วมือ (เปิด/ปิด)
-  const [biometricEnabled, setBiometricEnabled] = React.useState(false);
-  // State สำหรับโหมดมืด (เปิด/ปิด)
-  const [darkModeEnabled, setDarkModeEnabled] = React.useState(false);
+  // State สำหรับแสดง/ซ่อน logout modal
+  const [showLogoutModal, setShowLogoutModal] = React.useState(false);
   // เก็บข้อมูลที่ดึงจาก keychain
   const [storedCredentials, setStoredCredentials] =
     React.useState<LoginCredentials | null>(null);
   const [storedTokens, setStoredTokens] = React.useState<AuthTokens | null>(
     null,
   );
-  const profilePhoneNumber =
-    storedCredentials?.phoneNumber ?? "+66 81 234 5678";
-  const profileInitials = React.useMemo(() => {
-    const phone = storedCredentials?.phoneNumber;
-    if (!phone) {
-      return "JD";
-    }
-    const digits = phone.replace(/\D/g, "");
-    if (digits.length >= 2) {
-      return digits.slice(-2);
-    }
-    return digits || "JD";
-  }, [storedCredentials?.phoneNumber]);
 
   // โหลดข้อมูลจาก keychain เมื่อเข้า หน้านี้
   React.useEffect(() => {
@@ -87,47 +66,34 @@ export default function SettingsScreen() {
 
   // ฟังก์ชันสำหรับออกจากระบบ
   const handleLogout = () => {
-    // แสดง Alert ยืนยัน
-    Alert.alert(
-      "ออกจากระบบ", // หัวข้อ
-      "คุณต้องการออกจากระบบและล้างข้อมูลหรือไม่?", // ข้อความ
-      [
-        {
-          text: "ยกเลิก", // ปุ่มยกเลิก
-          style: "cancel",
-        },
-        {
-          text: "ออกจากระบบ", // ปุ่มยืนยัน
-          style: "destructive", // สีแดง (แสดงว่าเป็นการทำลาย)
-          onPress: async () => {
-            try {
-              // ลบข้อมูล credentials และ tokens ทั้งหมด
-              const cleared = await clearCredentials();
+    setShowLogoutModal(true);
+  };
 
-              if (!cleared) {
-                throw new Error("Failed to clear credentials");
-              }
+  // ฟังก์ชันยืนยันการออกจากระบบ
+  const confirmLogout = async () => {
+    try {
+      // ลบข้อมูล credentials และ tokens ทั้งหมด
+      const cleared = await clearCredentials();
 
-              setStoredCredentials(null);
-              setStoredTokens(null);
+      if (!cleared) {
+        throw new Error("Failed to clear credentials");
+      }
 
-              console.log("🧹 Cleared all credentials and tokens");
+      setStoredCredentials(null);
+      setStoredTokens(null);
 
-              // แจ้งเตือนว่าทำสำเร็จก่อนนำทางกลับหน้า login
-              Alert.alert("สำเร็จ", "ออกจากระบบและล้างข้อมูลเรียบร้อยแล้ว", [
-                {
-                  text: "ตกลง",
-                  onPress: () => router.replace("/login"),
-                },
-              ]);
-            } catch (error) {
-              console.error("Error during logout:", error);
-              Alert.alert("ข้อผิดพลาด", "ไม่สามารถออกจากระบบได้");
-            }
-          },
-        },
-      ],
-    );
+      console.log("🧹 Cleared all credentials and tokens");
+
+      // ปิด modal
+      setShowLogoutModal(false);
+
+      // นำทางกลับหน้า login
+      router.replace("/login");
+    } catch (error) {
+      console.error("Error during logout:", error);
+      setShowLogoutModal(false);
+      Alert.alert("ข้อผิดพลาด", "ไม่สามารถออกจากระบบได้");
+    }
   };
 
   // ฟังก์ชันสำหรับล้างข้อมูลทั้งหมด (สำหรับนักพัฒนา/ทดสอบ)
@@ -176,232 +142,146 @@ export default function SettingsScreen() {
     );
   };
 
-  // ข้อมูลการตั้งค่าทั้งหมด แบ่งเป็นหมวดหมู่
-  const settingSections = [
-    {
-      title: "บัญชีผู้ใช้", // หมวดหมู่ที่ 1
-      items: [
-        {
-          icon: "person-outline", // ไอคอนคน
-          title: "ข้อมูลส่วนตัว",
-          subtitle: "แก้ไขข้อมูลโปรไฟล์",
-          onPress: () => console.log("Profile pressed"), // ฟังก์ชันเมื่อกด
-          showArrow: true, // แสดงลูกศรชี้ขวา
-        },
-        {
-          icon: "shield-checkmark-outline", // ไอคอนโล่
-          title: "ความปลอดภัย",
-          subtitle: "เปลี่ยนรหัสผ่าน, PIN",
-          onPress: () => console.log("Security pressed"),
-          showArrow: true,
-        },
-        {
-          icon: "card-outline", // ไอคอนบัตร
-          title: "วิธีการชำระเงิน",
-          subtitle: "จัดการบัตรและบัญชี",
-          onPress: () => console.log("Payment methods pressed"),
-          showArrow: true,
-        },
-      ],
-    },
-    {
-      title: "การตั้งค่าแอป", // หมวดหมู่ที่ 2
-      items: [
-        {
-          icon: "notifications-outline", // ไอคอนระฆัง
-          title: "การแจ้งเตือน",
-          subtitle: "รับการแจ้งเตือนจากแอป",
-          onPress: () => setNotificationsEnabled(!notificationsEnabled), // สลับค่า
-          showSwitch: true, // แสดง toggle switch
-          switchValue: notificationsEnabled, // ค่าของ switch
-        },
-        {
-          icon: "finger-print-outline", // ไอคอนลายนิ้วมือ
-          title: "ล็อกด้วยลายนิ้วมือ",
-          subtitle: "ใช้ลายนิ้วมือเพื่อเข้าแอป",
-          onPress: () => setBiometricEnabled(!biometricEnabled),
-          showSwitch: true,
-          switchValue: biometricEnabled,
-        },
-        {
-          icon: "moon-outline", // ไอคอนพระจันทร์
-          title: "โหมดมืด",
-          subtitle: "เปลี่ยนธีมแอป",
-          onPress: () => setDarkModeEnabled(!darkModeEnabled),
-          showSwitch: true,
-          switchValue: darkModeEnabled,
-        },
-        {
-          icon: "language-outline", // ไอคอนภาษา
-          title: "ภาษา",
-          subtitle: "ไทย",
-          onPress: () => console.log("Language pressed"),
-          showArrow: true,
-        },
-      ],
-    },
-    {
-      title: "ช่วยเหลือและสนับสนุน", // หมวดหมู่ที่ 3
-      items: [
-        {
-          icon: "help-circle-outline", // ไอคอนเครื่องหมายคำถาม
-          title: "ศูนย์ช่วยเหลือ",
-          subtitle: "คำถามที่พบบ่อย",
-          onPress: () => console.log("Help center pressed"),
-          showArrow: true,
-        },
-        {
-          icon: "chatbubble-outline", // ไอคอนแชท
-          title: "ติดต่อเรา",
-          subtitle: "แชทกับทีมสนับสนุน",
-          onPress: () => console.log("Contact us pressed"),
-          showArrow: true,
-        },
-        {
-          icon: "star-outline", // ไอคอนดาว
-          title: "ให้คะแนนแอป",
-          subtitle: "ช่วยเราปรับปรุงแอป",
-          onPress: () => console.log("Rate app pressed"),
-          showArrow: true,
-        },
-      ],
-    },
-    {
-      title: "เกี่ยวกับ", // หมวดหมู่ที่ 4
-      items: [
-        {
-          icon: "document-text-outline", // ไอคอนเอกสาร
-          title: "เงื่อนไขการใช้งาน",
-          subtitle: "อ่านเงื่อนไขและข้อตกลง",
-          onPress: () => console.log("Terms pressed"),
-          showArrow: true,
-        },
-        {
-          icon: "lock-closed-outline", // ไอคอนกุญแจ
-          title: "นโยบายความเป็นส่วนตัว",
-          subtitle: "การใช้ข้อมูลส่วนบุคคล",
-          onPress: () => console.log("Privacy pressed"),
-          showArrow: true,
-        },
-        {
-          icon: "information-circle-outline", // ไอคอนข้อมูล
-          title: "เวอร์ชันแอป",
-          subtitle: "v1.0.0",
-          onPress: () => console.log("Version pressed"),
-          showArrow: false, // ไม่แสดงลูกศร
-        },
-      ],
-    },
-  ];
-
   return (
-    // SafeAreaView: ป้องกันเนื้อหาทับกับ notch/status bar
     <SafeAreaView
-      className="  flex-1 bg-[#D9DEED80]"
+      className="flex-1 "
       edges={["left", "right", "bottom"]}
       style={{ paddingHorizontal: TABS_HORIZONTAL_GUTTER }}
     >
-      {/* ScrollView: ทำให้เนื้อหาเลื่อนได้ */}
-      <ScrollView className="flex-1 " showsVerticalScrollIndicator={false}>
-        {/* === PROFILE SECTION === */}
-        {/* การ์ดแสดงข้อมูลโปรไฟล์ผู้ใช้ */}
-        <View className="mt-4 mb-6">
-          <TouchableOpacity className="p-4 bg-white shadow-sm rounded-xl">
-            <View className="flex-row items-center">
-              {/* วงกลมแสดงตัวอักษรจากเบอร์โทรที่บันทึกไว้ */}
-              <View className="w-16 h-16 bg-[#51BC8E] rounded-full items-center justify-center mr-4">
-                <Text className="text-xl font-bold text-white">
-                  {profileInitials}
-                </Text>
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+
+        {/* Profile Card with Gradient */}
+        <View className="mb-8">
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => router.push("/(tabs)/settings/profile")}
+          >
+            <LinearGradient
+              colors={[
+                "#1F274B",
+                "#395F85",
+                "#589FAF",
+                "#67C1A5",
+                "#5EC1A0",
+              ]}
+              locations={[0.1, 0.4, 0.7, 0.99, 1]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={{
+                borderRadius: 28,
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.15)",
+                shadowColor: "#0B1E2B",
+                shadowOpacity: 0.25,
+                shadowRadius: 18,
+                shadowOffset: { width: 0, height: 12 },
+                elevation: 12,
+              }}
+              className="p-6"
+            >
+              <View className="flex-row items-center justify-between px-6 py-8">
+                <View className="flex-row items-center flex-1">
+                  {/* Avatar with Initial */}
+                  <View className="mr-4">
+                    <View className="w-16 h-16 bg-[#34D399] rounded-full items-center justify-center border-2 border-white/20">
+                      <Text className="text-white text-2xl font-medium">P</Text>
+                    </View>
+                  </View>
+
+                  {/* User Info */}
+                  <View className="flex-1">
+                    <Text className="text-white text-lg font-bold mb-1">
+                      User2025001
+                    </Text>
+                    <Text className="text-white/80 text-sm">
+                      รหัสสมาชิก : P202501
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Edit Icon */}
+                <View className="w-10 h-10 bg-white/10 rounded-full items-center justify-center">
+                  <Ionicons name="create-outline" size={20} color="#FFFFFF" />
+                </View>
               </View>
-              {/* ข้อมูลผู้ใช้ */}
-              <View className="flex-1">
-                <Text className="text-lg font-semibold text-[#1F2937]">
-                  SuperApp User
-                </Text>
-                <Text className="text-sm text-[#6B7280]">
-                  เบอร์ที่ผูก: {profilePhoneNumber}
-                </Text>
-              </View>
-              {/* ลูกศรชี้ขวา (บ่งบอกว่ากดได้) */}
-              <Ionicons
-                name="chevron-forward-outline"
-                size={20}
-                color="#9CA3AF"
-              />
-            </View>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
 
-        {/* === SETTINGS SECTIONS === */}
-        {/* แสดงการตั้งค่าแบ่งตามหมวดหมู่ */}
-        <View>
-          {/* วนลูปแสดงแต่ละหมวดหมู่ */}
-          {settingSections.map((section, sectionIndex) => (
-            <View key={sectionIndex} className="mb-6">
-              {/* หัวข้อหมวดหมู่ (ตัวพิมพ์ใหญ่, ตัวอักษรห่าง) */}
-              <Text className="text-sm font-semibold text-[#6B7280] mb-3 uppercase tracking-wide">
-                {section.title}
-              </Text>
-              {/* กล่องรายการในหมวดหมู่ */}
-              <View className="bg-white shadow-sm rounded-xl">
-                {/* วนลูปแสดงรายการในหมวดหมู่ */}
-                {section.items.map((item, itemIndex) => (
-                  <TouchableOpacity
-                    key={itemIndex}
-                    onPress={item.onPress} // เรียกฟังก์ชันเมื่อกด
-                    // ถ้าไม่ใช่รายการสุดท้ายจะมีเส้นขอบด้านล่าง
-                    className={`p-4 ${
-                      itemIndex !== section.items.length - 1
-                        ? "border-b border-gray-100"
-                        : ""
-                    }`}
-                  >
-                    <View className="flex-row items-center">
-                      {/* ไอคอนของรายการ */}
-                      <View className="items-center justify-center w-10 h-10 mr-3 bg-gray-100 rounded-full">
-                        <Ionicons
-                          name={item.icon as any}
-                          size={20}
-                          color="#6B7280"
-                        />
-                      </View>
-                      {/* ข้อความรายการ */}
-                      <View className="flex-1">
-                        <Text className="font-medium text-[#1F2937]">
-                          {item.title}
-                        </Text>
-                        <Text className="text-sm text-[#6B7280] mt-1">
-                          {item.subtitle}
-                        </Text>
-                      </View>
-                      {/* แสดง Switch ถ้า showSwitch เป็น true */}
-                      {item.showSwitch && (
-                        <Switch
-                          value={item.switchValue} // ค่าปัจจุบัน
-                          onValueChange={item.onPress} // ฟังก์ชันเมื่อเปลี่ยนค่า
-                          trackColor={{ false: "#D1D5DB", true: "#51BC8E" }} // สีของแถบ (ปิด=เทา, เปิด=เขียว)
-                          thumbColor={item.switchValue ? "#FFFFFF" : "#FFFFFF"} // สีของปุ่มกลม
-                        />
-                      )}
-                      {/* แสดงลูกศรถ้า showArrow เป็น true */}
-                      {item.showArrow && (
-                        <Ionicons
-                          name="chevron-forward-outline"
-                          size={20}
-                          color="#9CA3AF"
-                        />
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          ))}
+        {/* Settings List */}
+        <View className="space-y-1 px-2">
+          {/* การแจ้งเตือน */}
+          <View className="flex-row items-center justify-between py-4">
+            <Text className="text-[#374151] text-base">การแจ้งเตือน</Text>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={setNotificationsEnabled}
+              trackColor={{ false: "#E5E7EB", true: "#34D399" }}
+              thumbColor="#FFFFFF"
+              ios_backgroundColor="#E5E7EB"
+            />
+          </View>
+
+          {/* คำถามที่พบบ่อย */}
+          <TouchableOpacity
+            className="flex-row items-center justify-between py-4"
+            onPress={() => router.push("/(tabs)/settings/faq")}
+          >
+            <Text className="text-[#374151] text-base">
+              คำถามที่พบบ่อย
+            </Text>
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color="#9CA3AF"
+            />
+          </TouchableOpacity>
+
+          {/* นโยบาย ความเป็นส่วนตัว */}
+          <TouchableOpacity
+            className="flex-row items-center justify-between py-4"
+            onPress={() => router.push("/(tabs)/settings/privacy")}
+          >
+            <Text className="text-[#374151] text-base">
+              นโยบาย ความเป็นส่วนตัว
+            </Text>
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color="#9CA3AF"
+            />
+          </TouchableOpacity>
+
+          {/* ติดต่อเรา */}
+          <TouchableOpacity
+            className="flex-row items-center justify-between py-4"
+            onPress={() => router.push("/(tabs)/settings/contact")}
+          >
+            <Text className="text-[#374151] text-base">ติดต่อเรา</Text>
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color="#9CA3AF"
+            />
+          </TouchableOpacity>
+
+          {/* ออกจากระบบ */}
+          <TouchableOpacity className="flex-row items-center justify-between py-4" onPress={handleLogout}>
+            <Text className="text-[#374151] text-base">ออกจากระบบ</Text>
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color="#9CA3AF"
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Dev Tools */}
+        <View className="mt-8">
 
           {/* === CLEAR DATA BUTTON (DEV/DEBUG) === */}
           {/* แสดงข้อมูลที่ดึงจาก keychain สำหรับ debug */}
-          {__DEV__ && (
+          {/* {__DEV__ && (
             <View className="p-4 mb-4 border-2 border-blue-200 shadow-sm bg-blue-50 rounded-xl">
               <Text className="font-semibold text-blue-800">
                 🔐 Keychain Debug
@@ -431,7 +311,7 @@ export default function SettingsScreen() {
             </View>
           )}
           {/* ปุ่มล้างข้อมูลทั้งหมด - สำหรับนักพัฒนา */}
-          {__DEV__ && ( // แสดงเฉพาะตอน development เท่านั้น
+          {/* {__DEV__ && ( // แสดงเฉพาะตอน development เท่านั้น
             <TouchableOpacity
               onPress={handleClearAllData}
               className="p-4 mb-4 border-2 border-orange-300 shadow-sm bg-orange-50 rounded-xl"
@@ -446,27 +326,90 @@ export default function SettingsScreen() {
                 ลบ tokens และ credentials ทั้งหมดออกจาก SecureStore
               </Text>
             </TouchableOpacity>
-          )}
-
-          {/* === LOGOUT BUTTON === */}
-          {/* ปุ่มออกจากระบบ */}
-          <TouchableOpacity
-            onPress={handleLogout} // เรียกฟังก์ชัน handleLogout
-            className="p-4 mb-6 bg-white shadow-sm rounded-xl"
-          >
-            <View className="flex-row items-center justify-center">
-              {/* ไอคอนออกจากระบบ (สีแดง) */}
-              <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-              <Text className="text-[#EF4444] font-semibold ml-2">
-                ออกจากระบบและล้างข้อมูล
-              </Text>
-            </View>
-          </TouchableOpacity>
+          )} */}
 
           {/* เพิ่มพื้นที่ด้านล่างเพื่อไม่ให้ถูก tab bar บัง */}
           <View className="h-20" />
         </View>
       </ScrollView>
+
+      {/* Logout Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showLogoutModal}
+        onRequestClose={() => setShowLogoutModal(false)}
+      >
+        <View className="flex-1 justify-center items-center bg-black/50">
+          {/* Modal Content */}
+          <View className="bg-white rounded-3xl w-[85%] max-w-sm overflow-hidden">
+            {/* Icon Circle */}
+            <View className="items-center pt-8 pb-4">
+              <View
+                className="w-48 h-48 rounded-full bg-gray-100 items-center justify-center"
+                style={{
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 20 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: 20,
+                  elevation: 10,
+                }}
+              >
+                <Ionicons name="log-out-outline" size={64} color="#1F2937" />
+              </View>
+            </View>
+
+            {/* Title */}
+            <Text className="text-xl font-bold text-center text-gray-900 px-6 mb-2">
+              คุณต้องการออกจากระบบหรือไม่?
+            </Text>
+
+            {/* Description */}
+            <Text className="text-sm text-center text-gray-500 px-6 mb-8">
+              หากออกจากระบบ คุณจะต้องเข้าสู่ระบบใหม่ในการใช้งานครั้งถัดไป
+            </Text>
+
+            {/* Buttons */}
+            <View className="flex-row px-6 pb-6 gap-2 space-x-3">
+              {/* Cancel Button */}
+              <TouchableOpacity
+                onPress={() => setShowLogoutModal(false)}
+                className="w-32 py-3 rounded-md bg-black items-center  justify-center"
+                activeOpacity={0.7}
+              >
+                <Text className="text-xl font-bold text-white">
+                  ยกเลิก
+                </Text>
+              </TouchableOpacity>
+
+              {/* Confirm Button */}
+              <TouchableOpacity
+                onPress={confirmLogout}
+                className="flex-1 rounded-md overflow-hidden"
+                activeOpacity={0.7}
+              >
+                <LinearGradient
+                  colors={[
+                    "#1F274B",
+                    "#395F85",
+                    "#589FAF",
+                    "#67C1A5",
+                    "#5EC1A0",
+                  ]}
+                  locations={[0.1, 0.4, 0.7, 0.99, 1]}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  className="py-3 items-center justify-center h-full"
+                >
+                  <Text className="text-xl py-4 text-center font-semibold text-white">
+                    ออกจากระบ
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

@@ -38,6 +38,7 @@ model SsTaxInvoiceProfile {
   isDefault     Boolean      @default(false)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime
+  invoices      Invoice[]
 
   @@unique([userId, taxId, branchCode])
   @@index([userId])
@@ -81,6 +82,7 @@ model User {
   user_vehicles   user_vehicles[]
   paymentCards    PaymentCard[]
   payments        Payment[]
+  invoices        Invoice[]
 }
 
 model admin_refresh_tokens {
@@ -170,6 +172,7 @@ model Payment {
   transaction transactions @relation(fields: [transactionId], references: [id])
   user        User         @relation(fields: [userId], references: [id])
   paymentLogs PaymentLog[]
+  invoices    Invoice[]
 
   @@index([transactionId])
   @@index([userId])
@@ -205,6 +208,30 @@ model PaymentLog {
   payment Payment @relation(fields: [paymentId], references: [id])
 
   @@index([paymentId])
+}
+
+model Invoice {
+  id            String      @id @default(uuid())
+  invoiceNumber String      @unique
+  paymentId     String      @unique
+  transactionId String
+  userId        String
+  amount        Float
+  status        InvoiceStatus @default(ISSUED)
+  issuedAt      DateTime    @default(now())
+  taxProfileId  String?
+  pdfUrl        String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Relations
+  payment    Payment              @relation(fields: [paymentId], references: [id])
+  user       User                 @relation(fields: [userId], references: [id])
+  taxProfile SsTaxInvoiceProfile? @relation(fields: [taxProfileId], references: [id])
+
+  @@index([paymentId])
+  @@index([transactionId])
+  @@index([userId])
 }
 
 model notifications {
@@ -389,6 +416,14 @@ enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
+  CANCELED
+  REFUNDED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
   CANCELED
   REFUNDED
 }
