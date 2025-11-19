@@ -144,7 +144,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView
-      className="flex-1 "
+      className="flex-1 bg-[#D9DEED80]"
       edges={["left", "right", "bottom"]}
       style={{ paddingHorizontal: TABS_HORIZONTAL_GUTTER }}
     >
