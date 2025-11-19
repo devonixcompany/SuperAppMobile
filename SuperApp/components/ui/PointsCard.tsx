@@ -141,7 +141,7 @@ export default function PointsCard({
   const badgeBackgroundColor = "rgba(243, 245, 250, 0.5)";
 
   const bottomText = footerText ?? DEFAULT_POINTS_CARD_PROPS.footerText;
-  const pointsLabel = `${points} Ponix`;
+  const pointsLabel = `${points} P.`;// นามสกุลคะแนนสะสม
 
   return (
     <View style={[{ marginBottom: 20, alignSelf: "stretch" }, style]}>
@@ -162,7 +162,7 @@ export default function PointsCard({
           style={{
             minHeight: pointResponsive.cardHeight,
             borderRadius: 28,
-            borderWidth: 1,
+            borderWidth: 1,//ความหนาเส้นขอบการ์ด
             borderColor: "rgba(255,255,255,0.15)",
             paddingHorizontal: pointResponsive.heroPaddingX,
             paddingTop: pointResponsive.heroPaddingTop,
@@ -273,9 +273,11 @@ export default function PointsCard({
           <View
             style={{
               height: 1,
-              backgroundColor: "rgba(255,255,255,0.35)",
+              backgroundColor: "#FFFFFF",
               marginTop: pointResponsive.heroDividerSpacingTop,
               marginBottom: pointResponsive.heroDividerSpacingBottom,
+              // ใช้ระยะ padding เดิมของการ์ดเป็นระยะลบให้เส้นพอดีชิดขอบซ้าย‑ขวา
+              marginHorizontal: -pointResponsive.heroPaddingX,
             }}
           />
 
