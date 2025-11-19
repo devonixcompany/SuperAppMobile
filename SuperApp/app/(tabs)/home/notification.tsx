@@ -123,7 +123,7 @@ export default function NotificationModal({
       onRequestClose={onClose}
     >
       <Animated.View
-        className="flex-1 bg-black/50 justify-center"
+        className="justify-center flex-1 bg-black/50"
         style={{ opacity: backdropOpacity }}
       >
         <TouchableOpacity
@@ -143,7 +143,7 @@ export default function NotificationModal({
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center">
                 <View className="items-center justify-center mr-3 border rounded-full w-11 h-11 border-[#CBD5E1]">
-                    <Ionicons name="notifications-outline" size={20} color="#1D2144" />
+                    <Ionicons name="notifications-outline" size={25} color="#1D2144" />
                   </View>
                   <View>
                     <Text className="text-lg font-semibold text-[#1F2937]">

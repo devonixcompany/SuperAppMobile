@@ -28,6 +28,9 @@ type RouteAppBarState = {
     disabled?: boolean;
     color?: string;
     backgroundColor?: string;
+    size?: number;
+    buttonSize?: number;
+    padding?: number;
   }[];
 };
 
@@ -50,6 +53,9 @@ type AppBarConfig = {
     disabled?: boolean;
     color?: string;
     backgroundColor?: string;
+    size?: number;
+    buttonSize?: number;
+    padding?: number;
   }[];
 };
 
@@ -94,15 +100,21 @@ const AppBar = ({
         </Text>
         <View style={styles.appBarSide}>
           {rightActions?.map((action, index) => {
+            const buttonStyle = [
+              styles.iconButton,
+              action.backgroundColor && { backgroundColor: action.backgroundColor },
+              action.buttonSize && {
+                width: action.buttonSize,
+                height: action.buttonSize,
+                borderRadius: action.buttonSize / 2,
+              },
+              action.padding !== undefined && { padding: action.padding },
+              action.disabled && styles.iconButtonDisabled,
+            ];
+
             if (action.loading) {
               return (
-                <View
-                  key={`${action.icon}-${index}`}
-                  style={[
-                    styles.iconButton,
-                    action.backgroundColor && { backgroundColor: action.backgroundColor },
-                  ]}
-                >
+                <View key={`${action.icon}-${index}`}>
                   <ActivityIndicator size="small" color="#6B7280" />
                 </View>
               );
@@ -112,17 +124,12 @@ const AppBar = ({
               <Pressable
                 key={`${action.icon}-${index}`}
                 onPress={action.onPress}
-                style={[
-                  styles.iconButton,
-                  action.backgroundColor && { backgroundColor: action.backgroundColor },
-                  action.disabled && styles.iconButtonDisabled,
-                ]}
                 disabled={action.disabled}
-                hitSlop={8}
+                hitSlop={10}
               >
                 <Ionicons
                   name={action.icon}
-                  size={20}
+                  size={action.size ?? 20}
                   color={action.color ?? "#111827"}
                 />
               </Pressable>

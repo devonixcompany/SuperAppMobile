@@ -161,7 +161,14 @@ export default function HomeScreen() {
         leftAvatar: profileAvatar,
         onLeftPress: handleShowProfile,
         rightActions: [
-          { icon: "notifications-outline", onPress: handleShowNotification },
+          {
+            icon: "notifications-outline",
+            onPress: handleShowNotification,
+            size: 29,//ขนาดรูปปุ่ม
+            buttonSize: 44, //ขนาดปุ่มหน้า Home
+            color: "#4EBB8E" //สีปุ่มหน้า Home
+            
+          },
         ],
       }),
       [handleShowNotification, handleShowProfile, profileAvatar],
