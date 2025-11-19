@@ -4,10 +4,10 @@
 """
 Alias/launcher for qr-generate.py so you can run:
   python3 generate_qr.py --text "..."
-    python3 ./generate_qr.py --text "https://bw6z7nqh-8080.asse.devtunnels.ms/api/chargepoints/Devonix1/1/websocket-url" -o d
+    python3 ./generate_qr.py --text "https://bw6z7nqh-8080.asse.devtunnels.ms/api/v1/user/chargepoints/Devonix1/1/websocket-url" -o d
 evonix1-connector1.png
 
-python generate_qr.py --text "http://192.168.1.78:8080/api/chargepoints/Devonix1/1/websocket-url" -o d
+python generate_qr.py --text "http://192.168.1.78:8080/api/v1/user/chargepoints/Devonix1/1/websocket-url" -o d
 evonix1-connector1.png
 
 This loads and executes the main() from qr-generate.py, forwarding CLI args.

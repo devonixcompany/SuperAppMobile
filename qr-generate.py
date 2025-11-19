@@ -4,7 +4,7 @@
 """
 Generate QR code image from text/URL or a file.
 Usage examples:
-  python generate_qr.py --text "http://localhost:8080/api/chargepoints/EVBANGNA-CP001/1/websocket-url"
+  python generate_qr.py --text "http://localhost:8080/api/v1/user/chargepoints/EVBANGNA-CP001/1/websocket-url"
   python generate_qr.py --text '{"apiBaseUrl":"http://192.168.1.10:8080","chargePointIdentity":"EVBANGNA-CP001","connectorId":1}' -o ev-qr.png
   python generate_qr.py --text "https://example.com" --logo logo.png --logo-size 72
 """
