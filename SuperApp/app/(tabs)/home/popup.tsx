@@ -377,10 +377,31 @@ const loadActiveTransaction = async (): Promise<ChargingStatusResult> => {
       return { data: null, hadError: false };
     }
 
+    // Check if transaction has valid ID - if it does, it's an active transaction
+    const hasValidTransactionId = !!(
+      activeTransaction.id ||
+      activeTransaction.transactionId ||
+      activeTransaction.transactionID
+    );
+
+    if (!hasValidTransactionId) {
+      console.log('❌ [POPUP] No valid transaction ID found');
+      return { data: null, hadError: false };
+    }
+
     const status = getStatusString(activeTransaction);
     console.log('📊 [POPUP] Transaction status:', status);
-    if (!status || !ACTIVE_STATUSES.includes(status.toUpperCase())) {
-      console.log('❌ [POPUP] Status is not one of:', ACTIVE_STATUSES);
+    
+    // Accept transaction if:
+    // 1. Status is one of the active statuses, OR
+    // 2. Status is AVAILABLE but transaction has a valid ID (means charging was/is active)
+    const isValidStatus = status && (
+      ACTIVE_STATUSES.includes(status.toUpperCase()) ||
+      status.toUpperCase() === 'AVAILABLE'
+    );
+    
+    if (!isValidStatus) {
+      console.log('❌ [POPUP] Status is not one of:', ACTIVE_STATUSES, 'and status is:', status);
       return { data: null, hadError: false };
     }
 
@@ -601,42 +622,88 @@ const ChargingStatusCardContent: React.FC<ChargingStatusCardContentProps> = ({
       return;
     }
 
-    console.log('🔌 [POPUP WS] Connecting to:', data.websocketUrl);
-
-    try {
-      const ws = new WebSocket(data.websocketUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        console.log('✅ [POPUP WS] Connected');
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          console.log('📨 [POPUP WS] Received:', message);
-
-          if (message.type === 'charging_data' && message.data) {
-            console.log('⚡ [POPUP WS] Charging data update:', message.data);
-            setRealtimeData(message.data);
-          }
-        } catch (error) {
-          console.error('❌ [POPUP WS] Parse error:', error);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('❌ [POPUP WS] Error:', error);
-      };
-
-      ws.onclose = () => {
-        console.log('🔌 [POPUP WS] Disconnected');
-      };
-    } catch (error) {
-      console.error('❌ [POPUP WS] Connection error:', error);
+    // Fix WebSocket URL - replace 0.0.0.0 with localhost or actual IP
+    let websocketUrl = data.websocketUrl;
+    if (websocketUrl.includes('0.0.0.0')) {
+      // For development, use localhost. In production, this should be the actual server IP
+      websocketUrl = websocketUrl.replace('0.0.0.0', '192.168.1.100'); // Replace with your actual server IP
+      console.log('🔧 [POPUP WS] Fixed URL from', data.websocketUrl, 'to', websocketUrl);
     }
 
+    console.log('🔌 [POPUP WS] Connecting to:', websocketUrl);
+
+    let connectionTimeout: ReturnType<typeof setTimeout>;
+    let retryTimeout: ReturnType<typeof setTimeout>;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    const connectWebSocket = () => {
+      try {
+        const ws = new WebSocket(websocketUrl);
+        wsRef.current = ws;
+
+        // Set connection timeout
+        connectionTimeout = setTimeout(() => {
+          if (ws.readyState === WebSocket.CONNECTING) {
+            console.warn('⏱️ [POPUP WS] Connection timeout, closing...');
+            ws.close();
+          }
+        }, 10000); // 10 second timeout
+
+        ws.onopen = () => {
+          console.log('✅ [POPUP WS] Connected successfully');
+          clearTimeout(connectionTimeout);
+          retryCount = 0; // Reset retry count on successful connection
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            console.log('📨 [POPUP WS] Received:', message);
+
+            if (message.type === 'charging_data' && message.data) {
+              console.log('⚡ [POPUP WS] Charging data update:', message.data);
+              setRealtimeData(message.data);
+            }
+          } catch (error) {
+            console.error('❌ [POPUP WS] Parse error:', error);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error('❌ [POPUP WS] WebSocket error:', error);
+          clearTimeout(connectionTimeout);
+        };
+
+        ws.onclose = (event) => {
+          console.log('🔌 [POPUP WS] Connection closed. Code:', event.code, 'Reason:', event.reason);
+          clearTimeout(connectionTimeout);
+
+          // Retry logic for unexpected closures
+          if (event.code !== 1000 && retryCount < maxRetries) {
+            retryCount++;
+            console.log(`🔄 [POPUP WS] Retrying connection (${retryCount}/${maxRetries}) in 5 seconds...`);
+            retryTimeout = setTimeout(connectWebSocket, 5000);
+          }
+        };
+      } catch (error) {
+        console.error('❌ [POPUP WS] Connection error:', error);
+        clearTimeout(connectionTimeout);
+
+        // Retry on connection errors
+        if (retryCount < maxRetries) {
+          retryCount++;
+          console.log(`🔄 [POPUP WS] Retrying connection (${retryCount}/${maxRetries}) in 5 seconds...`);
+          retryTimeout = setTimeout(connectWebSocket, 5000);
+        }
+      }
+    };
+
+    connectWebSocket();
+
     return () => {
+      clearTimeout(connectionTimeout);
+      clearTimeout(retryTimeout);
       if (wsRef.current) {
         console.log('🔌 [POPUP WS] Cleaning up connection');
         wsRef.current.close();
