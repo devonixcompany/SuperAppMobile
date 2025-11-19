@@ -129,7 +129,7 @@ class PaymentService {
     payload: ProcessTransactionPaymentRequest,
   ): Promise<ApiResponse<PaymentProcessingResult>> {
     return http.post<PaymentProcessingResult>(
-      `/api/transactions/${encodeURIComponent(transactionId)}/payment`,
+      `/api/v1/user/transactions/${encodeURIComponent(transactionId)}/payment`,
       payload,
     );
   }

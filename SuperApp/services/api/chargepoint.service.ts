@@ -61,7 +61,7 @@ class ChargepointService {
       console.log('Chargepoint Service - Params:', { userId: params.userId });
       
       // Construct the API endpoint
-      const endpoint = `/api/chargepoints/${encodeURIComponent(chargePointIdentity)}/${connectorId}/websocket-url?userId=${encodeURIComponent(params.userId)}`;
+      const endpoint = `/api/v1/user/chargepoints/${encodeURIComponent(chargePointIdentity)}/${connectorId}/websocket-url?userId=${encodeURIComponent(params.userId)}`;
       
       const response = await http.get<ChargepointWebSocketResponse>(
         endpoint
@@ -87,7 +87,7 @@ class ChargepointService {
   ): Promise<ApiResponse<any>> {
     try {
       const response = await http.get(
-        `/api/chargepoints/${encodeURIComponent(chargePointIdentity)}/status?userId=${params.userId}`
+        `/api/v1/user/chargepoints/${encodeURIComponent(chargePointIdentity)}/status?userId=${params.userId}`
       );
 
       return response;
@@ -110,7 +110,7 @@ class ChargepointService {
   ): Promise<ApiResponse<any>> {
     try {
       const response = await http.post(
-        `/api/chargepoints/${encodeURIComponent(chargePointIdentity)}/${connectorId}/start`,
+        `/api/v1/user/chargepoints/${encodeURIComponent(chargePointIdentity)}/${connectorId}/start`,
         { userId: params.userId }
       );
 
@@ -134,7 +134,7 @@ class ChargepointService {
   ): Promise<ApiResponse<any>> {
     try {
       const response = await http.post(
-        `/api/chargepoints/${encodeURIComponent(chargePointIdentity)}/${connectorId}/stop`,
+        `/api/v1/user/chargepoints/${encodeURIComponent(chargePointIdentity)}/${connectorId}/stop`,
         { userId: params.userId }
       );
 

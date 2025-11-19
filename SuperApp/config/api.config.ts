@@ -13,71 +13,71 @@ export const API_CONFIG = {
   ENDPOINTS: {
     // Authentication
     AUTH: {
-      LOGIN: '/api/auth/login',
-      REGISTER: '/api/auth/register',
-      REFRESH_TOKEN: '/api/auth/refresh',
-      LOGOUT: '/api/auth/logout',
-      VERIFY_OTP: '/api/auth/verify-otp',
-      RESEND_OTP: '/api/auth/resend-otp',
-      FORGOT_PASSWORD: '/api/auth/forgot-password',
-      RESET_PASSWORD: '/api/auth/reset-password',
+      LOGIN: '/api/v1/user/auth/login',
+      REGISTER: '/api/v1/user/auth/register',
+      REFRESH_TOKEN: '/api/v1/user/auth/refresh',
+      LOGOUT: '/api/v1/user/auth/logout',
+      VERIFY_OTP: '/api/v1/user/auth/verify-otp',
+      RESEND_OTP: '/api/v1/user/auth/resend-otp',
+      FORGOT_PASSWORD: '/api/v1/user/auth/forgot-password',
+      RESET_PASSWORD: '/api/v1/user/auth/reset-password',
     },
     
     // User Management
     USER: {
-      PROFILE: '/api/user/profile',
-      UPDATE_PROFILE: '/api/user/profile',
-      CHANGE_PASSWORD: '/api/user/change-password',
-      DELETE_ACCOUNT: '/api/user/account',
-      CHARGING_HISTORY: '/api/user/charging-history',
-      PAYMENT_METHODS: '/api/user/payment-methods',
+      PROFILE: '/api/v1/user/profile',
+      UPDATE_PROFILE: '/api/v1/user/profile',
+      CHANGE_PASSWORD: '/api/v1/user/change-password',
+      DELETE_ACCOUNT: '/api/v1/user/account',
+      CHARGING_HISTORY: '/api/v1/user/charging-history',
+      PAYMENT_METHODS: '/api/v1/user/payment-methods',
     },
     
     // Chargepoint Management
     CHARGEPOINT: {
       WEBSOCKET_URL: (identity: string, connectorId: number) => 
-        `/api/chargepoints/${encodeURIComponent(identity)}/${connectorId}/websocket-url`,
+        `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/${connectorId}/websocket-url`,
       STATUS: (identity: string) => 
-        `/api/chargepoints/${encodeURIComponent(identity)}/status`,
+        `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/status`,
       START_CHARGING: (identity: string, connectorId: number) => 
-        `/api/chargepoints/${encodeURIComponent(identity)}/${connectorId}/start`,
+        `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/${connectorId}/start`,
       STOP_CHARGING: (identity: string, connectorId: number) => 
-        `/api/chargepoints/${encodeURIComponent(identity)}/${connectorId}/stop`,
-      LIST: '/api/chargepoints',
+        `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/${connectorId}/stop`,
+      LIST: '/api/v1/user/chargepoints',
       DETAILS: (identity: string) => 
-        `/api/chargepoints/${encodeURIComponent(identity)}`,
+        `/api/v1/user/chargepoints/${encodeURIComponent(identity)}`,
     },
     
     // Payment
     PAYMENT: {
-      CARDS: '/api/payment/cards',
-      ADD_CARD: '/api/payment/cards',
+      CARDS: '/api/v1/user/payment/cards',
+      ADD_CARD: '/api/v1/user/payment/cards',
       REMOVE_CARD: (cardId: string) => 
-        `/api/payment/cards/${cardId}`,
+        `/api/v1/user/payment/cards/${cardId}`,
       SET_DEFAULT_CARD: (cardId: string) =>
-        `/api/payment/cards/${cardId}/default`,
-      PROCESS_PAYMENT: '/api/payment/process',
-      PAYMENT_HISTORY: '/api/payment/history',
-      STATUS: (paymentId: string) => `/api/payment/status/${encodeURIComponent(paymentId)}`,
+        `/api/v1/user/payment/cards/${cardId}/default`,
+      PROCESS_PAYMENT: '/api/v1/user/payment/process',
+      PAYMENT_HISTORY: '/api/v1/user/payment/history',
+      STATUS: (paymentId: string) => `/api/v1/user/payment/status/${encodeURIComponent(paymentId)}`,
     },
     
     // Notifications
     NOTIFICATIONS: {
-      LIST: '/api/notifications',
+      LIST: '/api/v1/user/notifications',
       MARK_READ: (notificationId: string) => 
-        `/api/notifications/${notificationId}/read`,
-      MARK_ALL_READ: '/api/notifications/read-all',
-      SETTINGS: '/api/notifications/settings',
+        `/api/v1/user/notifications/${notificationId}/read`,
+      MARK_ALL_READ: '/api/v1/user/notifications/read-all',
+      SETTINGS: '/api/v1/user/notifications/settings',
     },
     
     // Transactions
     TRANSACTIONS: {
-      CREATE: '/api/transactions',
+      CREATE: '/api/v1/user/transactions',
       SUMMARY: (transactionId: string) => 
-        `/api/transactions/${encodeURIComponent(transactionId)}/summary`,
-      LIST: '/api/transactions',
+        `/api/v1/user/transactions/${encodeURIComponent(transactionId)}/summary`,
+      LIST: '/api/v1/user/transactions',
       USER_TRANSACTIONS: (userId: string) => 
-        `/api/transactions/user/${encodeURIComponent(userId)}`,
+        `/api/v1/user/transactions/user/${encodeURIComponent(userId)}`,
     },
   },
   

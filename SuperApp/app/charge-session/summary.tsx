@@ -6,15 +6,15 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 const COLORS = {
@@ -112,16 +112,30 @@ export default function ChargeSummaryScreen() {
   const rateParam = resolveParam(params.rate);
   const selectedCardIdParam = resolveParam(params.selectedCardId);
 
-  const homeNavigationRef = useRef(false);
+  const navigationInProgressRef = useRef(false);
+
   const goHome = useCallback(() => {
-    if (homeNavigationRef.current) {
+    if (navigationInProgressRef.current) {
       return;
     }
-    homeNavigationRef.current = true;
-    setTimeout(() => {
-      router.replace("/(tabs)/home");
-    }, 50);
-  }, [router]);
+    navigationInProgressRef.current = true;
+    router.replace("/(tabs)/home");
+  }, []);
+
+  const goToChargingHistory = useCallback(() => {
+    if (navigationInProgressRef.current) {
+      return;
+    }
+    navigationInProgressRef.current = true;
+    if (transactionId) {
+      router.replace({
+        pathname: '/charging-history/[transactionId]',
+        params: { transactionId }
+      });
+    } else {
+      goHome();
+    }
+  }, [transactionId, goHome]);
 
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -184,7 +198,7 @@ export default function ChargeSummaryScreen() {
               Alert.alert(
                 'ชำระเงินสำเร็จ',
                 'บันทึกการชำระเงินเรียบร้อยแล้ว',
-                [{ text: 'ตกลง', onPress: goHome }]
+                [{ text: 'ตกลง', onPress: goToChargingHistory }]
               );
             } else {
               Alert.alert('ชำระเงินไม่สำเร็จ', failureMessage ?? 'ไม่สามารถชำระเงินได้');
@@ -200,7 +214,7 @@ export default function ChargeSummaryScreen() {
         Alert.alert('หมดเวลา', 'การตรวจสอบการยืนยัน 3DS หมดเวลา กรุณาลองใหม่');
       }
     }, intervalMs);
-  }, [loadPaymentCards, stopPolling, goHome]);
+  }, [loadPaymentCards, stopPolling, goToChargingHistory]);
 
 
   const energyKWh = useMemo(() => {
@@ -322,7 +336,7 @@ export default function ChargeSummaryScreen() {
       Alert.alert(
         'ชำระเงินสำเร็จ',
         'บันทึกการชำระเงินเรียบร้อยแล้ว',
-        [{ text: 'ตกลง', onPress: goHome }]
+        [{ text: 'ตกลง', onPress: goToChargingHistory }]
       );
     } catch (error: any) {
       console.error('Process payment error:', error);
@@ -334,7 +348,7 @@ export default function ChargeSummaryScreen() {
     } finally {
       setProcessingPayment(false);
     }
-  }, [loadPaymentCards, selectedCardId, transactionId, goHome]);
+  }, [loadPaymentCards, selectedCardId, transactionId, goToChargingHistory, startPollingPayment]);
 
   // Stop polling if modal is closed or on unmount
   useEffect(() => {

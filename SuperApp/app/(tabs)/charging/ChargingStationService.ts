@@ -27,7 +27,7 @@ export class ChargingStationService {
       console.log('🔌 Loading charging stations from API...');
 
       // เรียก API ผ่าน http client (จัดการ token อัตโนมัติ)
-      const response = await http.get<any[]>('/api/stations?page=1&limit=100');
+      const response = await http.get<any[]>('/api/v1/user/stations?page=1&limit=100');
 
       console.log('📡 API Response:', {
         success: response.success,
@@ -193,7 +193,7 @@ export class ChargingStationService {
 
       // เรียก API ผ่าน http client (จัดการ token อัตโนมัติ)
       const response = await http.get<any[]>(
-        `/api/stations/nearby/search?latitude=${latitude}&longitude=${longitude}&radius=${radiusKm}`
+        `/api/v1/user/stations/nearby/search?latitude=${latitude}&longitude=${longitude}&radius=${radiusKm}`
       );
 
       if (response.success && response.data) {

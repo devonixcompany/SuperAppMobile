@@ -1,7 +1,7 @@
 # Token Refresh Fix Summary
 
 ## Problem
-The frontend was experiencing 401 Unauthorized errors even after successful token refresh when calling `/api/chargepoints/CP-TH-BKK-001/1/websocket-url`. The logs showed:
+The frontend was experiencing 401 Unauthorized errors even after successful token refresh when calling `/api/v1/user/chargepoints/CP-TH-BKK-001/1/websocket-url`. The logs showed:
 
 1. First API call with expired token → 401 error
 2. Token refresh succeeds → New tokens generated

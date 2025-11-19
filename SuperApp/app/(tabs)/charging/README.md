@@ -107,7 +107,7 @@ npx expo run:android
 GET /api/chargepoints?isPublic=true
 
 // ดึงข้อมูลสถานีชาร์จเฉพาะ
-GET /api/chargepoints/:id
+GET /api/v1/user/chargepoints/:id
 
 // ค้นหาสถานีชาร์จใกล้เคียง
 GET /api/chargepoints?latitude=XX&longitude=XX&radius=5
