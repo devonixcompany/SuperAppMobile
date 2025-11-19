@@ -151,7 +151,7 @@ export default function SettingsScreen() {
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
 
         {/* Profile Card with Gradient */}
-        <View className="mb-8">
+        <View className="mt-4 mb-8">
           <TouchableOpacity
             activeOpacity={0.9}
             onPress={() => router.push("/(tabs)/settings/profile")}
@@ -184,23 +184,23 @@ export default function SettingsScreen() {
                   {/* Avatar with Initial */}
                   <View className="mr-4">
                     <View className="w-16 h-16 bg-[#34D399] rounded-full items-center justify-center border-2 border-white/20">
-                      <Text className="text-white text-2xl font-medium">P</Text>
+                      <Text className="text-2xl font-medium text-white">P</Text>
                     </View>
                   </View>
 
                   {/* User Info */}
                   <View className="flex-1">
-                    <Text className="text-white text-xl font-bold mb-1">
+                    <Text className="mb-1 text-xl font-bold text-white">
                       User2025001
                     </Text>
-                    <Text className="text-white/80 text-xl">
+                    <Text className="text-xl text-white/80">
                       รหัสสมาชิก : P202501
                     </Text>
                   </View>
                 </View>
 
                 {/* Edit Icon */}
-                <View className="w-10 h-10 bg-white/10 rounded-full items-center justify-center">
+                <View className="items-center justify-center w-10 h-10 rounded-full bg-white/10">
                   <Ionicons name="create-outline" size={20} color="#FFFFFF" />
                 </View>
               </View>
@@ -209,7 +209,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* Settings List */}
-        <View className="space-y-1 px-2">
+        <View className="px-2 space-y-1">
           {/* การแจ้งเตือน */}
           <View className="flex-row items-center justify-between py-4">
             <Text className="text-[#374151] text-base">การแจ้งเตือน</Text>
@@ -340,13 +340,13 @@ export default function SettingsScreen() {
         visible={showLogoutModal}
         onRequestClose={() => setShowLogoutModal(false)}
       >
-        <View className="flex-1 justify-center items-center bg-black/50">
+        <View className="items-center justify-center flex-1 bg-black/50">
           {/* Modal Content */}
           <View className="bg-white rounded-3xl w-[85%] max-w-sm overflow-hidden">
             {/* Icon Circle */}
             <View className="items-center pt-8 pb-4">
               <View
-                className="w-48 h-48 rounded-full bg-gray-100 items-center justify-center"
+                className="items-center justify-center w-48 h-48 bg-gray-100 rounded-full"
                 style={{
                   shadowColor: "#000",
                   shadowOffset: { width: 0, height: 20 },
@@ -360,21 +360,21 @@ export default function SettingsScreen() {
             </View>
 
             {/* Title */}
-            <Text className="text-xl font-bold text-center text-gray-900 px-6 mb-2">
+            <Text className="px-6 mb-2 text-xl font-bold text-center text-gray-900">
               คุณต้องการออกจากระบบหรือไม่?
             </Text>
 
             {/* Description */}
-            <Text className="text-sm text-center text-gray-500 px-6 mb-8">
+            <Text className="px-6 mb-8 text-sm text-center text-gray-500">
               หากออกจากระบบ คุณจะต้องเข้าสู่ระบบใหม่ในการใช้งานครั้งถัดไป
             </Text>
 
             {/* Buttons */}
-            <View className="flex-row px-6 pb-6 gap-2 space-x-3">
+            <View className="flex-row gap-2 px-6 pb-6 space-x-3">
               {/* Cancel Button */}
               <TouchableOpacity
                 onPress={() => setShowLogoutModal(false)}
-                className="w-32 py-3 rounded-md bg-black items-center  justify-center"
+                className="items-center justify-center w-32 py-3 bg-black rounded-md"
                 activeOpacity={0.7}
               >
                 <Text className="text-xl font-bold text-white">
@@ -385,7 +385,7 @@ export default function SettingsScreen() {
               {/* Confirm Button */}
               <TouchableOpacity
                 onPress={confirmLogout}
-                className="flex-1 rounded-md overflow-hidden"
+                className="flex-1 overflow-hidden rounded-md"
                 activeOpacity={0.7}
               >
                 <LinearGradient
@@ -399,9 +399,9 @@ export default function SettingsScreen() {
                   locations={[0.1, 0.4, 0.7, 0.99, 1]}
                   start={{ x: 0, y: 0.5 }}
                   end={{ x: 1, y: 0.5 }}
-                  className="py-3 items-center justify-center h-full"
+                  className="items-center justify-center h-full py-3"
                 >
-                  <Text className="text-xl py-4 text-center font-semibold text-white">
+                  <Text className="py-4 text-xl font-semibold text-center text-white">
                     ออกจากระบ
                   </Text>
                 </LinearGradient>

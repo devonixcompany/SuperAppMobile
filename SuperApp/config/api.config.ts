@@ -13,7 +13,7 @@ export const API_CONFIG = {
   ENDPOINTS: {
     // Authentication
     AUTH: {
-      LOGIN: '/api/auth/login',
+      LOGIN: '/api/v1/user/auth/login',
       REGISTER: '/api/v1/user/auth/register',
       REFRESH_TOKEN: '/api/v1/user/auth/refresh',
       LOGOUT: '/api/v1/user/auth/logout',

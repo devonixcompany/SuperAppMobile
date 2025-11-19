@@ -13,7 +13,7 @@ export default function ContactScreen() {
     };
 
     const handleFacebook = () => {
-        Linking.openURL('https://www.facebook.com/PONIX');
+        Linking.openURL('https://www.facebook.com/PONIXGROUPP');
     };
 
     const handleEmail = () => {
@@ -24,7 +24,7 @@ export default function ContactScreen() {
         <SafeAreaView className="flex-1 bg-[#F5F7FA]" edges={['top', 'left', 'right']}>
             {/* Header */}
             <View className="flex-row items-center px-6 pt-4 pb-2">
-                <TouchableOpacity className="w-11 h-11 rounded-full items-center justify-center" onPress={() => router.back()}>
+                <TouchableOpacity className="items-center justify-center rounded-full w-11 h-11" onPress={() => router.back()}>
                     <Ionicons name="arrow-back" size={22} color="#1F2937" />
                 </TouchableOpacity>
                 <Text className="flex-1 text-center text-xl font-semibold text-[#111827] mr-11">ติดต่อเรา</Text>
@@ -35,20 +35,20 @@ export default function ContactScreen() {
                 <View className="items-center ">
                     <Image
                         source={require('../../../assets/img/logo.png')}
-                        className="w-84 h-48"
+                        className="h-48 w-84"
                         resizeMode="contain"
                     />
                 </View>
 
                 {/* Header Text */}
                 <View className="mb-6">
-                    <Text className="text-center text-sm font-semibold text-gray-800 mb-1">
+                    <Text className="mb-1 text-sm font-semibold text-center text-gray-800">
                         PONIX TRANSFORMING THE WORLD
                     </Text>
-                    <Text className="text-center text-sm font-semibold text-gray-800 mb-1">
+                    <Text className="mb-1 text-sm font-semibold text-center text-gray-800">
                         WITH RENEWABLE ENERGY
                     </Text>
-                    <Text className="text-center text-xs text-gray-600">
+                    <Text className="text-xs text-center text-gray-600">
                         โพนิกซ์ เปลี่ยนโลกด้วย พลังงานสะอาด
                     </Text>
                 </View>
@@ -58,15 +58,15 @@ export default function ContactScreen() {
                     {/* Phone Card */}
                     <TouchableOpacity
                         onPress={handleCall}
-                        className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
+                        className="p-5 bg-white border border-gray-100 shadow-sm rounded-2xl"
                         activeOpacity={0.7}
                     >
                         <View className="flex-row items-center">
-                            <View className="w-12 h-12 rounded-xl items-center justify-center mr-4">
+                            <View className="items-center justify-center w-12 h-12 mr-4 rounded-xl">
                                 <Ionicons name="call" size={24} color="green" />
                             </View>
                             <View className="flex-1">
-                                <Text className="text-xs text-gray-500 mb-1">เบอร์ครศัพท์</Text>
+                                <Text className="mb-1 text-xs text-gray-500">เบอร์ครศัพท์</Text>
                                 <Text className="text-base font-semibold text-gray-800">082-436-0444</Text>
                             </View>
                         </View>
@@ -75,15 +75,15 @@ export default function ContactScreen() {
                     {/* Website Card */}
                     <TouchableOpacity
                         onPress={handleWebsite}
-                        className="bg-white rounded-2xl mt-2 p-5 shadow-sm border border-gray-100"
+                        className="p-5 mt-2 bg-white border border-gray-100 shadow-sm rounded-2xl"
                         activeOpacity={0.7}
                     >
                         <View className="flex-row items-center">
-                            <View className="w-12 h-12 rounded-xl items-center justify-center mr-4">
+                            <View className="items-center justify-center w-12 h-12 mr-4 rounded-xl">
                                 <Ionicons name="globe-outline" size={24} color="green" />
                             </View>
                             <View className="flex-1">
-                                <Text className="text-xs text-gray-500 mb-1">เว็บไซต์</Text>
+                                <Text className="mb-1 text-xs text-gray-500">เว็บไซต์</Text>
                                 <Text className="text-base font-semibold text-gray-800">ponix.co.th</Text>
                             </View>
                         </View>
@@ -92,16 +92,16 @@ export default function ContactScreen() {
                     {/* Facebook Card */}
                     <TouchableOpacity
                         onPress={handleFacebook}
-                        className="bg-white rounded-2xl mt-2 p-5 shadow-sm border border-gray-100"
+                        className="p-5 mt-2 bg-white border border-gray-100 shadow-sm rounded-2xl"
                         activeOpacity={0.7}
                     >
                         <View className="flex-row items-center">
-                            <View className="w-12 h-12 rounded-xl items-center justify-center mr-4">
+                            <View className="items-center justify-center w-12 h-12 mr-4 rounded-xl">
                                 <Ionicons name="logo-facebook" size={24} color="blue" />
                             </View>
                             <View className="flex-1">
-                                <Text className="text-xs text-gray-500 mb-1">เพจ</Text>
-                                <Text className="text-base font-semibold text-gray-800">PONIX</Text>
+                                <Text className="mb-1 text-xs text-gray-500">เพจ</Text>
+                                <Text className="text-base font-semibold text-gray-800">PONIX (Ponixcompany)</Text>
                             </View>
                         </View>
                     </TouchableOpacity>
@@ -109,15 +109,15 @@ export default function ContactScreen() {
                     {/* Email Card */}
                     <TouchableOpacity
                         onPress={handleEmail}
-                        className="bg-white rounded-2xl mt-2 p-5 shadow-sm border border-gray-100"
+                        className="p-5 mt-2 bg-white border border-gray-100 shadow-sm rounded-2xl"
                         activeOpacity={0.7}
                     >
                         <View className="flex-row items-center">
-                            <View className="w-12 h-12 rounded-xl items-center justify-center mr-4">
+                            <View className="items-center justify-center w-12 h-12 mr-4 rounded-xl">
                                 <Ionicons name="mail" size={24} color="green" />
                             </View>
                             <View className="flex-1">
-                                <Text className="text-xs text-gray-500 mb-1">อีเมล</Text>
+                                <Text className="mb-1 text-xs text-gray-500">อีเมล</Text>
                                 <Text className="text-base font-semibold text-gray-800">info@ponix.co.th</Text>
                             </View>
                         </View>

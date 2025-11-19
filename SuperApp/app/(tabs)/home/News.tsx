@@ -1,3 +1,5 @@
+import API_CONFIG from "@/config/api.config";
+import { http } from "@/services/api";
 import React, { useState } from "react";
 import {
   Image,
@@ -8,12 +10,19 @@ import {
   View,
 } from "react-native";
 
+export type NewsTag = {
+  id?: string;
+  label: string;
+  color?: string;
+};
+
 export type NewsItem = {
   id: string;
   title: string;
   subtitle?: string;
   image?: string;
-  tag?: string;
+  tags?: NewsTag[];
+  updatedAt?: string;
 };
 
 export type RecommendationItem = {
@@ -25,18 +34,33 @@ export type RecommendationItem = {
   date?: string;
 };
 
+type NewsApiTag = {
+  id?: string;
+  name?: string;
+  description?: string;
+  color?: string;
+};
+
 type NewsApiItem = {
   id: string;
   title: string;
   content?: string;
+  excerpt?: string;
   imageUrl?: string;
-  tags?: string | { description?: string; name?: string }[];
+  tags?: string | (NewsApiTag | string)[];
+  updatedAt?: string;
 };
 
-export const NEWS_API_BASE_URL =
-  "https://1w408kc7-3000.asse.devtunnels.ms/api/v1/user/news";
-// ค่า default ใช้ id ข่าวตัวอย่างจาก API หากไม่มีการส่ง id อื่นเข้ามา
-export const DEFAULT_NEWS_USER_ID = "3dbaa271-8c83-4787-b62b-a5d0bfd69fc8";
+export const NEWS_API_BASE_URL = API_CONFIG.ENDPOINTS.USER.NEWS;
+// รองรับการส่งพารามิเตอร์สำหรับการแบ่งหน้า/ค้นหา
+export type FetchNewsOptions = {
+  page?: number;
+  limit?: number;
+  tagIds?: string;
+  search?: string;
+  sortBy?: string;
+  sortOrder?: "ASC" | "DESC";
+};
 
 export type NewsResponsive = {
   newsCardWidth: number;
@@ -78,32 +102,88 @@ export const recommendationTopics: RecommendationItem[] = [
   },
 ];
 
-export const mapNewsApiItemToNews = (item: NewsApiItem): NewsItem => {
-  let tag: string | undefined;
-  if (Array.isArray(item.tags)) {
-    const firstTag = item.tags[0];
-    tag = firstTag?.description || firstTag?.name;
-  } else if (typeof item.tags === "string") {
-    tag = item.tags;
+const normalizeNewsTags = (
+  input?: string | (NewsApiTag | string)[],
+): NewsTag[] => {
+  if (!input) {
+    return [];
   }
 
+  if (typeof input === "string") {
+    const label = input.trim();
+    return label.length ? [{ label }] : [];
+  }
+
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const normalized: NewsTag[] = [];
+  for (const raw of input) {
+    if (!raw) {
+      continue;
+    }
+
+    if (typeof raw === "string") {
+      const label = raw.trim();
+      if (label.length) {
+        normalized.push({ label });
+      }
+      continue;
+    }
+
+    const label = raw.description?.trim() || raw.name?.trim();
+    if (!label) {
+      continue;
+    }
+
+    normalized.push({
+      id: raw.id,
+      color: raw.color?.trim(),
+      label,
+    });
+  }
+
+  return normalized;
+};
+
+export const mapNewsApiItemToNews = (item: NewsApiItem): NewsItem => {
   return {
     id: item.id,
     title: item.title ?? "",
-    subtitle: item.content ?? "",
+    subtitle: item.content ?? item.excerpt ?? "",
     image: item.imageUrl,
-    tag,
+    tags: normalizeNewsTags(item.tags),
+    updatedAt: item.updatedAt,
   };
 };
 
-export async function fetchNewsFromApi(userId = DEFAULT_NEWS_USER_ID) {
+const formatUpdatedAt = (iso?: string) => {
+  if (!iso) {
+    return undefined;
+  }
+
   try {
-    const response = await fetch(`${NEWS_API_BASE_URL}/${userId}`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) {
+      return undefined;
     }
-    const json = await response.json();
-    const payload = json?.data ?? json;
+
+    return date.toLocaleString("th-TH", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  } catch {
+    return undefined;
+  }
+};
+
+export async function fetchNewsFromApi(options?: FetchNewsOptions) {
+  try {
+    const response = await http.get<NewsApiItem[]>(NEWS_API_BASE_URL, {
+      params: options,
+    });
+    const payload = response?.data ?? [];
     const rows: NewsApiItem[] = Array.isArray(payload)
       ? payload
       : payload && typeof payload === "object"
@@ -163,64 +243,87 @@ export default function NewsSections({
           }}
         >
           {hasNews ? (
-            newsItems.map((item, index) => (
-              <Pressable
-                key={item.id}
-                onPress={() => onNewsPress?.(item)}
-                style={[
-                  styles.newsCard,
-                  {
-                    width: responsive.newsCardWidth,
-                    marginRight:
-                      index === newsItems.length - 1 ? 0 : responsive.cardSpacing,
-                  },
-                ]}
-              >
-                {item.image && !failedImages[item.id] ? (
-                  <Image
-                    source={{ uri: item.image }}
-                    resizeMode="cover"
-                    style={[
-                      styles.newsImage,
-                      { height: responsive.newsImageHeight },
-                    ]}
-                    onError={(e) => {
-                      console.warn(
-                        "[News] image load error",
-                        item.image,
-                        e.nativeEvent?.error,
-                      );
-                      setFailedImages((prev) => ({ ...prev, [item.id]: true }));
-                    }}
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.newsImage,
-                      styles.placeholderBg,
-                      { height: responsive.newsImageHeight },
-                    ]}
-                  >
-                    <Text style={styles.placeholderText}>ภาพ</Text>
-                  </View>
-                )}
-                <View style={styles.newsBody}>
-                  {item.tag ? (
-                    <View style={styles.newsTag}>
-                      <Text style={styles.newsTagText}>{item.tag}</Text>
+            newsItems.map((item, index) => {
+              const updatedLabel = formatUpdatedAt(item.updatedAt);
+              return (
+                <Pressable
+                  key={item.id}
+                  onPress={() => onNewsPress?.(item)}
+                  style={[
+                    styles.newsCard,
+                    {
+                      width: responsive.newsCardWidth,
+                      marginRight:
+                        index === newsItems.length - 1 ? 0 : responsive.cardSpacing,
+                    },
+                  ]}
+                >
+                  {item.image && !failedImages[item.id] ? (
+                    <Image
+                      source={{ uri: item.image }}
+                      resizeMode="cover"
+                      style={[
+                        styles.newsImage,
+                        { height: responsive.newsImageHeight },
+                      ]}
+                      onError={(e) => {
+                        console.warn(
+                          "[News] image load error",
+                          item.image,
+                          e.nativeEvent?.error,
+                        );
+                        setFailedImages((prev) => ({ ...prev, [item.id]: true }));
+                      }}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.newsImage,
+                        styles.placeholderBg,
+                        { height: responsive.newsImageHeight },
+                      ]}
+                    >
+                      <Text style={styles.placeholderText}>ภาพ</Text>
                     </View>
-                  ) : null}
-                  <Text style={styles.newsTitle} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                  {item.subtitle ? (
-                    <Text style={styles.newsSubtitle} numberOfLines={2}>
-                      {item.subtitle}
+                  )}
+                  <View style={styles.newsBody}>
+                    {item.tags && item.tags.length > 0 ? (
+                      <View style={styles.newsTagsRow}>
+                        {item.tags.map((tag, tagIndex) => {
+                          const label = (tag.label ?? "").trim();
+                          if (!label) {
+                            return null;
+                          }
+                          const backgroundColor = tag.color ?? "#E0F2FE";
+                          const textColor = tag.color ? "#FFFFFF" : "#0284C7";
+                          return (
+                            <View
+                              key={tag.id ?? `${item.id}-${label}-${tagIndex}`}
+                              style={[styles.newsTag, { backgroundColor }]}
+                            >
+                              <Text style={[styles.newsTagText, { color: textColor }]}>
+                                {label}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    ) : null}
+                    <Text style={styles.newsTitle} numberOfLines={2}>
+                      {item.title}
                     </Text>
-                  ) : null}
-                </View>
-              </Pressable>
-            ))
+                    {item.subtitle ? (
+                      <Text style={styles.newsSubtitle} numberOfLines={2}>
+                        {item.subtitle}
+                      </Text>
+                    ) : null}
+                    {updatedLabel ? (
+                      <Text style={styles.newsMeta}>อัปเดต {updatedLabel}</Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            })
           ) : (
             <View style={styles.emptyNews}>
               <Text style={styles.placeholderText}>ไม่มีข่าว</Text>
@@ -361,13 +464,20 @@ const styles = StyleSheet.create({
   newsBody: {
     padding: 16,
   },
+  newsTagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 4,
+    marginBottom: 12,
+  },
   newsTag: {
     alignSelf: "flex-start",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
     backgroundColor: "#E0F2FE",
-    marginBottom: 12,
+    marginBottom: 8,
+    marginRight: 8,
   },
   newsTagText: {
     color: "#0284C7",
@@ -383,6 +493,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 14,
     color: "#6B7280",
+  },
+  newsMeta: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#9CA3AF",
   },
   recommendCard: {
     backgroundColor: "#FFFFFF",
