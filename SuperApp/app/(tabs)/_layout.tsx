@@ -153,11 +153,11 @@ export default function TabLayout() {
 
   // ปรับค่า flex ของแต่ละ tab ได้จาก object นี้
   const tabSegmentFlex = {
-    home: 1.5,
-    charging: 1.2,
-    qr: 1.5,
-    card: 1.2,
-    settings: 1.3,
+    home: 1.6,
+    charging: 0.9,
+    qr: 2.0,
+    card: 0.9,
+    settings: 1.6,
   };
 
   return (
