@@ -1,8 +1,10 @@
 import API_CONFIG from "@/config/api.config";
 import { http } from "@/services/api";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,6 +22,7 @@ export type NewsItem = {
   id: string;
   title: string;
   subtitle?: string;
+  content?: string;
   image?: string;
   tags?: NewsTag[];
   updatedAt?: string;
@@ -102,6 +105,14 @@ export const recommendationTopics: RecommendationItem[] = [
   },
 ];
 
+const safeTrim = (value?: string | null) => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+};
+
 const normalizeNewsTags = (
   input?: string | (NewsApiTag | string)[],
 ): NewsTag[] => {
@@ -148,11 +159,16 @@ const normalizeNewsTags = (
 };
 
 export const mapNewsApiItemToNews = (item: NewsApiItem): NewsItem => {
+  const content = safeTrim(item.content);
+  const excerpt = safeTrim(item.excerpt);
+  const subtitle = excerpt ?? content;
+
   return {
     id: item.id,
-    title: item.title ?? "",
-    subtitle: item.content ?? item.excerpt ?? "",
-    image: item.imageUrl,
+    title: safeTrim(item.title) ?? "",
+    subtitle: subtitle,
+    content: content ?? excerpt,
+    image: safeTrim(item.imageUrl),
     tags: normalizeNewsTags(item.tags),
     updatedAt: item.updatedAt,
   };
@@ -221,7 +237,83 @@ export default function NewsSections({
   onRecommendationPress,
 }: NewsSectionsProps) {
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+  const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const detailRequestIdRef = useRef(0);
   const hasNews = newsItems.length > 0;
+  const selectedUpdatedLabel = selectedNews
+    ? formatUpdatedAt(selectedNews.updatedAt)
+    : undefined;
+
+  const fetchNewsDetail = async (newsId: string) => {
+    if (!newsId) {
+      return;
+    }
+
+    const requestId = ++detailRequestIdRef.current;
+    setIsDetailLoading(true);
+    setDetailError(null);
+
+    try {
+      const response = await http.get<NewsApiItem | { data?: NewsApiItem }>(
+        `${NEWS_API_BASE_URL}/${encodeURIComponent(newsId)}`,
+      );
+
+      const rawPayload = response?.data as any;
+      const payloadCandidate = rawPayload?.data ?? rawPayload;
+      const normalizedPayload = Array.isArray(payloadCandidate)
+        ? payloadCandidate[0]
+        : payloadCandidate;
+      const mapped = normalizedPayload
+        ? mapNewsApiItemToNews(normalizedPayload as NewsApiItem)
+        : null;
+
+      if (!mapped?.id) {
+        throw new Error("Invalid news detail response");
+      }
+
+      if (detailRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setSelectedNews((prev) => {
+        const base = prev && prev.id === mapped.id ? prev : null;
+        return {
+          ...(base ?? {}),
+          ...mapped,
+          subtitle: mapped.subtitle ?? base?.subtitle,
+          content: mapped.content ?? base?.content,
+          image: mapped.image ?? base?.image,
+          tags: mapped.tags?.length ? mapped.tags : base?.tags,
+          updatedAt: mapped.updatedAt ?? base?.updatedAt,
+        };
+      });
+    } catch (error) {
+      console.error("[News] failed to fetch detail", error);
+      if (detailRequestIdRef.current === requestId) {
+        setDetailError("โหลดรายละเอียดไม่สำเร็จ");
+      }
+    } finally {
+      if (detailRequestIdRef.current === requestId) {
+        setIsDetailLoading(false);
+      }
+    }
+  };
+
+  const handleNewsPress = (item: NewsItem) => {
+    onNewsPress?.(item);
+    setDetailError(null);
+    setSelectedNews(item);
+    fetchNewsDetail(item.id);
+  };
+
+  const handleCloseModal = () => {
+    detailRequestIdRef.current += 1;
+    setSelectedNews(null);
+    setDetailError(null);
+    setIsDetailLoading(false);
+  };
 
   return (
     <>
@@ -248,7 +340,7 @@ export default function NewsSections({
               return (
                 <Pressable
                   key={item.id}
-                  onPress={() => onNewsPress?.(item)}
+                  onPress={() => handleNewsPress(item)}
                   style={[
                     styles.newsCard,
                     {
@@ -411,6 +503,91 @@ export default function NewsSections({
           ))}
         </ScrollView>
       </View>
+
+      <Modal
+        visible={!!selectedNews}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={handleCloseModal}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={handleCloseModal} />
+          <View style={styles.modalCard}>
+            {selectedNews?.image && !failedImages[selectedNews.id] ? (
+              <Image
+                source={{ uri: selectedNews.image }}
+                resizeMode="cover"
+                style={styles.modalImage}
+                onError={() => {
+                  setFailedImages((prev) => ({ ...prev, [selectedNews.id]: true }));
+                }}
+              />
+            ) : null}
+            <ScrollView
+              style={styles.modalContent}
+              contentContainerStyle={styles.modalContentInner}
+              showsVerticalScrollIndicator={false}
+            >
+              {selectedNews?.tags && selectedNews.tags.length > 0 ? (
+                <View style={styles.modalTagsRow}>
+                  {selectedNews.tags.map((tag, tagIndex) => {
+                    const label = (tag.label ?? "").trim();
+                    if (!label) {
+                      return null;
+                    }
+                    const backgroundColor = tag.color ?? "#E0F2FE";
+                    const textColor = tag.color ? "#FFFFFF" : "#0284C7";
+                    return (
+                      <View
+                        key={tag.id ?? `${selectedNews.id}-${label}-${tagIndex}`}
+                        style={[styles.newsTag, { backgroundColor }]}
+                      >
+                        <Text style={[styles.newsTagText, { color: textColor }]}>
+                          {label}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+              <Text style={styles.modalTitle}>{selectedNews?.title}</Text>
+              {selectedNews?.subtitle ? (
+                <Text style={styles.modalSubtitle}>{selectedNews.subtitle}</Text>
+              ) : null}
+              {isDetailLoading ? (
+                <View style={styles.modalStatusRow}>
+                  <ActivityIndicator color="#2563EB" />
+                  <Text style={styles.modalStatusText}>กำลังโหลดรายละเอียด...</Text>
+                </View>
+              ) : detailError ? (
+                <View style={styles.modalStatusColumn}>
+                  <Text style={styles.modalErrorText}>{detailError}</Text>
+                  <Pressable
+                    style={styles.modalRetryButton}
+                    onPress={() =>
+                      selectedNews?.id ? fetchNewsDetail(selectedNews.id) : null
+                    }
+                    hitSlop={8}
+                  >
+                    <Text style={styles.modalRetryText}>ลองอีกครั้ง</Text>
+                  </Pressable>
+                </View>
+              ) : selectedNews?.content ? (
+                <Text style={styles.modalBodyText}>{selectedNews.content}</Text>
+              ) : (
+                <Text style={styles.modalMutedText}>ไม่มีรายละเอียดเพิ่มเติม</Text>
+              )}
+              {selectedUpdatedLabel ? (
+                <Text style={styles.modalMeta}>อัปเดต {selectedUpdatedLabel}</Text>
+              ) : null}
+            </ScrollView>
+            <Pressable style={styles.modalCloseButton} onPress={handleCloseModal}>
+              <Text style={styles.modalCloseText}>ปิด</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -558,5 +735,108 @@ const styles = StyleSheet.create({
   emptyNews: {
     paddingVertical: 20,
     paddingHorizontal: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 500,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  modalImage: {
+    width: "100%",
+    height: 200,
+  },
+  modalContent: {
+    maxHeight: 320,
+  },
+  modalContentInner: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  modalTagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1F2937",
+  },
+  modalSubtitle: {
+    marginTop: 10,
+    fontSize: 15,
+    color: "#4B5563",
+    lineHeight: 22,
+  },
+  modalMeta: {
+    marginTop: 10,
+    fontSize: 12,
+    color: "#9CA3AF",
+  },
+  modalBodyText: {
+    marginTop: 12,
+    fontSize: 15,
+    color: "#374151",
+    lineHeight: 22,
+  },
+  modalMutedText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#9CA3AF",
+  },
+  modalStatusRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  modalStatusColumn: {
+    marginTop: 12,
+    alignItems: "flex-start",
+  },
+  modalStatusText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#4B5563",
+  },
+  modalErrorText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#DC2626",
+  },
+  modalRetryButton: {
+    marginTop: 6,
+  },
+  modalRetryText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#2563EB",
+  },
+  modalCloseButton: {
+    paddingVertical: 14,
+    alignItems: "center",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#E5E7EB",
+  },
+  modalCloseText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#2563EB",
   },
 });
