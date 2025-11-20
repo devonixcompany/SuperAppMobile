@@ -62,7 +62,7 @@ async function validateChargePointWhitelist(serialNumber: string, chargePointIde
     console.log(`🔍 Checking whitelist - Serial: ${serialNumber}, Identity: ${chargePointIdentity}`);
     
     // Step 1: เรียก backend API เพื่อตรวจสอบ whitelist
-    const response = await fetch(`${BACKEND_URL}/api/chargepoints/validate-whitelist`, {
+    const response = await fetch(`${BACKEND_URL}/chargepoints/validate-whitelist`, {
       method: 'POST',
       headers: withGatewayHeaders({
         'Content-Type': 'application/json',
@@ -143,7 +143,7 @@ async function validateChargePoint(chargePointId: string, ocppVersion: string): 
     console.log(`🔍 Validating Charge Point - ID: ${chargePointId}, OCPP Version: ${formattedVersion}`);
     
     // Step 2: เรียก backend API เพื่อตรวจสอบ Charge Point และ OCPP version
-    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/validate-ocpp`, {
+    const response = await fetch(`${BACKEND_URL}/chargepoints/${chargePointId}/validate-ocpp`, {
       method: 'POST',
       headers: withGatewayHeaders({
         'Content-Type': 'application/json',
@@ -183,7 +183,7 @@ async function updateConnectionStatus(chargePointId: string, isConnected: boolea
     console.log(`🔄 Updating connection status - ID: ${chargePointId}, Connected: ${isConnected}`);
     
     // Step 1 & 2: เรียก backend API เพื่ออัปเดตสถานะการเชื่อมต่อ
-    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/connection-status`, {
+    const response = await fetch(`${BACKEND_URL}/chargepoints/${chargePointId}/connection-status`, {
       method: 'PUT',
       headers: withGatewayHeaders({
         'Content-Type': 'application/json',
@@ -220,7 +220,7 @@ async function registerChargePoint(chargePointId: string, ocppVersion: string): 
     console.log(`🔍 Checking Charge Point existence - ID: ${chargePointId}`);
     
     // Step 1: ตรวจสอบว่า Charge Point มีอยู่แล้วหรือไม่
-    const checkResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}`, {
+    const checkResponse = await fetch(`${BACKEND_URL}/chargepoints/${chargePointId}`, {
       method: 'GET',
       headers: withGatewayHeaders()
     });
@@ -248,7 +248,7 @@ async function registerChargePoint(chargePointId: string, ocppVersion: string): 
     }
 
     // Step 3: ลงทะเบียน Charge Point ใหม่
-    const response = await fetch(`${BACKEND_URL}/api/chargepoints`, {
+    const response = await fetch(`${BACKEND_URL}/chargepoints`, {
       method: 'POST',
       headers: withGatewayHeaders({
         'Content-Type': 'application/json',

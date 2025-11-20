@@ -1,12 +1,12 @@
 import { IncomingMessage, createServer } from 'http';
 import { URL } from 'url';
 import WebSocket, { WebSocketServer } from 'ws';
+import { BACKEND_BASE_URL, WS_GATEWAY_API_KEY } from './config/env';
 import { handleConnection } from './handlers/connection';
 import { gatewaySessionManager } from './handlers/gatewaySessionManager';
 import { sessionMonitor } from './handlers/sessionMonitor';
 import { subprotocolToVersion } from './handlers/versionNegotiation';
 import { UserConnectionManager } from './services/UserConnectionManager';
-import { BACKEND_BASE_URL, WS_GATEWAY_API_KEY } from './config/env';
 
 // ฟังก์ชันจัดการ RemoteStartTransaction
 async function handleRemoteStartTransaction(chargePoint: any, data: any, userWs: WebSocket) {
@@ -446,7 +446,7 @@ async function initializeCache() {
   try {
     console.log('Initializing charge point cache...');
     // Step 1: เรียก API เพื่อดึงข้อมูล charge points
-    const response = await fetch(`${BACKEND_BASE_URL}/api/chargepoints/ws-gateway/chargepoints`, {
+    const response = await fetch(`${BACKEND_BASE_URL}/chargepoints/ws-gateway/chargepoints`, {
       headers: {
         'Content-Type': 'application/json',
         'X-Api-Key': WS_GATEWAY_API_KEY

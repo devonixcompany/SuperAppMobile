@@ -105,7 +105,7 @@ export async function handleStatusNotification(
     );
     
     try {
-      const updateResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/status`, {
+      const updateResponse = await fetch(`${BACKEND_URL}/chargepoints/${chargePointId}/status`, {
         method: 'POST',
         headers: withGatewayHeaders({
           'Content-Type': 'application/json',
@@ -226,7 +226,7 @@ async function updateConnectorStatus(chargePointId: string, payload: OCPP16Statu
 
     console.log(`กำลังอัปเดตสถานะหัวชาร์จ ${payload.connectorId} ของ ${chargePointId}:`, updateData);
 
-    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/status`, {
+    const response = await fetch(`${BACKEND_URL}/chargepoints/${chargePointId}/status`, {
       method: 'POST',
       headers: withGatewayHeaders({
         'Content-Type': 'application/json',
@@ -303,7 +303,7 @@ export async function handleBootNotification(
     // Update Charge Point information in backend
     console.log(`📤 กำลังอัปเดตข้อมูล Charge Point ในระบบหลังบ้านสำหรับ ${chargePointId}`);
     
-    const updateResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/update-from-boot`, {
+    const updateResponse = await fetch(`${BACKEND_URL}/chargepoints/${chargePointId}/update-from-boot`, {
       method: 'POST',
       headers: withGatewayHeaders({
         'Content-Type': 'application/json',
@@ -361,7 +361,7 @@ async function updateChargePointFromBootNotification(chargePointId: string, payl
 
     console.log(`กำลังอัปเดตข้อมูล Charge Point ${chargePointId} จาก BootNotification:`, updateData);
 
-    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/update-from-boot`, {
+    const response = await fetch(`${BACKEND_URL}/chargepoints/${chargePointId}/update-from-boot`, {
       method: 'POST',
       headers: withGatewayHeaders({
         'Content-Type': 'application/json',
@@ -452,7 +452,7 @@ async function fetchChargePointConfiguration(chargePointId: string): Promise<voi
   try {
     console.log(`กำลังดึงข้อมูลการตั้งค่าสำหรับ Charge Point ${chargePointId}`);
 
-    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}`, {
+    const response = await fetch(`${BACKEND_URL}/chargepoints/${chargePointId}`, {
       method: 'GET',
       headers: withGatewayHeaders()
     });
@@ -508,7 +508,7 @@ export async function handleHeartbeat(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
     
-    const heartbeatResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/heartbeat`, {
+    const heartbeatResponse = await fetch(`${BACKEND_URL}/chargepoints/${chargePointId}/heartbeat`, {
       method: 'POST',
       headers: withGatewayHeaders({
         'Content-Type': 'application/json',
@@ -554,7 +554,7 @@ async function updateChargePointLastSeen(chargePointId: string): Promise<void> {
 
     console.log(`กำลังอัปเดตเวลาที่เห็นล่าสุด (lastSeen) สำหรับ Charge Point ${chargePointId}`);
 
-    const response = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/heartbeat`, {
+    const response = await fetch(`${BACKEND_URL}/chargepoints/${chargePointId}/heartbeat`, {
       method: 'POST',
       headers: withGatewayHeaders({
         'Content-Type': 'application/json',
@@ -583,7 +583,7 @@ export async function handleAuthorize(payload: { idTag: string }): Promise<any> 
   }
 
   try {
-    const response = await fetch(`${BACKEND_URL}/api/transactions/authorize`, {
+    const response = await fetch(`${BACKEND_URL}/transactions/authorize`, {
       method: 'POST',
       headers: withGatewayHeaders({
         'Content-Type': 'application/json',
@@ -652,7 +652,7 @@ export async function handleStartTransaction(
   let authorized = false;
 
   try {
-    const authResponse = await fetch(`${BACKEND_URL}/api/transactions/authorize`, {
+    const authResponse = await fetch(`${BACKEND_URL}/transactions/authorize`, {
       method: 'POST',
       headers: withGatewayHeaders({
         'Content-Type': 'application/json',
@@ -716,7 +716,7 @@ export async function handleStartTransaction(
 
   try {
     const startResponse = await fetch(
-      `${BACKEND_URL}/api/transactions/${encodeURIComponent(payload.idTag)}/start`,
+      `${BACKEND_URL}/transactions/${encodeURIComponent(payload.idTag)}/start`,
       {
         method: 'POST',
         headers: withGatewayHeaders({
@@ -783,7 +783,7 @@ export async function handleStopTransaction(
 
   try {
     const stopResponse = await fetch(
-      `${BACKEND_URL}/api/transactions/ocpp/${encodeURIComponent(String(payload.transactionId))}/stop`,
+      `${BACKEND_URL}/transactions/ocpp/${encodeURIComponent(String(payload.transactionId))}/stop`,
       {
         method: 'POST',
         headers: withGatewayHeaders({
