@@ -8,7 +8,7 @@ import env from './env';
 export const API_CONFIG = {
   // Base URL
   BASE_URL: env.apiUrl,
-  
+
   // API Endpoints
   ENDPOINTS: {
     // Authentication
@@ -22,7 +22,7 @@ export const API_CONFIG = {
       FORGOT_PASSWORD: '/api/v1/user/auth/forgot-password',
       RESET_PASSWORD: '/api/v1/user/auth/reset-password',
     },
-    
+
     // User Management
     USER: {
       PROFILE: '/api/v1/user/profile',
@@ -32,7 +32,7 @@ export const API_CONFIG = {
       CHARGING_HISTORY: '/api/v1/user/charging-history',
       PAYMENT_METHODS: '/api/v1/user/payment-methods',
     },
-    
+
     // Chargepoint Management
     CHARGEPOINT: {
       WEBSOCKET_URL: (identity: string, connectorId: number) => 
@@ -47,7 +47,15 @@ export const API_CONFIG = {
       DETAILS: (identity: string) => 
         `/api/v1/user/chargepoints/${encodeURIComponent(identity)}`,
     },
-    
+
+    // Stations
+    STATIONS: {
+      LIST: '/api/v1/user/stations',
+      NEARBY: '/api/v1/user/stations/nearby',
+      DETAILS: (stationId: string) =>
+        `/api/v1/user/stations/${encodeURIComponent(stationId)}`,
+    },
+
     // Payment
     PAYMENT: {
       CARDS: '/api/v1/user/payment/cards',
@@ -60,7 +68,16 @@ export const API_CONFIG = {
       PAYMENT_HISTORY: '/api/v1/user/payment/history',
       STATUS: (paymentId: string) => `/api/v1/user/payment/status/${encodeURIComponent(paymentId)}`,
     },
-    
+
+    // Charging
+    CHARGING: {
+      INITIATE: '/api/v1/user/charging/initiate',
+      START: '/api/v1/user/charging/start',
+      STOP: '/api/v1/user/charging/stop',
+      STATUS: '/api/v1/user/charging/status',
+      HISTORY: '/api/v1/user/charging/history',
+    },
+
     // Notifications
     NOTIFICATIONS: {
       LIST: '/api/v1/user/notifications',
@@ -69,7 +86,7 @@ export const API_CONFIG = {
       MARK_ALL_READ: '/api/v1/user/notifications/read-all',
       SETTINGS: '/api/v1/user/notifications/settings',
     },
-    
+
     // Transactions
     TRANSACTIONS: {
       CREATE: '/api/v1/user/transactions',
@@ -80,14 +97,14 @@ export const API_CONFIG = {
         `/api/v1/user/transactions/user/${encodeURIComponent(userId)}`,
     },
   },
-  
+
   // Request Configuration
   REQUEST: {
     TIMEOUT: 30000, // 30 seconds
     RETRY_ATTEMPTS: 3,
     RETRY_DELAY: 1000, // 1 second
   },
-  
+
   // Headers
   HEADERS: {
     DEFAULT: {
@@ -100,7 +117,7 @@ export const API_CONFIG = {
       'Authorization': `Bearer ${token}`,
     }),
   },
-  
+
   // Response Status Codes
   STATUS_CODES: {
     SUCCESS: 200,
@@ -115,7 +132,7 @@ export const API_CONFIG = {
     INTERNAL_SERVER_ERROR: 500,
     SERVICE_UNAVAILABLE: 503,
   },
-  
+
   // Error Messages
   ERROR_MESSAGES: {
     NETWORK_ERROR: 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต',

@@ -6,7 +6,6 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 const LoadingScreen = () => {
   const params = useLocalSearchParams<{
-    websocketUrl?: string
     chargePointIdentity?: string
     connectorId?: string
     chargePointName?: string
@@ -20,7 +19,7 @@ const LoadingScreen = () => {
     pricingTierName?: string
   }>()
 
-  const isConnected = Boolean(params?.websocketUrl)
+  const isConnected = Boolean(params?.chargePointIdentity && params?.connectorId) // ใช้ chargePoint แทน websocketUrl
   const progress = useRef(new Animated.Value(0)).current
   const [barWidth, setBarWidth] = useState(0)
   const [phase, setPhase] = useState<'init' | 'hold' | 'done'>('init')
@@ -106,7 +105,7 @@ const LoadingScreen = () => {
             />
           </View>
 
-          {/* หัวชาร์จ - โชว์เฉพาะเมื่อเชื่อมต่อจริง (websocket มีค่า) */}
+          {/* หัวชาร์จ - โชว์เฉพาะเมื่อเชื่อมต่อจริง (มี chargePointIdentity และ connectorId) */}
           <View className='w-[50%] pr-10 scale-100' style={{ height: 300, justifyContent: 'flex-start', alignItems: 'flex-end' }}>
             {isConnected && (
               <Image

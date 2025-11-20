@@ -1,3 +1,4 @@
+import { API_CONFIG } from '../../config/api.config';
 import type { ApiResponse } from './client';
 import { http } from './client';
 
@@ -7,6 +8,45 @@ export interface PaymentCardRequiredError {
   code: 'NO_PAYMENT_CARDS';
   message: string;
   action: 'ADD_PAYMENT_CARD';
+}
+
+export interface ChargingInitiateResponse {
+  chargePoint?: {
+    id?: string;
+    chargePointIdentity?: string;
+    chargePointName?: string;
+    brand?: string;
+    model?: string;
+    protocol?: string;
+  };
+  connector?: {
+    connectorId?: number;
+    type?: string;
+    maxPower?: number;
+    maxCurrent?: number;
+    status?: string;
+  };
+  station?: {
+    id?: string;
+    stationName?: string;
+    location?: string;
+  };
+  session?: {
+    sessionId?: string;
+    status?: string;
+  };
+  pricing?: {
+    pricePerKwh?: number;
+    currency?: string;
+    basicRate?: number;
+  };
+  paymentCard?: {
+    id?: string;
+    lastDigits?: string;
+    brand?: string;
+  };
+  powerRating?: number;
+  user?: any;
 }
 
 export interface ChargepointWebSocketResponse {
@@ -40,7 +80,7 @@ export interface ChargepointWebSocketResponse {
 }
 
 export interface ChargepointApiParams {
-  userId: string;
+  userId?: string; // Optional since not all endpoints need it
 }
 
 class ChargepointService {
@@ -79,11 +119,13 @@ class ChargepointService {
   /**
    * ขอข้อมูลสถานะของเครื่องชาร์จ
    * @param chargePointIdentity - รหัสเครื่องชาร์จ
-   * @param params - ข้อมูลอ้างอิงผู้ใช้ (ใช้เฉพาะ userId)
+   * @param connectorIdOrParams - หมายเลขหัวชาร์จ หรือ params (เพื่อความเข้ากันได้แบบย้อนหลัง)
+   * @param maybeParams - ข้อมูลอ้างอิงผู้ใช้ (ใช้เฉพาะ userId) - ต้องระบุเมื่อ connectorIdOrParams เป็น connectorId
    */
   async getStatus(
     chargePointIdentity: string,
-    params: ChargepointApiParams
+    connectorIdOrParams: number | ChargepointApiParams,
+    maybeParams?: ChargepointApiParams
   ): Promise<ApiResponse<any>> {
     try {
       const response = await http.get(
@@ -98,15 +140,54 @@ class ChargepointService {
   }
 
   /**
-   * เริ่มต้นเซสชันการชาร์จ
+   * เริ่มต้นเซสชัน - เรียกครั้งแรกเมื่อสแกน QR เพื่อเตรียมและดู status
    * @param chargePointIdentity - รหัสเครื่องชาร์จ
    * @param connectorId - หมายเลขหัวชาร์จ
-   * @param params - ข้อมูลอ้างอิงผู้ใช้ (ใช้เฉพาะ userId)
+   */
+  async initiateCharging(
+    chargePointIdentity: string,
+    connectorId: number
+  ): Promise<ApiResponse<any>> {
+    try {
+      console.log('🚀 [SERVICE] initiateCharging called with:', {
+        chargePointIdentity,
+        connectorId,
+        endpoint: API_CONFIG.ENDPOINTS.CHARGING.INITIATE
+      });
+
+      const response = await http.post(
+        API_CONFIG.ENDPOINTS.CHARGING.INITIATE,
+        {
+          chargePointId: chargePointIdentity,
+          connectorId: connectorId
+        }
+      );
+
+      console.log('🚀 [SERVICE] initiateCharging response:', response);
+      return response;
+    } catch (error: any) {
+      console.error('🚀 [SERVICE] Initiate Charging Error:', error);
+      
+      // Log detailed error information
+      if (error?.response?.data) {
+        console.error('🚀 [SERVICE] Error Response Data:', error.response.data);
+      }
+      if (error?.data) {
+        console.error('🚀 [SERVICE] Error Data:', error.data);
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * เริ่มชาร์จจริง - เรียกเมื่อกดปุ่ม "เริ่มชาร์จ"
+   * @param chargePointIdentity - รหัสเครื่องชาร์จ
+   * @param connectorId - หมายเลขหัวชาร์จ
    */
   async startCharging(
     chargePointIdentity: string,
-    connectorId: number,
-    params: ChargepointApiParams
+    connectorId: number
   ): Promise<ApiResponse<any>> {
     try {
       const response = await http.post(
@@ -122,15 +203,13 @@ class ChargepointService {
   }
 
   /**
-   * หยุดเซสชันการชาร์จ
-   * @param chargePointIdentity - รหัสเครื่องชาร์จ
-   * @param connectorId - หมายเลขหัวชาร์จ
-   * @param params - ข้อมูลอ้างอิงผู้ใช้ (ใช้เฉพาะ userId)
+   * หยุดเซสชันการชาร์จ (ใช้ endpoint ใหม่)
+   * @param transactionId - รหัสธุรกรรมการชาร์จ
+   * @param reason - เหตุผลการหยุดชาร์จ (default: "User requested")
    */
   async stopCharging(
-    chargePointIdentity: string,
-    connectorId: number,
-    params: ChargepointApiParams
+    transactionId: string,
+    reason: string = "User requested"
   ): Promise<ApiResponse<any>> {
     try {
       const response = await http.post(
@@ -139,8 +218,17 @@ class ChargepointService {
       );
 
       return response;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Stop Charging Error:', error);
+      
+      // Log detailed error information
+      if (error?.response?.data) {
+        console.error('Stop Charging Error Response Data:', error.response.data);
+      }
+      if (error?.data) {
+        console.error('Stop Charging Error Data:', error.data);
+      }
+      
       throw error;
     }
   }
