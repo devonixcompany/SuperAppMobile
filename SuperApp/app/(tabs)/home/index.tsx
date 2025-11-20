@@ -18,8 +18,11 @@ import { TABS_HORIZONTAL_GUTTER, useAppBarActions } from "../_layout";
 import NewsSections, {
   type NewsItem,
   fetchNewsFromApi,
-  recommendationTopics,
 } from "./News";
+import Products, {
+  type ProductItem,
+  fetchProductsFromApi,
+} from "./Products";
 import MiniProfileModal, { DEFAULT_PROFILE_AVATAR } from "./miniprofile";
 import NotificationModal from "./notification";
 import {
@@ -48,6 +51,9 @@ export default function HomeScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
+  const [productItems, setProductItems] = useState<ProductItem[]>([]);
+  const [productError, setProductError] = useState<string | null>(null);
+  const [isProductLoading, setIsProductLoading] = useState(false);
 
   const responsive = useMemo(() => {
     const isSmallPhone = screenWidth < 360;
@@ -64,20 +70,20 @@ export default function HomeScreen() {
       : Math.min(availableWidth, Math.max(desiredPhoneWidth, 220));
 
     const newsCardWidth = Math.max(
-      isTablet ? horizontalCardWidth * 0.5 : horizontalCardWidth * 0.8, //กำหนดวามกว้างของกรอบข่าว
-      50,// ขนาดของกรอบรูปของข่าว
+      isTablet ? horizontalCardWidth * 0.44 : horizontalCardWidth * 0.72, // ลดความกว้างการ์ดข่าว
+      50,
     );
 
     const newsImageHeight = isTablet
-      ? Math.min(150, newsCardWidth * 0.5)
-      : Math.max(120, newsCardWidth * 0.5); //กำหนดความสูงของรูปและข้อความ
+      ? Math.min(140, newsCardWidth * 0.45)
+      : Math.max(110, newsCardWidth * 0.45); // ลดความสูงรูปข่าว
 
     const recommendationCardWidth = Math.max(
-      isTablet ? horizontalCardWidth * 0.5 : horizontalCardWidth * 0.8, //กำหนดวามกว้างของกรอบหัวข้อแนะนำ
-      150, //กำหนดความสูงของรูปและข้อความ
+      isTablet ? horizontalCardWidth * 0.42 : horizontalCardWidth * 0.68, // ลดความกว้างการ์ดสินค้า
+      130,
     );
 
-    const recommendationAvatar = isTablet ? 76 : isSmallPhone ? 56 : 64;
+    const recommendationAvatar = isTablet ? 64 : isSmallPhone ? 52 : 56; // ลดขนาดรูปสินค้า
 
     return {
       isSmallPhone,
@@ -154,6 +160,36 @@ export default function HomeScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const loadProducts = async () => {
+      setProductError(null);
+      setIsProductLoading(true);
+      try {
+        const remoteProducts = await fetchProductsFromApi();
+        if (active) {
+          setProductItems(remoteProducts);
+          if (!remoteProducts.length) {
+            setProductError("ไม่พบสินค้า");
+          }
+        }
+      } catch (error) {
+        console.error("[Products] failed to load", error);
+        if (active) {
+          setProductError("โหลดสินค้าไม่สำเร็จ");
+        }
+      } finally {
+        if (active) {
+          setIsProductLoading(false);
+        }
+      }
+    };
+    loadProducts();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   useAppBarActions(
     "home",
     useMemo(
@@ -203,11 +239,17 @@ export default function HomeScreen() {
             />
           ) : null}
 
-       
+
           <NewsSections
             responsive={responsive}
             newsItems={newsItems}
-            recommendationItems={recommendationTopics}
+          />
+
+          <Products
+            responsive={responsive}
+            items={productItems}
+            isLoading={isProductLoading}
+            errorMessage={productError}
           />
 
           {/* ส่วนล่างถูกตัดออกตามคำขอ */}

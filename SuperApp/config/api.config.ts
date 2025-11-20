@@ -34,6 +34,7 @@ export const API_CONFIG = {
       VEHICLES: '/api/v1/user/vehicles',
       NEWS: '/api/v1/user/news',
       TAX_INVOICES: '/api/v1/user/tax-invoices',
+      PRODUCTS: '/api/v1/user/products',
     },
 
     // Chargepoint Management

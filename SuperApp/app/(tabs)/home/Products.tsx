@@ -1,6 +1,6 @@
 import API_CONFIG from "@/config/api.config";
 import { http } from "@/services/api";
-import React, { useRef, useState } from "react";
+import React from "react";
 import {
   ActivityIndicator,
   Image,
@@ -12,58 +12,49 @@ import {
   View,
 } from "react-native";
 
-export type NewsTag = {
+import type { NewsResponsive } from "./News";
+
+export type ProductTag = {
   id?: string;
   label: string;
   color?: string;
 };
 
-export type NewsItem = {
+export type ProductItem = {
   id: string;
-  title: string;
-  subtitle?: string;
+  name: string;
+  description?: string;
   content?: string;
   image?: string;
-  tags?: NewsTag[];
+  tags?: ProductTag[];
   updatedAt?: string;
 };
 
-type NewsApiTag = {
+type ProductApiTag = {
   id?: string;
   name?: string;
   description?: string;
   color?: string;
 };
 
-type NewsApiItem = {
+type ProductApiItem = {
   id: string;
-  title: string;
-  content?: string;
-  excerpt?: string;
+  name?: string;
+  description?: string;
   imageUrl?: string;
-  tags?: string | (NewsApiTag | string)[];
+  tags?: string | (ProductApiTag | string)[];
   updatedAt?: string;
 };
 
-export const NEWS_API_BASE_URL = API_CONFIG.ENDPOINTS.USER.NEWS;
-// รองรับการส่งพารามิเตอร์สำหรับการแบ่งหน้า/ค้นหา
-export type FetchNewsOptions = {
+export const PRODUCT_API_BASE_URL = API_CONFIG.ENDPOINTS.USER.PRODUCTS;
+
+export type FetchProductsOptions = {
   page?: number;
   limit?: number;
   tagIds?: string;
   search?: string;
   sortBy?: string;
   sortOrder?: "ASC" | "DESC";
-};
-
-export type NewsResponsive = {
-  newsCardWidth: number;
-  newsImageHeight: number;
-  recommendationCardWidth: number;
-  recommendationAvatar: number;
-  cardSpacing: number;
-  horizontalGutter: number;
-  isSmallPhone?: boolean;
 };
 
 const safeTrim = (value?: string | null) => {
@@ -74,9 +65,9 @@ const safeTrim = (value?: string | null) => {
   return trimmed.length ? trimmed : undefined;
 };
 
-const normalizeNewsTags = (
-  input?: string | (NewsApiTag | string)[],
-): NewsTag[] => {
+const normalizeProductTags = (
+  input?: string | (ProductApiTag | string)[],
+): ProductTag[] => {
   if (!input) {
     return [];
   }
@@ -90,7 +81,7 @@ const normalizeNewsTags = (
     return [];
   }
 
-  const normalized: NewsTag[] = [];
+  const normalized: ProductTag[] = [];
   for (const raw of input) {
     if (!raw) {
       continue;
@@ -119,18 +110,47 @@ const normalizeNewsTags = (
   return normalized;
 };
 
-export const mapNewsApiItemToNews = (item: NewsApiItem): NewsItem => {
-  const content = safeTrim(item.content);
-  const excerpt = safeTrim(item.excerpt);
-  const subtitle = excerpt ?? content;
+const extractProductArray = (payload: any): ProductApiItem[] => {
+  // รองรับโครงสร้าง payload หลายแบบ (data, items, array ตรง ๆ, object เดี่ยว)
+  if (!payload) {
+    return [];
+  }
 
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload?.data)) {
+    return payload.data;
+  }
+
+  if (Array.isArray(payload?.items)) {
+    return payload.items;
+  }
+
+  if (payload?.data) {
+    return extractProductArray(payload.data);
+  }
+
+  if (payload?.items) {
+    return extractProductArray(payload.items);
+  }
+
+  if (typeof payload === "object") {
+    return [payload as ProductApiItem];
+  }
+
+  return [];
+};
+
+export const mapProductApiItemToProduct = (item: ProductApiItem): ProductItem => {
   return {
     id: item.id,
-    title: safeTrim(item.title) ?? "",
-    subtitle: subtitle,
-    content: content ?? excerpt,
+    name: safeTrim(item.name) ?? "",
+    description: safeTrim(item.description),
+    content: safeTrim(item.description),
     image: safeTrim(item.imageUrl),
-    tags: normalizeNewsTags(item.tags),
+    tags: normalizeProductTags(item.tags),
     updatedAt: item.updatedAt,
   };
 };
@@ -155,56 +175,55 @@ const formatUpdatedAt = (iso?: string) => {
   }
 };
 
-export async function fetchNewsFromApi(options?: FetchNewsOptions) {
+export async function fetchProductsFromApi(options?: FetchProductsOptions) {
   try {
-    const response = await http.get<NewsApiItem[]>(NEWS_API_BASE_URL, {
+    const response = await http.get<ProductApiItem[]>(PRODUCT_API_BASE_URL, {
       params: options,
     });
-    const payload = response?.data ?? [];
-    const rows: NewsApiItem[] = Array.isArray(payload)
-      ? payload
-      : payload && typeof payload === "object"
-        ? [payload as NewsApiItem]
-        : [];
+    const payload = response?.data as any;
+    const rows: ProductApiItem[] = extractProductArray(payload);
     const mapped = rows
-      .map(mapNewsApiItemToNews)
-      .filter((item) => item.id && item.title);
+      .map(mapProductApiItemToProduct)
+      .filter((item) => item.id && item.name);
 
-    console.log("[News] fetched", mapped.length, "items");
+    console.log("[Products] fetched", mapped.length, "items");
     if (__DEV__) {
-      console.log("[News] sample item", mapped[0]);
+      console.log("[Products] sample item", mapped[0]);
     }
 
     return mapped;
   } catch (error) {
-    console.error("Failed to fetch news:", error);
+    console.error("Failed to fetch products:", error);
     return [];
   }
 }
 
-type NewsSectionsProps = {
+type ProductsProps = {
   responsive: NewsResponsive;
-  newsItems?: NewsItem[];
-  onNewsPress?: (item: NewsItem) => void;
+  items?: ProductItem[];
+  isLoading?: boolean;
+  errorMessage?: string | null;
+  onProductPress?: (item: ProductItem) => void;
 };
 
-export default function NewsSections({
+export default function Products({
   responsive,
-  newsItems = [],
-  onNewsPress,
-}: NewsSectionsProps) {
-  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
-  const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
-  const [isDetailLoading, setIsDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
-  const detailRequestIdRef = useRef(0);
-  const hasNews = newsItems.length > 0;
-  const selectedUpdatedLabel = selectedNews
-    ? formatUpdatedAt(selectedNews.updatedAt)
+  items = [],
+  isLoading,
+  errorMessage,
+  onProductPress,
+}: ProductsProps) {
+  const [selectedProduct, setSelectedProduct] = React.useState<ProductItem | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = React.useState(false);
+  const [detailError, setDetailError] = React.useState<string | null>(null);
+  const detailRequestIdRef = React.useRef(0);
+  const hasProducts = items.length > 0;
+  const selectedUpdatedLabel = selectedProduct
+    ? formatUpdatedAt(selectedProduct.updatedAt)
     : undefined;
 
-  const fetchNewsDetail = async (newsId: string) => {
-    if (!newsId) {
+  const fetchProductDetail = async (productId: string) => {
+    if (!productId) {
       return;
     }
 
@@ -213,43 +232,38 @@ export default function NewsSections({
     setDetailError(null);
 
     try {
-      const response = await http.get<NewsApiItem | { data?: NewsApiItem }>(
-        `${NEWS_API_BASE_URL}/${encodeURIComponent(newsId)}`,
+      const response = await http.get<ProductApiItem | { data?: ProductApiItem }>(
+        `${PRODUCT_API_BASE_URL}/${encodeURIComponent(productId)}`,
       );
-
-      const rawPayload = response?.data as any;
-      const payloadCandidate = rawPayload?.data ?? rawPayload;
-      const normalizedPayload = Array.isArray(payloadCandidate)
-        ? payloadCandidate[0]
-        : payloadCandidate;
-      const mapped = normalizedPayload
-        ? mapNewsApiItemToNews(normalizedPayload as NewsApiItem)
-        : null;
+      const payload = response?.data as any;
+      const rows = extractProductArray(payload);
+      const mapped = rows.length ? mapProductApiItemToProduct(rows[0]) : null;
 
       if (!mapped?.id) {
-        throw new Error("Invalid news detail response");
+        throw new Error("Invalid product detail response");
       }
 
       if (detailRequestIdRef.current !== requestId) {
         return;
       }
 
-      setSelectedNews((prev) => {
+      setSelectedProduct((prev) => {
         const base = prev && prev.id === mapped.id ? prev : null;
         return {
           ...(base ?? {}),
           ...mapped,
-          subtitle: mapped.subtitle ?? base?.subtitle,
-          content: mapped.content ?? base?.content,
+          description: mapped.description ?? base?.description,
+          content: mapped.content ?? base?.content ?? mapped.description,
           image: mapped.image ?? base?.image,
           tags: mapped.tags?.length ? mapped.tags : base?.tags,
           updatedAt: mapped.updatedAt ?? base?.updatedAt,
+          name: mapped.name ?? base?.name ?? "",
         };
       });
     } catch (error) {
-      console.error("[News] failed to fetch detail", error);
+      console.error("[Products] failed to fetch detail", error);
       if (detailRequestIdRef.current === requestId) {
-        setDetailError("โหลดรายละเอียดไม่สำเร็จ");
+        setDetailError("โหลดรายละเอียดสินค้าไม่สำเร็จ");
       }
     } finally {
       if (detailRequestIdRef.current === requestId) {
@@ -258,86 +272,100 @@ export default function NewsSections({
     }
   };
 
-  const handleNewsPress = (item: NewsItem) => {
-    onNewsPress?.(item);
+  const handleProductPress = (item: ProductItem) => {
+    onProductPress?.(item);
     setDetailError(null);
-    setSelectedNews(item);
-    fetchNewsDetail(item.id);
+    setSelectedProduct(item);
+    fetchProductDetail(item.id);
   };
 
   const handleCloseModal = () => {
     detailRequestIdRef.current += 1;
-    setSelectedNews(null);
+    setSelectedProduct(null);
     setDetailError(null);
     setIsDetailLoading(false);
   };
 
   return (
-    <>
-      {/* ข่าวสารอัพเดต */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionHeaderLeft}>
-            <Text style={styles.sectionTitle}>ข่าวสารอัพเดต</Text>
-            <Text style={styles.sectionBadge}>ใหม่</Text>
-          </View>
+    <View style={styles.section}>
+      <View style={[styles.sectionHeader, styles.sectionHeaderSpacing]}>
+        <Text style={styles.sectionTitle}>สินค้าแนะนำ</Text>
+        <Pressable hitSlop={8}>
           <Text style={styles.sectionMore}>เลื่อนดูเพิ่มเติม</Text>
-        </View>
+        </Pressable>
+      </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingRight: responsive.horizontalGutter,
-          }}
-        >
-          {hasNews ? (
-            newsItems.map((item, index) => {
-              const updatedLabel = formatUpdatedAt(item.updatedAt);
-              return (
-                <Pressable
-                  key={item.id}
-                  onPress={() => handleNewsPress(item)}
-                  style={[
-                    styles.newsCard,
-                    {
-                      width: responsive.newsCardWidth,
-                      marginRight:
-                        index === newsItems.length - 1 ? 0 : responsive.cardSpacing,
-                    },
-                  ]}
-                >
-                  {item.image && !failedImages[item.id] ? (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingRight: responsive.horizontalGutter,
+        }}
+      >
+        {isLoading ? (
+          <View style={styles.statusRow}>
+            <Text style={styles.placeholderText}>กำลังโหลดสินค้า...</Text>
+          </View>
+        ) : errorMessage ? (
+          <View style={styles.statusRow}>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          </View>
+        ) : hasProducts ? (
+          items.map((item, index) => {
+            const updatedLabel = formatUpdatedAt(item.updatedAt);
+            return (
+              <Pressable
+                key={item.id}
+                onPress={() => handleProductPress(item)}
+                style={[
+                  styles.recommendCard,
+                  {
+                    width: responsive.recommendationCardWidth,
+                    marginRight:
+                      index === items.length - 1 ? 0 : responsive.cardSpacing,
+                  },
+                ]}
+              >
+                <View style={styles.recommendRow}>
+                  {item.image ? (
                     <Image
                       source={{ uri: item.image }}
-                      resizeMode="cover"
-                      style={[
-                        styles.newsImage,
-                        { height: responsive.newsImageHeight },
-                      ]}
-                      onError={(e) => {
-                        console.warn(
-                          "[News] image load error",
-                          item.image,
-                          e.nativeEvent?.error,
-                        );
-                        setFailedImages((prev) => ({ ...prev, [item.id]: true }));
+                      style={{
+                        width: responsive.recommendationAvatar,
+                        height: responsive.recommendationAvatar,
+                        borderRadius: 16,
                       }}
                     />
                   ) : (
                     <View
                       style={[
-                        styles.newsImage,
-                        styles.placeholderBg,
-                        { height: responsive.newsImageHeight },
+                        styles.recommendAvatarPlaceholder,
+                        {
+                          width: responsive.recommendationAvatar,
+                          height: responsive.recommendationAvatar,
+                          borderRadius: 16,
+                        },
                       ]}
                     >
                       <Text style={styles.placeholderText}>ภาพ</Text>
                     </View>
                   )}
-                  <View style={styles.newsBody}>
+                  <View
+                    style={[
+                      styles.recommendTextWrap,
+                      { marginLeft: responsive.isSmallPhone ? 12 : 16 },
+                    ]}
+                  >
+                    <Text style={styles.recommendTitle} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    {item.description ? (
+                      <Text style={styles.recommendSubtitle} numberOfLines={2}>
+                        {item.description}
+                      </Text>
+                    ) : null}
                     {item.tags && item.tags.length > 0 ? (
-                      <View style={styles.newsTagsRow}>
+                      <View style={styles.recommendTagsRow}>
                         {item.tags.map((tag, tagIndex) => {
                           const label = (tag.label ?? "").trim();
                           if (!label) {
@@ -348,9 +376,9 @@ export default function NewsSections({
                           return (
                             <View
                               key={tag.id ?? `${item.id}-${label}-${tagIndex}`}
-                              style={[styles.newsTag, { backgroundColor }]}
+                              style={[styles.recommendTag, { backgroundColor }]}
                             >
-                              <Text style={[styles.newsTagText, { color: textColor }]}>
+                              <Text style={[styles.recommendTagText, { color: textColor }]}>
                                 {label}
                               </Text>
                             </View>
@@ -358,31 +386,22 @@ export default function NewsSections({
                         })}
                       </View>
                     ) : null}
-                    <Text style={styles.newsTitle} numberOfLines={2}>
-                      {item.title}
-                    </Text>
-                    {item.subtitle ? (
-                      <Text style={styles.newsSubtitle} numberOfLines={2}>
-                        {item.subtitle}
-                      </Text>
-                    ) : null}
                     {updatedLabel ? (
-                      <Text style={styles.newsMeta}>อัปเดต {updatedLabel}</Text>
+                      <Text style={styles.recommendMeta}>อัปเดต {updatedLabel}</Text>
                     ) : null}
                   </View>
-                </Pressable>
-              );
-            })
-          ) : (
-            <View style={styles.emptyNews}>
-              <Text style={styles.placeholderText}>ไม่มีข่าว</Text>
-            </View>
-          )}
-        </ScrollView>
-      </View>
-
+                </View>
+              </Pressable>
+            );
+          })
+        ) : (
+          <View style={styles.emptyProducts}>
+            <Text style={styles.placeholderText}>ไม่มีสินค้า</Text>
+          </View>
+        )}
+      </ScrollView>
       <Modal
-        visible={!!selectedNews}
+        visible={!!selectedProduct}
         transparent
         animationType="fade"
         statusBarTranslucent
@@ -391,24 +410,17 @@ export default function NewsSections({
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={handleCloseModal} />
           <View style={styles.modalCard}>
-            {selectedNews?.image && !failedImages[selectedNews.id] ? (
-              <Image
-                source={{ uri: selectedNews.image }}
-                resizeMode="cover"
-                style={styles.modalImage}
-                onError={() => {
-                  setFailedImages((prev) => ({ ...prev, [selectedNews.id]: true }));
-                }}
-              />
+            {selectedProduct?.image ? (
+              <Image source={{ uri: selectedProduct.image }} style={styles.modalImage} />
             ) : null}
             <ScrollView
               style={styles.modalContent}
               contentContainerStyle={styles.modalContentInner}
               showsVerticalScrollIndicator={false}
             >
-              {selectedNews?.tags && selectedNews.tags.length > 0 ? (
+              {selectedProduct?.tags && selectedProduct.tags.length > 0 ? (
                 <View style={styles.modalTagsRow}>
-                  {selectedNews.tags.map((tag, tagIndex) => {
+                  {selectedProduct.tags.map((tag, idx) => {
                     const label = (tag.label ?? "").trim();
                     if (!label) {
                       return null;
@@ -417,10 +429,10 @@ export default function NewsSections({
                     const textColor = tag.color ? "#FFFFFF" : "#0284C7";
                     return (
                       <View
-                        key={tag.id ?? `${selectedNews.id}-${label}-${tagIndex}`}
-                        style={[styles.newsTag, { backgroundColor }]}
+                        key={tag.id ?? `${selectedProduct.id}-${label}-${idx}`}
+                        style={[styles.recommendTag, { backgroundColor }]}
                       >
-                        <Text style={[styles.newsTagText, { color: textColor }]}>
+                        <Text style={[styles.recommendTagText, { color: textColor }]}>
                           {label}
                         </Text>
                       </View>
@@ -428,9 +440,9 @@ export default function NewsSections({
                   })}
                 </View>
               ) : null}
-              <Text style={styles.modalTitle}>{selectedNews?.title}</Text>
-              {selectedNews?.subtitle ? (
-                <Text style={styles.modalSubtitle}>{selectedNews.subtitle}</Text>
+              <Text style={styles.modalTitle}>{selectedProduct?.name}</Text>
+              {selectedProduct?.description ? (
+                <Text style={styles.modalSubtitle}>{selectedProduct.description}</Text>
               ) : null}
               {isDetailLoading ? (
                 <View style={styles.modalStatusRow}>
@@ -443,15 +455,15 @@ export default function NewsSections({
                   <Pressable
                     style={styles.modalRetryButton}
                     onPress={() =>
-                      selectedNews?.id ? fetchNewsDetail(selectedNews.id) : null
+                      selectedProduct?.id ? fetchProductDetail(selectedProduct.id) : null
                     }
                     hitSlop={8}
                   >
                     <Text style={styles.modalRetryText}>ลองอีกครั้ง</Text>
                   </Pressable>
                 </View>
-              ) : selectedNews?.content ? (
-                <Text style={styles.modalBodyText}>{selectedNews.content}</Text>
+              ) : selectedProduct?.content ? (
+                <Text style={styles.modalBodyText}>{selectedProduct.content}</Text>
               ) : (
                 <Text style={styles.modalMutedText}>ไม่มีรายละเอียดเพิ่มเติม</Text>
               )}
@@ -465,7 +477,7 @@ export default function NewsSections({
           </View>
         </View>
       </Modal>
-    </>
+    </View>
   );
 }
 
@@ -491,80 +503,97 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1F2937",
   },
-  sectionBadge: {
-    marginLeft: 8,
-    fontSize: 12,
-    color: "#3B82F6",
-  },
   sectionMore: {
     fontSize: 13,
     color: "#6B7280",
   },
-  newsCard: {
+  recommendCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
+    padding: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 2,
-    overflow: "hidden",
   },
-  newsImage: {
-    width: "100%",
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+  recommendRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  newsBody: {
-    padding: 12,
+  recommendTextWrap: {
+    flex: 1,
   },
-  newsTagsRow: {
+  recommendTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1F2937",
+  },
+  recommendSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  recommendTagsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginTop: 4,
-    marginBottom: 12,
+    marginTop: 6,
+    marginBottom: 6,
   },
-  newsTag: {
+  recommendTag: {
     alignSelf: "flex-start",
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "#FFFFFF",
-    marginBottom: 6,
+    backgroundColor: "#E0F2FE",
     marginRight: 6,
+    marginBottom: 6,
   },
-  newsTagText: {
+  recommendTagText: {
     color: "#0284C7",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
-  newsTitle: {
-    fontSize: 16, //ขนาดตัวอักษร ข่าวหน้าหลัก
-    fontWeight: "700",
-    color: "#1D2144",
-  },
-  newsSubtitle: {
+  recommendMeta: {
     marginTop: 6,
-    fontSize: 13,
-    color: "#6B7280",
-  },
-  newsMeta: {
-    marginTop: 4,
-    fontSize: 11,
+    fontSize: 12,
     color: "#9CA3AF",
+  },
+  recommendFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
+  },
+  recommendSource: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#3B82F6",
+  },
+  recommendDate: {
+    fontSize: 12,
+    color: "#9CA3AF",
+  },
+  recommendAvatarPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E5E7EB",
   },
   placeholderText: {
     color: "#6B7280",
     fontWeight: "600",
   },
-  placeholderBg: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#E5E7EB",
+  statusRow: {
+    paddingVertical: 20,
+    paddingHorizontal: 12,
   },
-  emptyNews: {
-    paddingVertical: 16,
-    paddingHorizontal: 10,
+  errorText: {
+    color: "#DC2626",
+    fontWeight: "700",
+  },
+  emptyProducts: {
+    paddingVertical: 20,
+    paddingHorizontal: 12,
   },
   modalOverlay: {
     flex: 1,
@@ -579,7 +608,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     maxWidth: 460,
-    backgroundColor: "#FFFFFF",//พื้นหลังแนะนำ
+    backgroundColor: "#FFFFFF",
     borderRadius: 14,
     overflow: "hidden",
     shadowColor: "#000",
@@ -596,8 +625,8 @@ const styles = StyleSheet.create({
     maxHeight: 280,
   },
   modalContentInner: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   modalTagsRow: {
     flexDirection: "row",
@@ -605,30 +634,30 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   modalTitle: {
-    fontSize: 18, //ขนาดตัวอักษรป๊อปอัพข่าว
+    fontSize: 18,
     fontWeight: "700",
     color: "#1F2937",
   },
   modalSubtitle: {
-    marginTop: 8,
-    fontSize: 14,
+    marginTop: 10,
+    fontSize: 15,
     color: "#4B5563",
-    lineHeight: 20,
+    lineHeight: 22,
   },
   modalMeta: {
-    marginTop: 8,
-    fontSize: 11,
+    marginTop: 10,
+    fontSize: 12,
     color: "#9CA3AF",
   },
   modalBodyText: {
-    marginTop: 10,
-    fontSize: 14,
+    marginTop: 12,
+    fontSize: 15,
     color: "#374151",
-    lineHeight: 20,
+    lineHeight: 22,
   },
   modalMutedText: {
-    marginTop: 10,
-    fontSize: 13,
+    marginTop: 12,
+    fontSize: 14,
     color: "#9CA3AF",
   },
   modalStatusRow: {
