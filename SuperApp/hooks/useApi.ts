@@ -244,7 +244,7 @@ export function useUserProfile() {
  * Hook สำหรับ Transactions API
  */
 export function useTransactions(userId?: string) {
-  const endpoint = userId ? `/api/transactions/user/${userId}` : '/api/transactions';
+  const endpoint = userId ? `/api/v1/user/transactions/user/${userId}` : '/api/v1/user/transactions';
   
   return useGet(endpoint, {
     immediate: !!userId, // เรียกเมื่อมี userId เท่านั้น
@@ -261,14 +261,14 @@ export function useTransactions(userId?: string) {
  * Hook สำหรับสร้าง Transaction
  */
 export function useCreateTransaction() {
-  return usePost('/api/transactions');
+  return usePost('/api/v1/user/transactions');
 }
 
 /**
  * Hook สำหรับ WebSocket URL
  */
 export function useWebSocketUrl(chargePointId: string, connectorId: number, userId: string) {
-  const endpoint = `/api/chargepoints/${chargePointId}/${connectorId}/websocket-url?userId=${userId}`;
+  const endpoint = `/api/v1/user/chargepoints/${chargePointId}/${connectorId}/websocket-url?userId=${userId}`;
   
   return useGet(endpoint, {
     immediate: !!(chargePointId && connectorId && userId),

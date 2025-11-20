@@ -80,7 +80,7 @@ export class ChargingStationService {
       console.log('🔌 Loading charging stations from API...');
 
       // เรียก API ผ่าน http client (จัดการ token อัตโนมัติ)
-      const response = await http.get<any>('/api/v1/user/stations?page=1&limit=100');
+      const response = await http.get<any[]>('/api/v1/user/stations?page=1&limit=100');
 
       console.log('📡 Raw API Response:', {
         hasResponse: !!response,

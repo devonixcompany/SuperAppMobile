@@ -156,7 +156,7 @@ export async function handleHeartbeat(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
     
-    const heartbeatResponse = await fetch(`${BACKEND_URL}/api/chargepoints/${chargePointId}/heartbeat`, {
+    const heartbeatResponse = await fetch(`${BACKEND_URL}/chargepoints/${chargePointId}/heartbeat`, {
       method: 'POST',
       headers: withGatewayHeaders({
         'Content-Type': 'application/json',

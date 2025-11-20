@@ -353,7 +353,7 @@ export default function ChargeSessionScreen() {
       try {
         console.log('💰 [STATION] Fetching station rate for:', chargePointIdentity);
 
-        const response = await http.get<any>(`/api/chargepoints/${encodeURIComponent(chargePointIdentity)}`);
+        const response = await http.get<any>(`/api/v1/user/chargepoints/${encodeURIComponent(chargePointIdentity)}`);
         console.log('💰 [STATION] Response:', response);
 
         const chargePoint = response?.data;

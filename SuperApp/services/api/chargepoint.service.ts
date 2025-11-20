@@ -100,10 +100,8 @@ class ChargepointService {
       console.log('Chargepoint Service - Connector ID:', connectorId);
       console.log('Chargepoint Service - Params:', { userId: params.userId });
       
-      // Construct the API endpoint using config
-      const endpoint = params.userId 
-        ? `${API_CONFIG.ENDPOINTS.CHARGEPOINT.WEBSOCKET_URL(chargePointIdentity, connectorId)}?userId=${encodeURIComponent(params.userId)}`
-        : API_CONFIG.ENDPOINTS.CHARGEPOINT.WEBSOCKET_URL(chargePointIdentity, connectorId);
+      // Construct the API endpoint
+      const endpoint = `/api/v1/user/chargepoints/${encodeURIComponent(chargePointIdentity)}/${connectorId}/websocket-url?userId=${encodeURIComponent(params.userId)}`;
       
       const response = await http.get<ChargepointWebSocketResponse>(
         endpoint
@@ -130,23 +128,9 @@ class ChargepointService {
     maybeParams?: ChargepointApiParams
   ): Promise<ApiResponse<any>> {
     try {
-      let connectorId: number | undefined;
-      let params: ChargepointApiParams;
-
-      // Handle overloaded parameters
-      if (typeof connectorIdOrParams === 'number') {
-        connectorId = connectorIdOrParams;
-        if (!maybeParams) {
-          throw new Error('Params parameter is required when connectorId is provided');
-        }
-        params = maybeParams;
-      } else {
-        params = connectorIdOrParams;
-        // connectorId remains undefined for backward compatibility
-      }
-
-      const endpoint = API_CONFIG.ENDPOINTS.CHARGEPOINT.STATUS(chargePointIdentity, connectorId);
-      const response = await http.get(`${endpoint}?userId=${params.userId}`);
+      const response = await http.get(
+        `/api/v1/user/chargepoints/${encodeURIComponent(chargePointIdentity)}/status?userId=${params.userId}`
+      );
 
       return response;
     } catch (error) {

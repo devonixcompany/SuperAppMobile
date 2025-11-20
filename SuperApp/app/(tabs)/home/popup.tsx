@@ -286,6 +286,109 @@ const deriveConnectorName = (transaction: RawTransaction): string | null => {
   return null;
 };
 
+const isUUID = (value: string): boolean => {
+  // UUID pattern: 8-4-4-4-12 hex digits
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+};
+
+const deriveChargePointIdentity = (transaction: RawTransaction, websocketUrl?: string | null): string | null => {
+  // Priority 1: Direct OCPP identity fields (skip UUIDs)
+  const identityCandidates = [
+    transaction.chargePointIdentity,
+    transaction.chargePoint?.chargePointIdentity,
+    transaction.chargePointId,
+    transaction.chargePoint?.chargePointId,
+    transaction.chargePointName,
+    transaction.chargePoint?.chargepointid,
+    transaction.chargePoint?.name,
+  ];
+
+  for (const candidate of identityCandidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      const trimmed = candidate.trim();
+      // Skip UUID-like values (they're database IDs, not OCPP identities)
+      if (!isUUID(trimmed)) {
+        return trimmed;
+      }
+    }
+  }
+
+  // Priority 2: Extract from websocket URL
+  // Format: ws://host/user-cp/{chargePointIdentity}/{connectorNumber}/{uuid}
+  if (websocketUrl && typeof websocketUrl === "string") {
+    const urlPattern = /\/user-cp\/([^/]+)\//;
+    const match = websocketUrl.match(urlPattern);
+    if (match && match[1]) {
+      const extracted = match[1].trim();
+      if (!isUUID(extracted)) {
+        return extracted;
+      }
+    }
+  }
+
+  // Priority 3: Last resort - database ID (UUID) if nothing else works
+  if (transaction.chargePoint?.id && typeof transaction.chargePoint.id === "string") {
+    const id = transaction.chargePoint.id.trim();
+    if (id.length > 0) {
+      return id;
+    }
+  }
+
+  return null;
+};
+
+const deriveConnectorId = (transaction: RawTransaction, websocketUrl?: string | null): string | number | null => {
+  // Direct numeric candidates first
+  const numericCandidates = [
+    transaction.connector?.connectorId,
+    transaction.connector?.id,
+    transaction.connector?.connectorNumber,
+    transaction.connectorId,
+    transaction.connectorNumber,
+    transaction.connector?.number,
+  ];
+
+  for (const candidate of numericCandidates) {
+    if (candidate !== undefined && candidate !== null) {
+      const parsed = typeof candidate === "number" ? candidate : 
+                    typeof candidate === "string" ? parseInt(candidate, 10) : null;
+      if (parsed !== null && !isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+  }
+
+  // If UUID string is available, keep it as fallback
+  const uuidCandidates = [
+    transaction.connector?.connectorId,
+    transaction.connectorId,
+  ];
+
+  for (const candidate of uuidCandidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      // Check if it looks like a UUID
+      if (candidate.includes("-") && candidate.length > 20) {
+        return candidate;
+      }
+    }
+  }
+
+  // Extract connector number from websocket URL as fallback
+  // Format: ws://host/user-cp/{chargePointIdentity}/{connectorNumber}/{uuid}
+  if (websocketUrl && typeof websocketUrl === "string") {
+    const urlPattern = /\/user-cp\/[^/]+\/(\d+)\//;
+    const match = websocketUrl.match(urlPattern);
+    if (match && match[1]) {
+      const parsed = parseInt(match[1], 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
+};
+
 export type ChargingStatusPopupData = {
   status?: string;
   currentPowerKw?: number | null;
@@ -296,7 +399,7 @@ export type ChargingStatusPopupData = {
   transactionId?: number | string | null;
   websocketUrl?: string | null;
   chargePointIdentity?: string | null;
-  connectorId?: number | null;
+  connectorId?: number | string | null;
   stationName?: string | null;
   stationLocation?: string | null;
   powerRating?: number | null;
@@ -330,7 +433,7 @@ const loadActiveTransaction = async (): Promise<ChargingStatusResult> => {
       return { data: null, hadError: false };
     }
 
-    const endpoint = `/api/transactions/user/${credentials.id}`;
+    const endpoint = `/api/v1/user/transactions/user/${credentials.id}`;
     console.log('🔍 [POPUP] Fetching active transaction from:', endpoint);
     const response = await http.get<any>(endpoint);
     console.log('📦 [POPUP] Raw API response:', response);
@@ -357,10 +460,14 @@ const loadActiveTransaction = async (): Promise<ChargingStatusResult> => {
     const chargePoint = activeTransaction.chargePoint;
     const connector = activeTransaction.connector;
     const station = chargePoint?.Station ?? chargePoint?.station;
+    
+    // Extract websocket URL early for fallback extraction
+    const websocketUrl = activeTransaction.websocketUrl ?? chargePoint?.urlwebSocket ?? chargePoint?.websocketUrl ?? null;
 
     console.log('🔌 [POPUP] ChargePoint:', chargePoint);
     console.log('🔌 [POPUP] Connector:', connector);
     console.log('🏢 [POPUP] Station:', station);
+    console.log('🔌 [POPUP] WebSocket URL:', websocketUrl);
 
     const popupData = {
       status,
@@ -376,9 +483,9 @@ const loadActiveTransaction = async (): Promise<ChargingStatusResult> => {
         activeTransaction.transactionID ??
         null,
       startTime: activeTransaction.startTime ?? null,
-      websocketUrl: activeTransaction.websocketUrl ?? chargePoint?.urlwebSocket ?? chargePoint?.websocketUrl ?? null,
-      chargePointIdentity: chargePoint?.chargePointIdentity ?? activeTransaction.chargePointIdentity ?? null,
-      connectorId: connector?.connectorId ?? activeTransaction.connectorId ?? null,
+      websocketUrl,
+      chargePointIdentity: deriveChargePointIdentity(activeTransaction, websocketUrl),
+      connectorId: deriveConnectorId(activeTransaction, websocketUrl),
       stationName: station?.stationname ?? station?.name ?? chargePoint?.stationName ?? null,
       stationLocation: station?.location ?? chargePoint?.location ?? null,
       powerRating: chargePoint?.powerRating ?? chargePoint?.maxPower ?? null,

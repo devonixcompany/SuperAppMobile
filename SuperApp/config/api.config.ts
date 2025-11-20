@@ -17,8 +17,8 @@ export const API_CONFIG = {
       REGISTER: '/api/v1/user/auth/register',
       REFRESH_TOKEN: '/api/v1/user/auth/refresh',
       LOGOUT: '/api/v1/user/auth/logout',
-      VERIFY_PHONE: '/api/v1/user/auth/phone/verify',
-      GET_ME: '/api/v1/user/auth/me',
+      VERIFY_OTP: '/api/v1/user/auth/verify-otp',
+      RESEND_OTP: '/api/v1/user/auth/resend-otp',
       FORGOT_PASSWORD: '/api/v1/user/auth/forgot-password',
       RESET_PASSWORD: '/api/v1/user/auth/reset-password',
     },
@@ -31,25 +31,20 @@ export const API_CONFIG = {
       DELETE_ACCOUNT: '/api/v1/user/account',
       CHARGING_HISTORY: '/api/v1/user/charging-history',
       PAYMENT_METHODS: '/api/v1/user/payment-methods',
-      VEHICLES: '/api/v1/user/vehicles',
-      NEWS: '/api/v1/user/news',
-      TAX_INVOICES: '/api/v1/user/tax-invoices',
     },
 
     // Chargepoint Management
     CHARGEPOINT: {
-      WEBSOCKET_URL: (identity: string, connectorId: number) =>
+      WEBSOCKET_URL: (identity: string, connectorId: number) => 
         `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/${connectorId}/websocket-url`,
-      STATUS: (identity: string, connectorId?: number) =>
-        connectorId
-          ? `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/connectors/${connectorId}/status`
-          : `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/status`,
-      START_CHARGING: (identity: string, connectorId: number) =>
+      STATUS: (identity: string) => 
+        `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/status`,
+      START_CHARGING: (identity: string, connectorId: number) => 
         `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/${connectorId}/start`,
-      STOP_CHARGING: (identity: string, connectorId: number) =>
+      STOP_CHARGING: (identity: string, connectorId: number) => 
         `/api/v1/user/chargepoints/${encodeURIComponent(identity)}/${connectorId}/stop`,
       LIST: '/api/v1/user/chargepoints',
-      DETAILS: (identity: string) =>
+      DETAILS: (identity: string) => 
         `/api/v1/user/chargepoints/${encodeURIComponent(identity)}`,
     },
 
@@ -63,15 +58,15 @@ export const API_CONFIG = {
 
     // Payment
     PAYMENT: {
-      CARDS: '/api/v1/user/payments/cards',
-      ADD_CARD: '/api/v1/user/payments/cards',
-      REMOVE_CARD: (cardId: string) =>
-        `/api/v1/user/payments/cards/${cardId}`,
+      CARDS: '/api/v1/user/payment/cards',
+      ADD_CARD: '/api/v1/user/payment/cards',
+      REMOVE_CARD: (cardId: string) => 
+        `/api/v1/user/payment/cards/${cardId}`,
       SET_DEFAULT_CARD: (cardId: string) =>
-        `/api/v1/user/payments/cards/${cardId}/default`,
-      PROCESS_PAYMENT: '/api/v1/user/payments/process',
-      PAYMENT_HISTORY: '/api/v1/user/payments/history',
-      STATUS: (paymentId: string) => `/api/v1/user/payments/status/${encodeURIComponent(paymentId)}`,
+        `/api/v1/user/payment/cards/${cardId}/default`,
+      PROCESS_PAYMENT: '/api/v1/user/payment/process',
+      PAYMENT_HISTORY: '/api/v1/user/payment/history',
+      STATUS: (paymentId: string) => `/api/v1/user/payment/status/${encodeURIComponent(paymentId)}`,
     },
 
     // Charging
@@ -86,7 +81,7 @@ export const API_CONFIG = {
     // Notifications
     NOTIFICATIONS: {
       LIST: '/api/v1/user/notifications',
-      MARK_READ: (notificationId: string) =>
+      MARK_READ: (notificationId: string) => 
         `/api/v1/user/notifications/${notificationId}/read`,
       MARK_ALL_READ: '/api/v1/user/notifications/read-all',
       SETTINGS: '/api/v1/user/notifications/settings',
@@ -95,11 +90,11 @@ export const API_CONFIG = {
     // Transactions
     TRANSACTIONS: {
       CREATE: '/api/v1/user/transactions',
-      SUMMARY: (transactionId: string) =>
+      SUMMARY: (transactionId: string) => 
         `/api/v1/user/transactions/${encodeURIComponent(transactionId)}/summary`,
       LIST: '/api/v1/user/transactions',
-      DETAILS: (transactionId: string) =>
-        `/api/v1/user/transactions/${encodeURIComponent(transactionId)}`,
+      USER_TRANSACTIONS: (userId: string) => 
+        `/api/v1/user/transactions/user/${encodeURIComponent(userId)}`,
     },
   },
 

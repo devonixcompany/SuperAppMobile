@@ -100,7 +100,7 @@ export default function QRScannerScreen() {
         }
 
         const apiBase = (baseUrl ?? env.apiUrl).replace(/\/$/, "");
-        const requestUrl = `${apiBase}/api/chargepoints/${encodeURIComponent(
+        const requestUrl = `${apiBase}/api/v1/user/chargepoints/${encodeURIComponent(
           identity,
         )}/${connectorId}/websocket-url`;
 
@@ -125,7 +125,7 @@ export default function QRScannerScreen() {
         
         try {
           const url = new URL(urlString);
-          // Extract from path: /api/chargepoints/{identity}/{connectorId}/websocket-url
+          // Extract from path: /api/v1/user/chargepoints/{identity}/{connectorId}/websocket-url
           const pathParts = url.pathname.split('/');
           const chargepointsIndex = pathParts.indexOf('chargepoints');
           
